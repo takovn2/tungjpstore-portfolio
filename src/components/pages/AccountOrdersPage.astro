@@ -1,0 +1,80 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { localizePath, type Locale } from "../../i18n/dictionaries";
+import { formatMoney, formatShopDateTime, formatShopFulfillmentStatus, formatShopOrderStatus, formatShopPaymentStatus, getShopCopy } from "../../i18n/shop";
+
+interface OrderRow {
+  id: string;
+  number: string;
+  status: string;
+  paymentStatus: string;
+  fulfillmentStatus: string;
+  totalMinor: number;
+  currency: string;
+  createdAt: string;
+}
+
+interface Props {
+  locale: Locale;
+  orders: OrderRow[];
+}
+
+const { locale, orders } = Astro.props;
+const copy = getShopCopy(locale);
+const account = copy.account;
+---
+
+<BaseLayout title={account.orders.metaTitle} description={account.orders.metaDescription} locale={locale} chrome="store" noindex={true} alternateLocales={[locale]} rss={false}>
+  <div class="account shell">
+    <header class="account__head">
+      <p class="account__label">{account.orders.label}</p>
+      <h1>{account.orders.title}</h1>
+      <a class="account__back" href={localizePath("/shop/account", locale)}>{account.orders.back}</a>
+    </header>
+    {orders.length === 0 ? (
+      <p class="account__empty">{account.orders.empty}</p>
+    ) : (
+      <ul class="account__orders">
+        {orders.map((order) => (
+          <li>
+            <a href={localizePath(`/shop/account/orders/${order.id}`, locale)}>
+              <div>
+                <strong>{order.number}</strong>
+                <small>{formatShopDateTime(order.createdAt, locale)}</small>
+              </div>
+              <div class="account__meta">
+                <span>{formatMoney(order.totalMinor, order.currency, locale)}</span>
+                <small>{formatShopOrderStatus(order.status, locale)} · {formatShopPaymentStatus(order.paymentStatus, locale)} · {formatShopFulfillmentStatus(order.fulfillmentStatus, locale)}</small>
+              </div>
+            </a>
+          </li>
+        ))}
+      </ul>
+    )}
+  </div>
+</BaseLayout>
+
+<style>
+  .account { max-width: 48rem; margin: 0 auto; padding: clamp(2rem, 5vw, 3.5rem) 0 4rem; }
+  .account__label { display:inline-flex; margin:0; padding:.35rem .7rem; border-radius:999px; background:var(--shop-accent-soft,rgba(42, 157, 143,.12)); color:var(--shop-accent-hover,var(--accent)); font:700 .74rem/1 var(--font-sans); }
+  .account__head h1 { margin:.85rem 0 .5rem; font:800 clamp(1.5rem,3.5vw,2rem)/1.12 var(--font-sans); letter-spacing:-.03em; color:var(--shop-ink,var(--paper)); }
+  .account__intro, .account__empty { color:var(--shop-ink-soft,var(--paper-soft)); line-height:1.6; }
+  .account__actions { display:flex; flex-wrap:wrap; gap:.65rem; margin:1.35rem 0 1.75rem; }
+  .account__primary, .account__ghost { display:inline-flex; min-height:2.8rem; align-items:center; padding:.55rem 1.05rem; border-radius:var(--shop-radius-btn,.85rem); font:750 .88rem/1 var(--font-sans); text-decoration:none; cursor:pointer; border:0; }
+  .account__primary { background:var(--shop-accent,var(--accent)); color:#fff; box-shadow:0 8px 18px rgba(42, 157, 143,.25); }
+  .account__ghost { border:1px solid var(--shop-line,var(--line)); background:var(--shop-surface,#fff); color:var(--shop-ink,var(--paper)); }
+  .account__section h2 { margin:0 0 1rem; font:750 1.05rem/1.2 var(--font-sans); color:var(--shop-ink,var(--paper)); }
+  .account__orders, .account__items { list-style:none; margin:0; padding:0; display:grid; gap:.75rem; }
+  .account__orders a, .account__items li, .account__section > ul > li {
+    display:grid; gap:.35rem; padding:1.1rem 1.15rem; border:1px solid var(--shop-line,var(--line));
+    border-radius:var(--shop-radius,1rem); background:var(--shop-surface,#fff); color:var(--shop-ink,var(--paper));
+    text-decoration:none; box-shadow:var(--shop-shadow-soft,none); transition:border-color .18s ease, box-shadow .18s ease;
+  }
+  .account__orders a:hover { border-color:rgba(42, 157, 143,.35); box-shadow:var(--shop-shadow,none); }
+  .account__orders strong, .account__items strong { font-size:.95rem; }
+  .account__orders span { color:var(--shop-accent,var(--accent)); font:750 .95rem/1 var(--font-sans); }
+  .account__orders small, .account__items small { color:var(--shop-ink-soft,var(--paper-soft)); font-size:.78rem; }
+  .account__back { color:var(--shop-ink-soft,var(--paper-soft)); text-decoration:none; font:650 .88rem/1 var(--font-sans); }
+  .account__back:hover { color:var(--shop-accent,var(--accent)); }
+  .account__empty { padding:2rem 1.25rem; border:1px dashed var(--shop-line-strong,var(--line)); border-radius:var(--shop-radius-lg,1.25rem); background:var(--shop-bg-soft,#eaf5f3); text-align:center; }
+</style>

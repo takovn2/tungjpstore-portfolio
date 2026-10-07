@@ -1,0 +1,32 @@
+---
+import { env } from "cloudflare:workers";
+import AccountLoginPage from "../../../components/pages/AccountLoginPage.astro";
+import { localizePath, type Locale } from "../../../i18n/dictionaries";
+import { resolveRequestLocale } from "../../../i18n/locale-preference";
+import { getCustomerSession, sanitizeReturnPath, setPrivateNoStore } from "../../../lib/shop/customer-auth";
+import { isMagicLinkEmailConfigured } from "../../../lib/shop/magic-link";
+import { isGoogleOAuthConfigured } from "../../../lib/shop/oauth-google";
+
+export const prerender = false;
+const shopLocale: Locale = resolveRequestLocale(Astro.request);
+if (shopLocale !== "vi") {
+  return Astro.redirect(`/${shopLocale}/shop/account/login${Astro.url.search}`, 302);
+}
+setPrivateNoStore(Astro.response.headers);
+
+const returnPath = sanitizeReturnPath(Astro.url.searchParams.get("return"), localizePath("/shop/account", shopLocale));
+const session = await getCustomerSession(env, Astro.request);
+if (session) {
+  return Astro.redirect(returnPath, 302);
+}
+
+const errorCode = Astro.url.searchParams.get("error");
+---
+<AccountLoginPage
+  locale={shopLocale}
+  turnstileSiteKey={env.TURNSTILE_SITE_KEY?.trim() || ""}
+  googleEnabled={isGoogleOAuthConfigured(env)}
+  magicEnabled={isMagicLinkEmailConfigured(env)}
+  errorCode={errorCode}
+  returnPath={returnPath}
+/>

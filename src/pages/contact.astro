@@ -1,0 +1,25 @@
+---
+import ContactPage from "../components/pages/ContactPage.astro";
+import NotFoundPage from "../components/pages/NotFoundPage.astro";
+import UnavailablePage from "../components/pages/UnavailablePage.astro";
+import { type Locale } from "../i18n/dictionaries";
+import { resolveRequestLocale } from "../i18n/locale-preference";
+import { isManagedSlug, loadPublicSnapshot, publicContactEmail } from "../lib/public-runtime";
+import { publishedSiteSection, setPublicCache } from "../lib/public-content";
+
+export const prerender = false;
+const pageLocale: Locale = resolveRequestLocale(Astro.request);
+setPublicCache(Astro.response.headers);
+const snapshot = await loadPublicSnapshot(pageLocale);
+const unavailable = snapshot.status === "unavailable";
+const contactSection = publishedSiteSection(snapshot, "contact-profile");
+const contactHidden = isManagedSlug(snapshot, "site_section", "contact-profile") && !contactSection;
+if (unavailable) {
+  Astro.response.status = 503;
+  setPublicCache(Astro.response.headers, "unavailable");
+} else if (contactHidden) {
+  Astro.response.status = 404;
+  setPublicCache(Astro.response.headers, "not-found");
+}
+---
+{unavailable ? <UnavailablePage locale={pageLocale} /> : contactHidden ? <NotFoundPage locale={pageLocale} /> : <ContactPage locale={pageLocale} contactSection={contactSection} contactEmail={publicContactEmail(snapshot)} />}

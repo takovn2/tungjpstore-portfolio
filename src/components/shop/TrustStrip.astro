@@ -1,0 +1,80 @@
+---
+interface Props {
+  items: readonly { title: string; body?: string; icon?: string }[];
+  compact?: boolean;
+}
+
+const { items, compact = false } = Astro.props;
+---
+
+<ul class:list={["shop-trust", { "shop-trust--compact": compact }]} role="list">
+  {items.map((item) => (
+    <li>
+      <b aria-hidden="true">{item.icon || "✓"}</b>
+      <div>
+        <strong>{item.title}</strong>
+        {item.body ? <span>{item.body}</span> : null}
+      </div>
+    </li>
+  ))}
+</ul>
+
+<style>
+  .shop-trust {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.65rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .shop-trust li {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.65rem;
+    min-height: 100%;
+    padding: 0.85rem 0.95rem;
+    border: 1px solid var(--shop-line, #e2e8f0);
+    border-radius: var(--shop-radius, 0.5rem);
+    background: var(--shop-surface, #ffffff);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+  }
+  .shop-trust b {
+    display: grid;
+    width: 1.5rem;
+    height: 1.5rem;
+    flex: 0 0 auto;
+    place-items: center;
+    border-radius: 0.375rem;
+    background: var(--shop-accent-soft, #f1f5f9);
+    color: var(--shop-ink, #0f172a);
+    font: 600 0.72rem/1 var(--font-sans);
+  }
+  .shop-trust strong {
+    display: block;
+    margin: 0 0 0.15rem;
+    color: var(--shop-ink, #0f172a);
+    font: 600 0.82rem/1.25 var(--font-sans);
+  }
+  .shop-trust span {
+    display: block;
+    color: var(--shop-ink-soft, #64748b);
+    font: 450 0.74rem/1.4 var(--font-sans);
+  }
+  .shop-trust--compact li {
+    padding: 0.65rem 0.75rem;
+    align-items: center;
+  }
+  .shop-trust--compact span { display: none; }
+  @media (max-width: 720px) {
+    .shop-trust { grid-template-columns: 1fr; }
+    .shop-trust--compact { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.45rem; }
+    .shop-trust--compact li {
+      flex-direction: column;
+      gap: 0.35rem;
+      text-align: center;
+      padding: 0.65rem 0.4rem;
+    }
+    .shop-trust--compact strong { font-size: 0.72rem; }
+  }
+</style>

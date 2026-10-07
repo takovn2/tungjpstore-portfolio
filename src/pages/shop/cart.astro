@@ -1,0 +1,26 @@
+---
+import { env } from "cloudflare:workers";
+import CartPage from "../../components/pages/CartPage.astro";
+import { type Locale } from "../../i18n/dictionaries";
+import { resolveRequestLocale } from "../../i18n/locale-preference";
+import { getCustomerSession, setPrivateNoStore } from "../../lib/shop/customer-auth";
+import { getShopCheckoutReadiness } from "../../lib/shop/service";
+
+export const prerender = false;
+const shopLocale: Locale = resolveRequestLocale(Astro.request);
+if (shopLocale !== "vi") {
+  return Astro.redirect(`/${shopLocale}/shop/cart${Astro.url.search}`, 302);
+}
+setPrivateNoStore(Astro.response.headers);
+const session = await getCustomerSession(env, Astro.request);
+let checkoutReady = false;
+try { checkoutReady = (await getShopCheckoutReadiness(env)).ready; } catch { checkoutReady = false; }
+---
+<CartPage
+  locale={shopLocale}
+  checkoutReady={checkoutReady}
+  turnstileSiteKey={env.TURNSTILE_SITE_KEY?.trim() || ""}
+  authenticated={Boolean(session)}
+  customerDisplayName={session?.displayName ?? ""}
+  customerEmail={session?.emailNormalized ?? ""}
+/>

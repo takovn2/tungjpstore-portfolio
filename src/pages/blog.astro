@@ -1,0 +1,21 @@
+---
+import BlogPage from "../components/pages/BlogPage.astro";
+import UnavailablePage from "../components/pages/UnavailablePage.astro";
+import { type Locale } from "../i18n/dictionaries";
+import { resolveRequestLocale } from "../i18n/locale-preference";
+import { loadPublicSnapshot } from "../lib/public-runtime";
+import { canUseBundledFallback, publishedBlogPosts, setPublicCache } from "../lib/public-content";
+
+export const prerender = false;
+const pageLocale: Locale = resolveRequestLocale(Astro.request);
+
+setPublicCache(Astro.response.headers);
+const snapshot = await loadPublicSnapshot(pageLocale);
+const unavailable = snapshot.status === "unavailable";
+const posts = canUseBundledFallback(snapshot, "post") ? undefined : publishedBlogPosts(snapshot);
+if (unavailable) {
+  Astro.response.status = 503;
+  setPublicCache(Astro.response.headers, "unavailable");
+}
+---
+{unavailable ? <UnavailablePage locale={pageLocale} /> : <BlogPage locale={pageLocale} posts={posts} />}

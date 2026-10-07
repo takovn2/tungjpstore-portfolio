@@ -1,0 +1,162 @@
+---
+import type { Locale } from "../i18n/dictionaries";
+import { caseStudyLabels, type ProjectEvidence } from "../content/portfolio-evidence";
+
+interface Props {
+  evidence: ProjectEvidence;
+  locale: Locale;
+  slug: string;
+}
+
+const { evidence, locale, slug } = Astro.props;
+const presentationCopy = {
+  vi: {
+    evidence: "Điểm nổi bật",
+    evidenceHeading: "Những phần chính làm nên trải nghiệm sản phẩm.",
+    evidenceNote: "Một lát cắt ngắn từ giao diện, luồng sử dụng và nền tảng phía sau.",
+    decisions: "Quyết định sản phẩm",
+    decisionsHeading: "Những lựa chọn định hình trải nghiệm và khả năng phát triển.",
+    fieldNote: "Góc nhìn cá nhân",
+    record: "Quyết định",
+    visualKinds: { capture: "Màn hình", system: "Tổng quan", flow: "Luồng", detail: "Chi tiết" },
+  },
+  en: {
+    evidence: "Highlights",
+    evidenceHeading: "The main elements shaping the product experience.",
+    evidenceNote: "A concise view across the interface, user flow and supporting platform.",
+    decisions: "Product decisions",
+    decisionsHeading: "Choices that shape the experience and its ability to evolve.",
+    fieldNote: "Personal perspective",
+    record: "Decision",
+    visualKinds: { capture: "Screen", system: "Overview", flow: "Flow", detail: "Detail" },
+  },
+  ja: {
+    evidence: "ハイライト",
+    evidenceHeading: "プロダクト体験を形づくる主な要素。",
+    evidenceNote: "画面、利用フロー、背後の基盤を簡潔に紹介します。",
+    decisions: "プロダクトの判断",
+    decisionsHeading: "体験と今後の発展を形づくる選択。",
+    fieldNote: "個人的な視点",
+    record: "判断",
+    visualKinds: { capture: "画面", system: "概要", flow: "フロー", detail: "詳細" },
+  },
+  zh: {
+    evidence: "产品亮点",
+    evidenceHeading: "塑造产品体验的主要部分。",
+    evidenceNote: "从界面、使用流程到支撑平台的简明视角。",
+    decisions: "产品决策",
+    decisionsHeading: "塑造体验与后续演进能力的关键选择。",
+    fieldNote: "个人视角",
+    record: "决策",
+    visualKinds: { capture: "界面", system: "概览", flow: "流程", detail: "细节" },
+  },
+}[locale];
+const baseLabels = caseStudyLabels(locale);
+const labels = {
+  ...presentationCopy,
+  walkthrough: baseLabels.walkthrough,
+  walkthroughHeading: baseLabels.walkthroughHeading,
+  architecture: baseLabels.architecture,
+  architectureHeading: baseLabels.architectureHeading,
+  layer: baseLabels.layer,
+  technology: baseLabels.technology,
+  reason: baseLabels.reason,
+  effect: baseLabels.effect,
+  context: baseLabels.context,
+  decision: baseLabels.decision,
+  tradeoff: baseLabels.tradeoff,
+};
+---
+
+<section class="case-section case-impact" aria-labelledby={`${slug}-impact`}>
+  <div class="section-heading-row">
+    <div>
+      <p class="section-label">{labels.evidence}</p>
+      <h2 id={`${slug}-impact`}>{labels.evidenceHeading}</h2>
+    </div>
+    <p>{labels.evidenceNote}</p>
+  </div>
+  <div class="impact-strip">
+    {evidence.metrics.map((metric) => (
+      <dl>
+        <dd>{metric.value}</dd>
+        <dt>{metric.label}</dt>
+      </dl>
+    ))}
+  </div>
+</section>
+
+<section class="case-section case-walkthrough" aria-labelledby={`${slug}-visual-walkthrough`}>
+  <div class="section-heading-row">
+    <div>
+      <p class="section-label">{labels.walkthrough}</p>
+      <h2 id={`${slug}-visual-walkthrough`}>{labels.walkthroughHeading}</h2>
+    </div>
+  </div>
+  <div class:list={["evidence-gallery", `evidence-gallery--${slug}`]}>
+    {evidence.visuals.map((visual, index) => (
+      <figure class:list={["evidence-figure", `evidence-figure--${visual.kind}`, index === 0 && "evidence-figure--lead"]}>
+        <div class="evidence-figure__media">
+          <img src={visual.src} alt={visual.alt} loading="lazy" decoding="async" />
+          <span aria-hidden="true">0{index + 1}</span>
+        </div>
+        <figcaption><span>{labels.visualKinds[visual.kind]}</span>{visual.caption}</figcaption>
+      </figure>
+    ))}
+  </div>
+</section>
+
+<section class="case-section case-stack" aria-labelledby={`${slug}-stack`}>
+  <div class="section-heading-row">
+    <div>
+      <p class="section-label">{labels.architecture}</p>
+      <h2 id={`${slug}-stack`}>{labels.architectureHeading}</h2>
+    </div>
+  </div>
+  <div class="stack-ledger" role="table" aria-label={labels.architecture}>
+    <div class="stack-ledger__header" role="row">
+      <span role="columnheader">{labels.layer}</span>
+      <span role="columnheader">{labels.technology}</span>
+      <span role="columnheader">{labels.reason}</span>
+      <span role="columnheader">{labels.effect}</span>
+    </div>
+    {evidence.stack.map((item) => (
+      <div class="stack-ledger__row" role="row">
+        <strong role="cell">{item.layer}</strong>
+        <code role="cell">{item.technology}</code>
+        <p role="cell">{item.reason}</p>
+        <p role="cell">{item.effect}</p>
+      </div>
+    ))}
+  </div>
+</section>
+
+<section class="case-section case-decisions" aria-labelledby={`${slug}-decision-records`}>
+  <div class="section-heading-row">
+    <div>
+      <p class="section-label">{labels.decisions}</p>
+      <h2 id={`${slug}-decision-records`}>{labels.decisionsHeading}</h2>
+    </div>
+  </div>
+  <div class="decision-records">
+    {evidence.decisions.map((record, index) => (
+      <article class="decision-record">
+        <header><span>{labels.record} / 0{index + 1}</span><h3>{record.title}</h3></header>
+        <dl>
+          <div><dt>{labels.context}</dt><dd>{record.context}</dd></div>
+          <div><dt>{labels.decision}</dt><dd>{record.decision}</dd></div>
+          <div><dt>{labels.tradeoff}</dt><dd>{record.tradeoff}</dd></div>
+        </dl>
+      </article>
+    ))}
+  </div>
+</section>
+
+<aside class="builder-note" aria-labelledby={`${slug}-builder-note`}>
+  <figure><img src={evidence.fieldNote.image} alt={evidence.fieldNote.alt} loading="lazy" decoding="async" /></figure>
+  <div>
+    <p class="section-label">{labels.fieldNote}</p>
+    <h2 id={`${slug}-builder-note`}>{evidence.fieldNote.title}</h2>
+    <p>{evidence.fieldNote.body}</p>
+  </div>
+</aside>

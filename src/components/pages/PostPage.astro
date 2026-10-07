@@ -1,0 +1,155 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import CmsBlocks from "../CmsBlocks.astro";
+import { localizePath, type Locale } from "../../i18n/dictionaries";
+import { blogLanguageTag, getBlogCopy } from "../../i18n/blog";
+import { estimateReadingMinutes, validIsoDate } from "../../lib/blog";
+import type { PublicPost } from "../../lib/public-content";
+
+interface Props {
+  locale: Locale;
+  post: PublicPost;
+  availableLocales?: Locale[];
+}
+
+const { locale, post, availableLocales } = Astro.props;
+const blog = getBlogCopy(locale);
+const dateLocale = locale === "zh" ? "zh-CN" : locale;
+const publishedAt = validIsoDate(post.publishedAt);
+const modifiedAt = validIsoDate(post.updatedAt);
+const dateLabel = publishedAt
+  ? new Intl.DateTimeFormat(dateLocale, { dateStyle: "long" }).format(new Date(publishedAt))
+  : null;
+const readingTime = estimateReadingMinutes(post.body);
+const site = Astro.site ?? new URL("https://tung.codes");
+const canonicalUrl = new URL(Astro.url.pathname.replace(/\/$/, "") || "/", site).href;
+const publicationPath = post.surface === "blog" ? "/blog" : "/lab";
+const isBlogPost = post.surface === "blog";
+const publicationUrl = new URL(localizePath(publicationPath, locale), site).href;
+const homeUrl = new URL(localizePath("/", locale), site).href;
+const articleImage = new URL(post.image ?? "/og/default.png", site).href;
+const articleSchema = {
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "@id": `${canonicalUrl}#article`,
+  headline: post.title,
+  description: post.seoDescription,
+  url: canonicalUrl,
+  mainEntityOfPage: canonicalUrl,
+  image: [articleImage],
+  ...(publishedAt ? { datePublished: publishedAt } : {}),
+  ...(modifiedAt ? { dateModified: modifiedAt } : {}),
+  articleSection: post.category || blog.label,
+  keywords: [post.category || blog.label],
+  about: { "@type": "Thing", name: post.category || blog.label },
+  isPartOf: isBlogPost
+    ? { "@id": `${publicationUrl}#collection`, "@type": "CollectionPage", name: blog.publicationName, url: publicationUrl }
+    : { "@id": "https://tung.codes/#website", "@type": "WebSite", name: "TUNG", url: "https://tung.codes/" },
+  inLanguage: blogLanguageTag[locale],
+  author: { "@id": "https://tung.codes/#person", "@type": "Person", name: "TUNG", url: new URL(localizePath("/about", locale), site).href },
+  publisher: { "@id": "https://tung.codes/#person", "@type": "Person", name: "TUNG", url: homeUrl },
+};
+const breadcrumbSchema = {
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  inLanguage: blogLanguageTag[locale],
+  itemListElement: [
+    { "@type": "ListItem", position: 1, name: "TUNG", item: homeUrl },
+    { "@type": "ListItem", position: 2, name: blog.label, item: publicationUrl },
+    { "@type": "ListItem", position: 3, name: post.title, item: canonicalUrl },
+  ],
+};
+---
+
+<BaseLayout
+  title={post.seoTitle}
+  description={post.seoDescription}
+  image={post.image ?? undefined}
+  imageAlt={post.imageAlt}
+  locale={locale}
+  ogType="article"
+  articlePublishedTime={publishedAt}
+  articleModifiedTime={modifiedAt}
+  articleSection={post.category || blog.label}
+  structuredData={[articleSchema, breadcrumbSchema]}
+  alternateLocales={availableLocales ?? [locale]}
+>
+  <article class="content-page cms-post-page">
+    <header class="page-hero cms-post-hero shell">
+      <nav class="cms-post-breadcrumb reveal" aria-label={blog.backToArticles}>
+        <a class="text-link" href={localizePath(publicationPath, locale)}>← {blog.backToArticles}</a>
+      </nav>
+      <div class="cms-post-kicker reveal" style="--reveal-delay: 60ms">
+        <p class="section-label">{post.category || blog.label}</p>
+      </div>
+      <h1 class="page-title reveal" style="--reveal-delay: 110ms">{post.title}</h1>
+      <p class="cms-post-deck reveal" style="--reveal-delay: 170ms">{post.excerpt}</p>
+      <div class="cms-post-meta reveal" style="--reveal-delay: 220ms">
+        <div><span>{blog.publishedLabel}</span>{dateLabel ? <time datetime={publishedAt ?? undefined}>{dateLabel}</time> : <strong>TUNG</strong>}</div>
+        <div><span>{blog.label}</span><strong>{blog.readingTime(readingTime)}</strong></div>
+        <div><span>{blog.authorLabel}</span><strong>TUNG</strong></div>
+      </div>
+    </header>
+
+    {post.image && <figure class="shell cms-post-cover reveal"><img src={post.image} alt={post.imageAlt} decoding="async" fetchpriority="high" /><figcaption>{post.imageAlt}</figcaption></figure>}
+
+    <section class="shell cms-post-content" aria-label={post.title}>
+      <aside class="cms-post-rail reveal">
+        <span class="mono-label">{isBlogPost ? blog.postRailLabel : blog.label}</span>
+        <p>{isBlogPost ? blog.postRailBody : blog.publicationDescription}</p>
+        {isBlogPost && <div class="cms-post-rail__actions">
+          <a class="text-link" href={localizePath("/pricing", locale)}>{blog.postPricingCta} <span aria-hidden="true">↗</span></a>
+          <a class="text-link" href={localizePath("/work", locale)}>{blog.heroSecondaryCta}</a>
+        </div>}
+      </aside>
+      <div class="cms-prose">
+        <CmsBlocks blocks={post.body} locale={locale} />
+      </div>
+    </section>
+
+    {isBlogPost ? (
+      <footer class="shell cms-post-footer cms-post-footer--service reveal">
+        <div>
+          <p class="section-label">{blog.postCtaLabel}</p>
+          <h2>{blog.postCtaHeading}</h2>
+        </div>
+        <div class="cms-post-footer__service">
+          <p>{blog.postCtaBody}</p>
+          <div class="hero-actions">
+            <a class="button-link primary" href={localizePath("/contact", locale)}>{blog.contactCta} <span aria-hidden="true">↗</span></a>
+            <a class="button-link" href={localizePath("/pricing", locale)}>{blog.postPricingCta}</a>
+            <a class="text-link" href={localizePath(publicationPath, locale)}>← {blog.backToArticles}</a>
+          </div>
+        </div>
+      </footer>
+    ) : (
+      <footer class="shell cms-post-footer reveal">
+        <div>
+          <p class="section-label">{blog.continueExploring}</p>
+          <h2>{blog.publicationName}</h2>
+        </div>
+        <div class="hero-actions">
+          <a class="button-link primary" href={localizePath(publicationPath, locale)}>{blog.backToArticles}</a>
+          <a class="button-link" href={localizePath("/contact", locale)}>{blog.contactCta} <span aria-hidden="true">↗</span></a>
+        </div>
+      </footer>
+    )}
+  </article>
+</BaseLayout>
+
+<style>
+  .cms-post-rail__actions { display: grid; justify-items: start; gap: .8rem; margin-top: 1.75rem; padding-top: 1.5rem; border-top: 1px solid var(--line); }
+  .cms-post-rail__actions .text-link { font: 600 .68rem/1.4 var(--font-mono); letter-spacing: .06em; text-transform: uppercase; }
+  .cms-post-footer--service { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(18rem, .8fr); }
+  .cms-post-footer--service h2 { max-width: 15ch; }
+  .cms-post-footer__service > p { max-width: 34rem; margin: 0 0 2rem; color: var(--paper-soft); font-size: 1.05rem; line-height: 1.7; }
+  .cms-post-footer__service .hero-actions { align-items: center; flex-wrap: wrap; }
+  .cms-post-footer__service .text-link { color: var(--paper-soft); }
+  @media (max-width: 900px) {
+    .cms-post-footer--service { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 600px) {
+    .cms-post-footer__service .hero-actions { display: grid; width: 100%; }
+    .cms-post-footer__service .button-link { width: 100%; }
+  }
+</style>

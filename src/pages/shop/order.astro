@@ -1,0 +1,16 @@
+---
+import OrderPage from "../../components/pages/OrderPage.astro";
+import { type Locale } from "../../i18n/dictionaries";
+import { resolveRequestLocale } from "../../i18n/locale-preference";
+import { setPublicCache } from "../../lib/public-content";
+
+export const prerender = false;
+const shopLocale: Locale = resolveRequestLocale(Astro.request);
+if (shopLocale !== "vi") {
+  return Astro.redirect(`/${shopLocale}/shop/order${Astro.url.search}`, 302);
+}
+
+setPublicCache(Astro.response.headers, "unavailable");
+Astro.response.headers.set("X-Robots-Tag", "noindex, nofollow");
+---
+<OrderPage locale={shopLocale} />

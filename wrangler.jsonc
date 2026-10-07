@@ -1,0 +1,107 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "tungjpstore-portfolio",
+	"workers_dev": false,
+	"compatibility_date": "2026-07-24",
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	"keep_vars": true,
+	"vars": {
+		"MEDIA_PUBLIC_BASE_URL": "https://media.tung.codes",
+		"SHOP_PUBLIC_ORIGIN": "https://tung.codes",
+		"SHOP_KEY_ENCRYPTION_KEY_VERSION": "v1",
+		"TELEGRAM_BOT_USERNAME": "dochoiai_bot",
+		"TELEGRAM_TOKEN_ENCRYPTION_KEY_VERSION": "v1",
+		"TRANSACTIONAL_EMAIL_FROM_ADDRESS": "orders@tungjpstore.net",
+		"TRANSACTIONAL_EMAIL_FROM_NAME": "TUNG Shop",
+		"TRANSACTIONAL_EMAIL_DELIVER_KEYS": "0",
+		"TURNSTILE_SITE_KEY": "0x4AAAAAADDtBCY2bporLyqE"
+	},
+	"observability": {
+		"enabled": true,
+		"head_sampling_rate": 1
+	},
+	"triggers": {
+		"crons": ["*/5 * * * *"]
+	},
+	"assets": {
+		"binding": "ASSETS",
+		"not_found_handling": "404-page",
+		"run_worker_first": [
+			"/",
+			"/api/*",
+			"/admin",
+			"/admin/*",
+			"/contact*",
+			"/shop*",
+			"/work*",
+			"/lab*",
+			"/blog*",
+			"/about*",
+			"/privacy*",
+			"/pricing*",
+			"/terms-of-service*",
+			"/refund-policy*",
+			"/telegram*",
+			"/robots.txt",
+			"/rss.xml",
+			"/sitemap.xml",
+			"/en",
+			"/en/*",
+			"/ja",
+			"/ja/*",
+			"/zh",
+			"/zh/*",
+			"/vi",
+			"/vi/*"
+		]
+	},
+	"dev": {
+		"inspector_port": 0
+	},
+	"d1_databases": [
+		{
+			"binding": "CONTACT_DB",
+			"database_name": "tungjpstore-contact",
+			"database_id": "026225c4-4062-45d5-8958-166567af1eeb",
+			"migrations_dir": "migrations"
+		},
+		{
+			"binding": "CONTENT_DB",
+			"database_name": "tungjpstore-content",
+			"database_id": "cddce825-5653-4014-9948-b0640cdf6969",
+			"migrations_dir": "content-migrations"
+		}
+	],
+	"r2_buckets": [
+		{
+			"binding": "MEDIA",
+			"bucket_name": "tung-profile-media"
+		}
+	],
+	"send_email": [
+		{
+			"name": "SHOP_EMAIL",
+			"allowed_sender_addresses": ["orders@tungjpstore.net"]
+		}
+	],
+	"routes": [
+		{
+			"pattern": "tung.codes",
+			"custom_domain": true
+		},
+		{
+			"pattern": "www.tung.codes",
+			"custom_domain": true
+		},
+		{
+			"pattern": "tungjpstore.net",
+			"custom_domain": true
+		},
+		{
+			"pattern": "www.tungjpstore.net",
+			"custom_domain": true
+		}
+	]
+}

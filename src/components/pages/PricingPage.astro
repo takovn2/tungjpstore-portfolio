@@ -1,0 +1,316 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { localizePath, type Locale } from "../../i18n/dictionaries";
+import { getPricingCopy } from "../../i18n/pricing";
+import { formatServiceBudgetBand, formatServicePricePoint, getServiceCurrencyNote, type ServiceBudgetBand } from "../../lib/services/currency";
+
+interface Props { locale: Locale; }
+
+const { locale } = Astro.props;
+const copy = getPricingCopy(locale);
+const siteUrl = Astro.site ?? new URL("https://tung.codes");
+const pricingPath = localizePath("/pricing", locale);
+const contactSubject = ({
+  vi: "Tư vấn website và báo giá dự án",
+  en: "Website project and pricing enquiry",
+  ja: "Webサイト制作と料金の相談",
+  zh: "网站项目与报价咨询",
+} as const)[locale];
+const contactHref = localizePath(`/contact?subject=${encodeURIComponent(contactSubject)}`, locale);
+const workHref = localizePath("/work", locale);
+const budgetBands: ServiceBudgetBand[] = ["focused", "build", "platform"];
+const currencyNote = getServiceCurrencyNote(locale);
+const structuredData = [{
+  "@context": "https://schema.org",
+  "@type": "CollectionPage",
+  name: copy.metaTitle,
+  description: copy.metaDescription,
+  url: new URL(pricingPath, siteUrl).href,
+  mainEntity: {
+    "@type": "ItemList",
+    itemListElement: copy.services.map((service, index) => ({
+      "@type": "ListItem",
+      position: index + 1,
+      item: { "@type": "Service", serviceType: service.title, name: service.title, description: service.summary, areaServed: ["VN", "JP", "Worldwide"], availableChannel: { "@type": "ServiceChannel", serviceUrl: new URL(pricingPath, siteUrl).href }, provider: { "@id": "https://tung.codes/#person" } },
+    })),
+  },
+}, {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  mainEntity: copy.faqs.map((faq) => ({
+    "@type": "Question",
+    name: faq.question,
+    acceptedAnswer: { "@type": "Answer", text: faq.answer },
+  })),
+}, {
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  itemListElement: [
+    { "@type": "ListItem", position: 1, name: "TUNG", item: new URL(localizePath("/", locale), siteUrl).href },
+    { "@type": "ListItem", position: 2, name: copy.navLabel, item: new URL(pricingPath, siteUrl).href },
+  ],
+}];
+---
+
+<BaseLayout title={copy.metaTitle} description={copy.metaDescription} locale={locale} structuredData={structuredData}>
+  <article class="pricing-page">
+    <header class="pricing-hero shell">
+      <div class="pricing-hero__copy reveal">
+        <p class="section-label"><span class="status-dot" aria-hidden="true"></span>{copy.label}</p>
+        <h1><span>{copy.headingLead}</span><em>{copy.headingEmphasis}</em></h1>
+        <p class="pricing-hero__intro">{copy.intro}</p>
+        <div class="hero-actions">
+          <a class="button-link primary" href={contactHref}>{copy.ctaPrimary}<span aria-hidden="true">↗</span></a>
+          <a class="button-link" href="#investment">{copy.budgetLabel}<span aria-hidden="true">↓</span></a>
+        </div>
+      </div>
+      <div class="pricing-hero__signal reveal" style="--reveal-delay: 140ms">
+        <div class="pricing-signal__diagram" aria-hidden="true"><i></i><i></i><i></i><b>01</b><b>02</b><b>03</b></div>
+        <p class="section-label">{copy.servicesLabel}</p>
+        <strong>{copy.facts[0]?.value}</strong>
+        <small>{copy.responseNote}</small>
+      </div>
+      <div class="pricing-facts reveal" style="--reveal-delay: 220ms">
+        {copy.facts.map((fact) => <div><span>{fact.label}</span><strong>{fact.value}</strong></div>)}
+      </div>
+    </header>
+
+    <section class="pricing-services section-rule" aria-labelledby="services-heading">
+      <div class="shell">
+        <div class="pricing-section-head reveal"><p class="section-label">{copy.servicesLabel}</p><div><h2 id="services-heading">{copy.servicesHeading}</h2><p>{copy.servicesIntro}</p></div></div>
+        <div class="pricing-service-list">
+          {copy.services.map((service, index) => <article class="pricing-service reveal" style={`--reveal-delay: ${index * 80}ms`}>
+            <div class="pricing-service__index">0{index + 1}</div>
+            <div class="pricing-service__main"><p class="mono-label">{service.label}</p><h3>{service.title}</h3><p class="pricing-service__summary">{service.summary}</p><p class="pricing-service__fit"><strong>{locale === "vi" ? "Phù hợp khi" : locale === "ja" ? "向いている場合" : locale === "zh" ? "适合情况" : "Best when"}</strong>{service.fit}</p></div>
+            <div class="pricing-service__details"><p><span>{locale === "vi" ? "Mô hình" : locale === "ja" ? "進め方" : locale === "zh" ? "合作形式" : "Engagement"}</span>{service.engagement}</p><div><span>{locale === "vi" ? "Đầu ra thường có" : locale === "ja" ? "主な成果物" : locale === "zh" ? "常见交付物" : "Typical outputs"}</span><ul>{service.deliverables.map((item) => <li>{item}</li>)}</ul></div></div>
+          </article>)}
+        </div>
+      </div>
+    </section>
+
+    <section class="pricing-investment section-rule" id="investment" aria-labelledby="investment-heading">
+      <div class="shell">
+        <div class="pricing-section-head reveal"><p class="section-label">{copy.budgetLabel}</p><div><h2 id="investment-heading">{copy.budgetHeading}</h2><p>{copy.budgetIntro}</p></div></div>
+        <figure class="pricing-budget-visual reveal"><img src="/images/services/pricing-scope-ladder.webp" alt={copy.budgetImageAlt} width="1536" height="1024" loading="lazy" decoding="async" /><figcaption>{copy.budgetImageAlt}</figcaption></figure>
+        <div class="pricing-budget-list">
+          {budgetBands.map((band, index) => {
+            const item = copy.budgetBands[band];
+            const amount = formatServiceBudgetBand(band, locale);
+            return <article class:list={["pricing-budget", "reveal", { "pricing-budget--featured": item.featured }]} style={`--reveal-delay: ${index * 70}ms`}>
+              <div class="pricing-budget__head"><span>0{index + 1}</span><p class="mono-label">{item.label}</p>{item.featured && <b>{copy.budgetFeaturedLabel}</b>}</div>
+              <h3>{item.title}</h3>
+              <strong class="pricing-budget__amount">{amount.primary}</strong>
+              {amount.base && <small class="pricing-budget__base">{amount.base}</small>}
+              <p>{item.description}</p>
+              <p class="pricing-budget__fit"><span>{copy.budgetFitLabel}</span>{item.fit}</p>
+              <p class="pricing-budget__timeline"><span>{copy.budgetTimelineLabel}</span>{item.timeline}</p>
+              <div class="pricing-budget__options"><span>{copy.budgetIncludedLabel}</span>{item.options.map((option) => { const quote = formatServicePricePoint(option.pricePoint, locale); return <div class="pricing-budget__option"><strong>{option.label}</strong><b>{quote.primary}</b>{quote.base && <small>{quote.base}</small>}</div>; })}</div>
+              <ul>{item.examples.map((example) => <li>{example}</li>)}</ul>
+            </article>;
+          })}
+        </div>
+        <p class="pricing-currency-note">{currencyNote}</p>
+      </div>
+    </section>
+
+    <section class="pricing-addons section-rule" aria-labelledby="addons-heading">
+      <div class="shell">
+        <div class="pricing-section-head reveal"><p class="section-label">{copy.addOnsLabel}</p><div><h2 id="addons-heading">{copy.addOnsHeading}</h2><p>{copy.addOnsIntro}</p></div></div>
+        <div class="pricing-addons-list">{copy.addOns.map((item, index) => <article class="pricing-addon reveal" style={`--reveal-delay: ${index * 55}ms`}><span>0{index + 1}</span><div><h3>{item.title}</h3><p>{item.body}</p><strong>{item.price}</strong></div></article>)}</div>
+      </div>
+    </section>
+
+    <section class="pricing-proof section-rule" aria-labelledby="proof-heading">
+      <div class="shell">
+        <div class="pricing-section-head reveal"><p class="section-label">{copy.proofLabel}</p><div><h2 id="proof-heading">{copy.proofHeading}</h2><p>{copy.proofIntro}</p></div></div>
+        <div class="pricing-proof-list">
+          {copy.proofItems.map((item, index) => <a class="pricing-proof-item reveal" style={`--reveal-delay: ${index * 70}ms`} href={localizePath(item.href, locale)}><span>0{index + 1}</span><div><p class="mono-label">{item.label}</p><h3>{item.title}</h3><p>{item.body}</p><strong>{item.linkLabel}<span aria-hidden="true">↗</span></strong></div></a>)}
+        </div>
+      </div>
+    </section>
+
+    <section class="pricing-proposal section-rule" aria-labelledby="proposal-heading">
+      <div class="shell">
+        <div class="pricing-section-head reveal"><p class="section-label">{copy.proposalLabel}</p><div><h2 id="proposal-heading">{copy.proposalHeading}</h2></div></div>
+        <ol class="pricing-proposal-list">{copy.proposalItems.map((item, index) => <li class="reveal"><span>0{index + 1}</span><h3>{item.title}</h3><p>{item.body}</p></li>)}</ol>
+      </div>
+    </section>
+
+    <section class="pricing-process section-rule" aria-labelledby="process-heading">
+      <div class="shell">
+        <div class="pricing-section-head reveal"><p class="section-label">{copy.processLabel}</p><div><h2 id="process-heading">{copy.processHeading}</h2></div></div>
+        <ol class="pricing-process-list">{copy.process.map((item, index) => <li class="reveal"><span>0{index + 1}</span><h3>{item.title}</h3><p>{item.body}</p></li>)}</ol>
+      </div>
+    </section>
+
+    <section class="pricing-scope section-rule" aria-labelledby="scope-heading">
+      <div class="shell">
+        <div class="pricing-section-head reveal"><p class="section-label">{copy.scopeLabel}</p><div><h2 id="scope-heading">{copy.scopeHeading}</h2></div></div>
+        <div class="pricing-scope-grid">
+          <div class="pricing-scope-column pricing-scope-column--included reveal"><p class="mono-label">{copy.includedLabel}</p><ul>{copy.included.map((item) => <li><i aria-hidden="true">+</i>{item}</li>)}</ul></div>
+          <div class="pricing-scope-column reveal"><p class="mono-label">{copy.outsideLabel}</p><ul>{copy.outside.map((item) => <li><i aria-hidden="true">—</i>{item}</li>)}</ul></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="pricing-faq section-rule" aria-labelledby="faq-heading">
+      <div class="shell pricing-faq-grid">
+        <div class="reveal"><p class="section-label">{copy.faqLabel}</p><h2 id="faq-heading">{copy.faqHeading}</h2></div>
+        <div>{copy.faqs.map((faq, index) => <details class="reveal"><summary><span>0{index + 1}</span>{faq.question}<i aria-hidden="true">+</i></summary><p>{faq.answer}</p></details>)}</div>
+      </div>
+    </section>
+
+    <section class="pricing-cta section-rule">
+      <div class="shell pricing-cta-grid reveal"><p class="section-label">{copy.ctaLabel}</p><div><h2>{copy.ctaHeading}</h2><p>{copy.ctaBody}</p><p class="pricing-response"><span class="status-dot" aria-hidden="true"></span>{copy.responseNote}</p><div class="hero-actions"><a class="button-link primary" href={contactHref}>{copy.ctaPrimary}<span aria-hidden="true">↗</span></a><a class="button-link" href={workHref}>{copy.ctaSecondary}<span aria-hidden="true">↗</span></a></div></div></div>
+    </section>
+  </article>
+</BaseLayout>
+
+<style>
+  .pricing-page { background: var(--ink); }
+  .pricing-hero { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(14rem, .55fr); gap: clamp(2rem, 7vw, 8rem); min-height: 88svh; align-content: end; padding-top: 8rem; padding-bottom: clamp(3.5rem, 8vw, 7rem); }
+  .pricing-hero__copy h1 { max-width: 10ch; margin: 2rem 0 0; font: 400 clamp(3.3rem, 8vw, 8.8rem)/.88 var(--font-serif); letter-spacing: -.065em; }
+  .pricing-hero__copy h1 span, .pricing-hero__copy h1 em { display: block; }
+  .pricing-hero__copy h1 em { color: var(--accent); font-weight: 400; }
+  .pricing-hero__intro { max-width: 44rem; margin: clamp(2rem, 5vw, 4.5rem) 0 0; color: var(--paper-soft); font-size: clamp(1.05rem, 1.45vw, 1.3rem); line-height: 1.55; }
+  .pricing-hero__copy .hero-actions { margin-top: 2rem; }
+  .pricing-hero__signal { align-self: end; padding: 1.25rem 0 1.4rem; border-top: 1px solid var(--line-strong); border-bottom: 1px solid var(--line); }
+  .pricing-signal__diagram { display: grid; grid-template-columns: repeat(3, 1fr); gap: .5rem; margin-bottom: 3rem; }
+  .pricing-signal__diagram i { height: 4.5rem; border-top: 1px solid var(--accent); border-bottom: 1px solid var(--line); transform: skewY(-20deg); opacity: .75; }
+  .pricing-signal__diagram b { color: var(--paper-soft); font: 600 .58rem/1 var(--font-mono); letter-spacing: .08em; }
+  .pricing-hero__signal strong { display: block; max-width: 15rem; margin: 1rem 0 2.5rem; font: 400 clamp(1.65rem, 2.5vw, 2.5rem)/1.02 var(--font-serif); }
+  .pricing-hero__signal small { color: var(--paper-soft); font: 500 .67rem/1.45 var(--font-mono); }
+  .pricing-facts { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: clamp(2.5rem, 6vw, 5.5rem); border-top: 1px solid var(--line-strong); }
+  .pricing-facts div { display: grid; min-height: 6.5rem; align-content: space-between; gap: 1rem; padding: 1rem 1.25rem 1rem 0; border-bottom: 1px solid var(--line); }
+  .pricing-facts div + div { padding-left: 1.25rem; border-left: 1px solid var(--line); }
+  .pricing-facts span { color: var(--paper-soft); font: 600 .6rem/1 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; }
+  .pricing-facts strong { max-width: 22rem; font-size: .9rem; font-weight: 500; }
+
+  .pricing-services, .pricing-investment, .pricing-addons, .pricing-proof, .pricing-proposal, .pricing-process, .pricing-scope, .pricing-faq, .pricing-cta { padding-block: clamp(5rem, 10vw, 9rem); }
+  .pricing-section-head { display: grid; grid-template-columns: .38fr 1.62fr; gap: 3rem; }
+  .pricing-section-head h2, .pricing-faq h2, .pricing-cta h2 { max-width: 16ch; margin: 0; font: 400 clamp(2.7rem, 5.3vw, 5.8rem)/.98 var(--font-serif); letter-spacing: -.05em; }
+  .pricing-section-head > div > p { max-width: 48rem; margin: 2rem 0 0; color: var(--paper-soft); line-height: 1.6; }
+
+  .pricing-service-list { margin-top: clamp(3rem, 6vw, 5rem); border-top: 1px solid var(--line-strong); }
+  .pricing-service { display: grid; grid-template-columns: 3rem minmax(0, 1.05fr) minmax(16rem, .95fr); gap: clamp(1.5rem, 4vw, 5rem); padding: clamp(2rem, 4vw, 3.5rem) 0; border-bottom: 1px solid var(--line); }
+  .pricing-service__index { color: var(--accent); font: 600 .68rem/1 var(--font-mono); }
+  .pricing-service__main h3 { max-width: 16ch; margin: .9rem 0 1.2rem; font: 400 clamp(2rem, 3.4vw, 4rem)/.96 var(--font-serif); letter-spacing: -.045em; }
+  .pricing-service__summary { max-width: 42rem; margin: 0; color: var(--paper-soft); font-size: 1rem; line-height: 1.6; }
+  .pricing-service__fit { max-width: 38rem; margin: 1.6rem 0 0; color: var(--paper-soft); font-size: .84rem; line-height: 1.55; }
+  .pricing-service__fit strong { display: block; margin-bottom: .3rem; color: var(--paper); font: 600 .6rem/1 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; }
+  .pricing-service__details { display: grid; align-content: start; gap: 1.5rem; }
+  .pricing-service__details p, .pricing-service__details ul { margin: 0; color: var(--paper-soft); font-size: .8rem; line-height: 1.55; }
+  .pricing-service__details > p span, .pricing-service__details > div > span { display: block; margin-bottom: .55rem; color: var(--paper); font: 600 .6rem/1 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; }
+  .pricing-service__details ul { display: grid; gap: .55rem; padding: 0; list-style: none; }
+  .pricing-service__details li { position: relative; padding-left: 1rem; }
+  .pricing-service__details li::before { content: ""; position: absolute; top: .55em; left: 0; width: .35rem; height: .35rem; background: var(--accent); }
+
+  .pricing-budget-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: clamp(3rem, 6vw, 5rem); border-top: 1px solid var(--line-strong); }
+  .pricing-budget-visual { margin: clamp(3rem, 6vw, 5rem) 0 0; border: 1px solid var(--line); background: var(--ink-soft); }
+  .pricing-budget-visual img { display: block; width: 100%; height: auto; aspect-ratio: 3 / 1.25; object-fit: cover; opacity: .9; }
+  .pricing-budget-visual figcaption { padding: .75rem 1rem; color: var(--paper-soft); font: 500 .6rem/1.4 var(--font-mono); letter-spacing: .04em; text-transform: uppercase; }
+  .pricing-budget { display: flex; min-height: 38rem; flex-direction: column; gap: 1rem; padding: 1.25rem; border-bottom: 1px solid var(--line); }
+  .pricing-budget + .pricing-budget { border-left: 1px solid var(--line); }
+  .pricing-budget--featured { background: var(--ink-soft); box-shadow: inset 0 .2rem 0 var(--accent); }
+  .pricing-budget__head { display: flex; align-items: center; gap: .7rem; min-height: 1.2rem; }
+  .pricing-budget__head > span { color: var(--accent); font: 600 .62rem/1 var(--font-mono); }
+  .pricing-budget__head b { margin-left: auto; color: var(--accent); font: 600 .57rem/1 var(--font-mono); letter-spacing: .06em; text-transform: uppercase; }
+  .pricing-budget h3 { margin: 2.5rem 0 0; font: 400 clamp(1.7rem, 2.5vw, 2.7rem)/1 var(--font-serif); }
+  .pricing-budget__amount { display: block; overflow-wrap: anywhere; color: var(--paper); font: 500 clamp(1.35rem, 2vw, 2rem)/1.05 var(--font-sans); font-variant-numeric: tabular-nums; letter-spacing: -.04em; }
+  .pricing-budget__base { color: var(--paper-soft); font: 500 .61rem/1.3 var(--font-mono); }
+  .pricing-budget > p { margin: .4rem 0 0; color: var(--paper-soft); font-size: .83rem; line-height: 1.55; }
+  .pricing-budget__fit span { display: block; margin-bottom: .3rem; color: var(--paper); font: 600 .6rem/1 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; }
+  .pricing-budget__timeline { padding-top: .75rem; border-top: 1px solid var(--line); }
+  .pricing-budget__timeline span, .pricing-budget__options > span { display: block; margin-bottom: .45rem; color: var(--paper); font: 600 .6rem/1 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; }
+  .pricing-budget__options { display: grid; gap: .55rem; margin-top: .25rem; }
+  .pricing-budget__option { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .25rem 1rem; align-items: baseline; padding: .7rem 0; border-top: 1px solid var(--line); }
+  .pricing-budget__option strong { font-size: .77rem; font-weight: 600; line-height: 1.35; }
+  .pricing-budget__option b { color: var(--accent); font: 600 .72rem/1.25 var(--font-mono); text-align: right; }
+  .pricing-budget__option small { grid-column: 1 / -1; color: var(--paper-soft); font: 500 .55rem/1.35 var(--font-mono); text-align: right; }
+  .pricing-budget ul { display: grid; gap: .55rem; margin: auto 0 0; padding: 1rem 0 0; border-top: 1px solid var(--line); list-style: none; }
+  .pricing-budget li { color: var(--paper-soft); font: 500 .64rem/1.4 var(--font-mono); }
+  .pricing-budget li::before { content: "↳"; margin-right: .5rem; color: var(--accent); }
+  .pricing-currency-note { max-width: 52rem; margin: 1.5rem 0 0 auto; color: var(--paper-soft); font-size: .72rem; line-height: 1.55; text-align: right; }
+
+  .pricing-addons-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: clamp(3rem, 6vw, 5rem); border-top: 1px solid var(--line-strong); }
+  .pricing-addon { display: grid; grid-template-columns: 2rem minmax(0, 1fr); gap: 1rem; min-height: 15rem; padding: 1.25rem; border-bottom: 1px solid var(--line); }
+  .pricing-addon:not(:nth-child(3n + 1)) { border-left: 1px solid var(--line); }
+  .pricing-addon > span { color: var(--accent); font: 600 .62rem/1 var(--font-mono); }
+  .pricing-addon > div { display: flex; min-width: 0; flex-direction: column; }
+  .pricing-addon h3 { margin: 0 0 1rem; font: 400 clamp(1.45rem, 2vw, 2.15rem)/1.02 var(--font-serif); letter-spacing: -.035em; }
+  .pricing-addon p { margin: 0; color: var(--paper-soft); font-size: .82rem; line-height: 1.55; }
+  .pricing-addon strong { margin-top: auto; padding-top: 1.5rem; color: var(--accent); font: 600 .62rem/1.35 var(--font-mono); letter-spacing: .04em; text-transform: uppercase; }
+
+  .pricing-proof-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: clamp(3rem, 6vw, 5rem); border-top: 1px solid var(--line-strong); }
+  .pricing-proof-item { display: grid; grid-template-columns: 2rem 1fr; gap: 1.2rem; min-height: 19rem; padding: 1.25rem; border-bottom: 1px solid var(--line); }
+  .pricing-proof-item + .pricing-proof-item { border-left: 1px solid var(--line); }
+  .pricing-proof-item > span { color: var(--accent); font: 600 .63rem/1 var(--font-mono); }
+  .pricing-proof-item h3 { margin: 1rem 0 .7rem; font: 400 clamp(1.7rem, 2.6vw, 2.8rem)/1 var(--font-serif); }
+  .pricing-proof-item p:not(.mono-label) { margin: 0; color: var(--paper-soft); font-size: .82rem; line-height: 1.55; }
+  .pricing-proof-item strong { display: inline-flex; gap: .5rem; margin-top: 2rem; color: var(--paper); font: 600 .62rem/1 var(--font-mono); letter-spacing: .07em; text-transform: uppercase; }
+  .pricing-proof-item:hover strong, .pricing-proof-item:focus-visible strong { color: var(--accent); }
+
+  .pricing-proposal-list, .pricing-process-list { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin: clamp(3rem, 6vw, 5rem) 0 0; padding: 0; border-top: 1px solid var(--line-strong); list-style: none; }
+  .pricing-proposal-list li, .pricing-process-list li { display: grid; min-height: 15rem; align-content: start; gap: 1.4rem; padding: 1.25rem; border-bottom: 1px solid var(--line); }
+  .pricing-proposal-list li + li, .pricing-process-list li + li { border-left: 1px solid var(--line); }
+  .pricing-proposal-list li > span, .pricing-process-list li > span { color: var(--accent); font: 600 .63rem/1 var(--font-mono); }
+  .pricing-proposal-list h3, .pricing-process-list h3 { margin: 1rem 0 0; font: 400 clamp(1.45rem, 2.1vw, 2.2rem)/1.03 var(--font-serif); }
+  .pricing-proposal-list p, .pricing-process-list p { margin: auto 0 0; color: var(--paper-soft); font-size: .82rem; line-height: 1.55; }
+
+  .pricing-scope-grid { display: grid; grid-template-columns: 1fr 1fr; margin-top: clamp(3rem, 6vw, 5rem); border-top: 1px solid var(--line-strong); }
+  .pricing-scope-column { padding: 1.25rem 1.25rem 1.5rem; border-bottom: 1px solid var(--line); }
+  .pricing-scope-column + .pricing-scope-column { border-left: 1px solid var(--line); }
+  .pricing-scope-column ul { display: grid; gap: 1rem; margin: 2rem 0 0; padding: 0; list-style: none; }
+  .pricing-scope-column li { display: grid; grid-template-columns: 1.25rem 1fr; gap: .7rem; color: var(--paper-soft); font-size: .9rem; line-height: 1.5; }
+  .pricing-scope-column li i { color: var(--accent); font: 400 1.2rem/1 var(--font-sans); font-style: normal; }
+  .pricing-scope-column:not(.pricing-scope-column--included) li i { color: var(--paper-soft); }
+
+  .pricing-faq-grid, .pricing-cta-grid { display: grid; grid-template-columns: .55fr 1.45fr; gap: clamp(3rem, 8vw, 9rem); }
+  .pricing-faq-grid > div:first-child { position: sticky; top: 7rem; align-self: start; }
+  .pricing-faq h2 { margin-top: 2rem; }
+  .pricing-faq details { border-top: 1px solid var(--line); }
+  .pricing-faq details:last-child { border-bottom: 1px solid var(--line); }
+  .pricing-faq summary { display: grid; grid-template-columns: 2.5rem 1fr auto; gap: 1rem; align-items: center; min-height: 5rem; cursor: pointer; font-weight: 600; list-style: none; }
+  .pricing-faq summary::-webkit-details-marker { display: none; }
+  .pricing-faq summary > span { color: var(--paper-soft); font: 600 .61rem/1 var(--font-mono); }
+  .pricing-faq summary i { color: var(--accent); font-size: 1.2rem; font-style: normal; }
+  .pricing-faq details[open] summary i { transform: rotate(45deg); }
+  .pricing-faq details p { max-width: 46rem; margin: 0 0 2rem 3.5rem; color: var(--paper-soft); line-height: 1.6; }
+  .pricing-cta { background: var(--ink-soft); }
+  .pricing-cta h2 { max-width: 18ch; }
+  .pricing-cta h2 + p { max-width: 46rem; margin: 2rem 0; color: var(--paper-soft); line-height: 1.6; }
+  .pricing-response { display: flex; align-items: center; gap: .7rem; margin: 0 0 1.7rem; color: var(--paper-soft); font: 600 .63rem/1.3 var(--font-mono); letter-spacing: .06em; text-transform: uppercase; }
+  .pricing-response .status-dot { flex: 0 0 auto; }
+
+  @media (max-width: 900px) {
+    .pricing-hero { grid-template-columns: 1fr; min-height: 0; }
+    .pricing-hero__signal { max-width: 28rem; }
+    .pricing-service { grid-template-columns: 2.5rem 1fr; }
+    .pricing-service__details { grid-column: 2; grid-template-columns: 1fr 1fr; }
+    .pricing-budget-list, .pricing-proof-list { grid-template-columns: 1fr; }
+    .pricing-budget + .pricing-budget, .pricing-proof-item + .pricing-proof-item { border-left: 0; }
+    .pricing-budget { min-height: 0; }
+    .pricing-budget ul { margin-top: 1rem; }
+    .pricing-addons-list { grid-template-columns: 1fr 1fr; }
+    .pricing-addon:not(:nth-child(3n + 1)) { border-left: 0; }
+    .pricing-addon:nth-child(even) { border-left: 1px solid var(--line); }
+    .pricing-proposal-list, .pricing-process-list { grid-template-columns: 1fr 1fr; }
+    .pricing-proposal-list li:nth-child(odd), .pricing-process-list li:nth-child(odd) { border-left: 0; }
+  }
+  @media (max-width: 680px) {
+    .pricing-facts, .pricing-section-head, .pricing-faq-grid, .pricing-cta-grid, .pricing-scope-grid { grid-template-columns: 1fr; }
+    .pricing-facts div + div { padding-left: 0; border-left: 0; }
+    .pricing-service { grid-template-columns: 2rem 1fr; gap: 1rem; }
+    .pricing-service__details { grid-column: 2; grid-template-columns: 1fr; }
+    .pricing-scope-column + .pricing-scope-column { border-left: 0; }
+    .pricing-addons-list { grid-template-columns: 1fr; }
+    .pricing-addon:nth-child(even) { border-left: 0; }
+    .pricing-faq-grid > div:first-child { position: static; }
+    .pricing-currency-note { text-align: left; }
+  }
+  @media (max-width: 500px) {
+    .pricing-proposal-list, .pricing-process-list { grid-template-columns: 1fr; }
+    .pricing-proposal-list li + li, .pricing-process-list li + li { border-left: 0; }
+    .pricing-hero__copy h1 { max-width: 11ch; }
+  }
+</style>

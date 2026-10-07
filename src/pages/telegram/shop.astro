@@ -1,0 +1,2060 @@
+---
+import { env } from "cloudflare:workers";
+import { serializeMiniCatalog } from "../../lib/shop/product-view";
+import { listPublicProducts } from "../../lib/shop/repository";
+import {
+  resolveVietnamMiniShopBranding,
+  vietnamMiniShopBrandingFallback,
+} from "../../lib/shop/telegram-mini-branding";
+import { getTelegramMiniAppEnabledSetting } from "../../lib/shop/telegram";
+
+export const prerender = false;
+// Check if Mini App is enabled. If disabled, block rendering immediately.
+const miniAppEnabled = env.TELEGRAM_MINI_APP_ENABLED === "1" || env.TELEGRAM_MINI_APP_ENABLED === "true" || (env.CONTENT_DB ? await getTelegramMiniAppEnabledSetting(env.CONTENT_DB) : false);
+if (!miniAppEnabled) {
+  return new Response(
+    `<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mini App đã tắt</title>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; display: grid; place-items: center; min-height: 100vh; margin: 0; background: #f8fafc; color: #0f172a; text-align: center; padding: 1.5rem; }
+    .card { background: #ffffff; padding: 2rem; border-radius: 1rem; max-width: 400px; border: 1px solid #e2e8f0; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05); }
+    h1 { font-size: 1.2rem; margin-bottom: 0.75rem; color: #e11d48; }
+    p { font-size: 0.95rem; color: #64748b; line-height: 1.5; margin-bottom: 1.5rem; }
+    .btn { display: inline-block; background: #0f172a; color: #fff; text-decoration: none; padding: 0.75rem 1.5rem; border-radius: 0.5rem; font-weight: 600; font-size: 0.9rem; border: none; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>⚠️ Mini App Hiện Đang Tắt</h1>
+    <p>Giao diện Mini App đã được tạm tắt để dùng luồng Chat Bot truyền thống. Vui lòng quay lại chat để đặt hàng.</p>
+    <button onclick="if(window.Telegram?.WebApp){window.Telegram.WebApp.close();}" class="btn">Đóng cửa sổ</button>
+  </div>
+</body>
+</html>`,
+    { headers: { "Content-Type": "text/html; charset=utf-8" } }
+  );
+}
+
+// This page bootstraps an identity-bound Telegram session; never let an edge
+// cache serve stale Mini App JavaScript after a rollout.
+Astro.response.headers.set("Cache-Control", "private, no-store, max-age=0");
+Astro.response.headers.set("Cloudflare-CDN-Cache-Control", "no-store, max-age=0");
+Astro.response.headers.set("CDN-Cache-Control", "no-store, max-age=0");
+Astro.response.headers.set("Pragma", "no-cache");
+Astro.response.headers.set("Expires", "0");
+// This is the Vietnam bot surface. Keep it deliberately stable while a
+// separate global bot/app is developed, so Telegram users always see VND and
+// the PayOS checkout contract.
+const miniLocale = "vi" as "vi" | "en" | "ja" | "zh";
+const miniCurrency = "VND" as "VND" | "USD";
+// Prefer live Telegram bot identity (getMe, cached). Fall back to username /
+// env overrides when Telegram is unreachable so SSR never hardcodes a brand.
+const shopBranding = await resolveVietnamMiniShopBranding(env, "environment").catch(() => vietnamMiniShopBrandingFallback(env));
+const miniCopy = miniLocale === "en" ? {
+  identityPending: "Verifying Telegram…", pendingOrder: "Payment pending", resumePayment: "Continue payment", reopen: "Open again",
+  telegramConnection: "Telegram connection", sessionNotVerified: "Session not verified", sessionRetry: "Keep the Mini App open and try again in a few seconds.", retry: "Try again",
+  heroKicker: shopBranding.welcomeKicker, heroFirst: shopBranding.welcomeHeading, heroSecond: shopBranding.welcomeEmphasis, featuredCta: "See picks", verifying: "Verifying Telegram",
+  storePromise: "Store promise", safePayment: "Secure payment", instantDelivery: "Instant key delivery", orderTracking: "24/7 order tracking",
+  featuredHeading: "Today's picks", featuredCaption: "Curated for quick checkout", allProducts: "All products",
+  searchPlaceholder: "Search ChatGPT, Canva, Netflix…", searchLabel: "Search products", cart: "Cart", orders: "Orders", orderSync: "Synced to Telegram ID",
+  refreshOrders: "Refresh orders", checkoutCount: "0 items · Crypto / card", checkout: "Checkout", shop: "Shop", close: "Close",
+} : {
+  identityPending: "Đang xác minh…", pendingOrder: "Đơn đang chờ", resumePayment: "Tiếp tục thanh toán", reopen: "Mở lại",
+  telegramConnection: "Kết nối Telegram", sessionNotVerified: "Chưa xác minh được phiên", sessionRetry: "Giữ Mini App mở và thử lại sau ít giây.", retry: "Thử lại",
+  heroKicker: shopBranding.welcomeKicker, heroFirst: shopBranding.welcomeHeading, heroSecond: shopBranding.welcomeEmphasis, featuredCta: "Xem gợi ý", verifying: "Đang xác minh Telegram",
+  storePromise: "Cam kết cửa hàng", safePayment: "Thanh toán an toàn", instantDelivery: "Giao key tức thì", orderTracking: "Theo dõi đơn 24/7",
+  featuredHeading: "Gợi ý hôm nay", featuredCaption: "Chọn lọc để mua nhanh", allProducts: "Tất cả sản phẩm",
+  searchPlaceholder: "Tìm ChatGPT, Canva, Netflix…", searchLabel: "Tìm sản phẩm", cart: "Giỏ hàng", orders: "Đơn hàng", orderSync: "Đồng bộ theo Telegram ID",
+  refreshOrders: "Làm mới đơn hàng", checkoutCount: "0 sản phẩm · VietQR", checkout: "Thanh toán", shop: "Shop", close: "Đóng",
+};
+const products = env.CONTENT_DB ? await listPublicProducts(env.CONTENT_DB, { locale: miniLocale, limit: 48 }) : [];
+const serializedProducts = serializeMiniCatalog(products);
+const pageTitle = `${shopBranding.shopName} · Telegram`;
+---
+
+<!doctype html>
+<html lang={miniLocale} data-currency={miniCurrency}>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <meta name="theme-color" content="#ffffff" />
+    <meta name="color-scheme" content="dark light" />
+    <meta name="robots" content="noindex,nofollow" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300..800&display=swap" rel="stylesheet" />
+    <link rel="preconnect" href="https://telegram.org" />
+    <link rel="preconnect" href="https://media.tung.codes" crossorigin />
+    <title>{pageTitle}</title>
+    <!-- Load the Telegram bridge synchronously. Astro turns normal external scripts into deferred modules, which would run after the inline app boot and leave initData empty. -->
+    <script is:inline src="https://telegram.org/js/telegram-web-app.js"></script>
+<style is:global>
+
+      /* ══════════════════════════════════════════════════════════════
+         TUNG Shop · Telegram Mini App
+         Design System v7 — Porcelain White (unified with web shop)
+         ══════════════════════════════════════════════════════════════ */
+
+      /* ── Design Tokens ─────────────────────────────────────────── */
+      :root {
+        --shop-bg: #ffffff;
+        --shop-bg-soft: #f6f7f9;
+        --shop-surface: #ffffff;
+        --shop-surface-alt: #fafbfc;
+        --shop-ink: #0b0f1a;
+        --shop-ink-soft: #4b5565;
+        --shop-ink-muted: #9aa3b2;
+        --shop-accent: #0b0f1a;
+        --shop-accent-hover: #252e42;
+        --shop-accent-ink: #ffffff;
+        --shop-mint: #0da678;
+        --shop-mint-soft: #e8f8f1;
+        --shop-sun: #e8930c;
+        --shop-sun-soft: #fdf4e3;
+        --shop-danger: #e0483f;
+        --shop-danger-soft: #fdeeed;
+        --ink: var(--shop-bg);
+        --ink-soft: var(--shop-bg-soft);
+        --surface: var(--shop-surface);
+        --paper: var(--shop-ink);
+        --paper-soft: var(--shop-ink-soft);
+        --line: #e9ecf1;
+        --line-strong: #d4dae3;
+        --accent: var(--shop-accent);
+        --accent-ink: #ffffff;
+        --danger: var(--shop-danger);
+        --danger-text: #b03830;
+        --card: var(--shop-surface);
+        --card-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 8px 24px -8px rgba(16, 24, 40, 0.08);
+        --nav: rgba(255, 255, 255, 0.94);
+        --notice: var(--shop-bg-soft);
+        --cta-primary: var(--shop-ink);
+        --cta-primary-press: var(--shop-accent-hover);
+        --cta-primary-ink: #ffffff;
+        --cta-secondary-bg: #ffffff;
+        --cta-secondary-ink: var(--shop-ink);
+        --cta-secondary-line: var(--line-strong);
+        --cta-shadow: 0 1px 2px rgba(11, 15, 26, 0.2), 0 10px 24px -10px rgba(11, 15, 26, 0.32);
+        --font-sans: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+        --font-serif: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+        --font-mono: "SFMono-Regular", Menlo, Consolas, monospace;
+        --ease: cubic-bezier(0.16, 1, 0.3, 1);
+        --ease-spring: cubic-bezier(0.3, 1.4, 0.4, 1);
+        color-scheme: light;
+      }
+
+      /* ── Reset & Base ──────────────────────────────────────────── */
+      * { box-sizing:border-box; }
+      html,body {
+        margin:0; min-height:100%;
+        background-color:var(--shop-bg);
+        color:var(--paper);
+        font-family:var(--font-sans);
+        -webkit-font-smoothing:antialiased;
+      }
+      body {
+        padding:env(safe-area-inset-top) 12px calc(88px + env(safe-area-inset-bottom));
+        background-image:radial-gradient(72% 30% at 50% -40px, rgba(59, 130, 246, 0.045), transparent 72%);
+        background-repeat:no-repeat;
+      }
+      body.cart-dock-visible { padding-bottom:calc(168px + env(safe-area-inset-bottom)); }
+      body.modal-open { overflow:hidden; }
+      button,input,select { font:inherit; }
+      button { color:inherit; cursor:pointer; touch-action:manipulation; -webkit-tap-highlight-color:transparent; }
+      button:focus-visible,input:focus-visible,select:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+      img { display:block; }
+      .app { width:100%; max-width:760px; margin:0 auto; }
+      .shell { width:100%; max-width:860px; margin:0 auto; }
+
+      /* ── Topbar ─────────────────────────────────────────────────── */
+      .topbar {
+        display:flex; align-items:center; justify-content:space-between;
+        margin-bottom:12px; padding:10px 12px;
+        border:1px solid var(--line); border-radius:0.95rem;
+        background:var(--surface);
+        box-shadow:0 1px 2px rgba(16,24,40,0.03);
+      }
+      .brand { display:flex; align-items:center; gap:10px; min-width:0; font:700 14px/1 var(--font-sans); letter-spacing:-0.01em; color:var(--paper); }
+      #shop-brand-name {
+        min-width:0; max-width:11rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+        text-transform:none; letter-spacing:0.01em;
+      }
+      .brand-mark {
+        display:grid; place-items:center; width:28px; height:28px;
+        background:linear-gradient(160deg, #1c2536, var(--shop-ink)); color:#fff; border-radius:8px;
+        font:800 14px/1 var(--font-sans);
+        box-shadow:0 2px 6px -1px rgba(11,15,26,0.3), inset 0 1px 0 rgba(255,255,255,0.14);
+      }
+      .identity { display:flex; align-items:center; gap:10px; text-align:right; }
+      .identity span { display:grid; }
+      .identity strong, .identity-copy b { font:700 13px/1 var(--font-sans); color:var(--paper); }
+      .identity small, .identity-copy small { font:600 10px/1 var(--font-mono); color:var(--shop-ink-muted); text-transform:uppercase; margin-top:3px; letter-spacing:.06em; }
+      .identity .avatar {
+        display:grid; place-items:center; width:34px; height:34px;
+        border-radius:50%; background:var(--notice); border:1px solid var(--line);
+        color:var(--paper); font:700 13px/1 var(--font-sans);
+      }
+
+      /* ── Hero ───────────────────────────────────────────────────── */
+      .hero {
+        position:relative; overflow:hidden;
+        padding:16px 14px 14px; border:1px solid var(--line); border-radius:1.1rem;
+        background:
+          radial-gradient(80% 120% at 85% -20%, rgba(59,130,246,0.05), transparent 70%),
+          radial-gradient(60% 100% at 10% 120%, rgba(13,166,120,0.05), transparent 70%),
+          var(--surface);
+        text-align:left; margin-bottom:4px;
+        box-shadow:0 1px 2px rgba(16,24,40,0.03);
+      }
+      .hero-kicker, .kicker {
+        display:inline-flex; align-items:center; gap:6px;
+        font:700 10px/1 var(--font-sans); letter-spacing:.05em;
+        text-transform:uppercase; color:var(--paper-soft); margin-bottom:8px;
+        padding:5px 10px; border:1px solid var(--line); border-radius:999px;
+        background:var(--shop-surface-alt);
+      }
+      .hero h1 { margin:0 0 10px; font:800 clamp(1.3rem, 5.5vw, 1.65rem)/1.15 var(--font-sans); letter-spacing:-0.03em; color:var(--paper); }
+      .hero h1 em { font-style:normal; color:var(--paper); background:linear-gradient(120deg, var(--shop-mint), #3b82f6); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
+      .hero p { margin:0 auto 16px; max-width:480px; color:var(--paper-soft); font:13px/1.6 var(--font-sans); }
+      .hero-foot { display:flex; flex-direction:row; align-items:center; justify-content:space-between; gap:10px; width:100%; }
+      .hero-signal, .signal { display:flex; align-items:center; gap:8px; color:var(--paper-soft); font:700 10px/1 var(--font-mono); letter-spacing:.06em; text-transform:uppercase; }
+      .hero-signal:before, .signal:before { width:8px; height:8px; border-radius:50%; background:var(--shop-mint); box-shadow:0 0 0 4px rgba(13,166,120,0.14); content:""; flex:0 0 auto; }
+      body[data-session-state="pending"] .hero-signal:before, body[data-session="pending"] .signal:before { background:var(--shop-sun); box-shadow:0 0 0 4px rgba(232,147,12,0.14); }
+      body[data-session-state="error"] .hero-signal:before, body[data-session="error"] .signal:before { background:var(--danger); box-shadow:0 0 0 4px rgba(224,72,63,0.15); }
+
+      /* ── Trust Strip ────────────────────────────────────────────── */
+      .trust-strip { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; margin:10px 0 0; }
+      .trust-strip div {
+        display:flex; min-width:0; min-height:40px; align-items:center; gap:6px;
+        border:1px solid var(--line); border-radius:0.6rem;
+        background:var(--surface); padding:6px 8px;
+        font:650 10px/1.2 var(--font-sans); color:var(--paper-soft);
+        box-shadow:0 1px 2px rgba(16,24,40,0.02);
+      }
+      .trust-strip b {
+        display:grid; width:20px; height:20px; place-items:center; border-radius:50%;
+        background:var(--shop-mint-soft); color:var(--shop-mint); font-size:10px; font-weight:800; flex:0 0 auto;
+      }
+      .trust-strip span { line-height:1.15; }
+
+      /* ── Banners & Errors ───────────────────────────────────────── */
+      .pending-banner, .session-error, .session-error-banner {
+        display:grid; grid-template-columns:minmax(0,1fr) auto; gap:12px; align-items:center;
+        margin-top:12px; border-radius:0.9rem; padding:14px;
+      }
+      .pending-banner { border:1px solid rgba(232,147,12,.32); background:var(--shop-sun-soft); }
+      .session-error, .session-error-banner { border:1px solid rgba(224,72,63,.28); background:var(--shop-danger-soft); }
+      .pending-banner[hidden], .session-error[hidden], .session-error-banner[hidden] { display:none; }
+      .pending-banner span, .session-error-banner span, .session-error span { display:block; font:700 10px/1 var(--font-mono); letter-spacing:.08em; text-transform:uppercase; }
+      .pending-banner span { color:#a06a08; }
+      .session-error-banner span, .session-error span { color:var(--danger-text); }
+      .pending-banner strong, .session-error-banner strong, .session-error strong { display:block; margin-top:4px; font:700 1.05rem/1.2 var(--font-sans); letter-spacing:-0.01em; color:var(--paper); }
+      .session-error-banner p, .session-error p { margin:4px 0 0; color:var(--paper-soft); font-size:.76rem; line-height:1.4; }
+      .pending-banner button, .session-error-banner button, .session-error button { min-height:40px; border-radius:.6rem; padding:0 14px; font:650 11px/1 var(--font-sans); transition:background .18s; }
+      .pending-banner button { border:1px solid #e5a23c; background:transparent; color:#a06a08; }
+      .pending-banner button:active { background:rgba(232,147,12,.12); }
+      .session-error-banner button, .session-error button { border:1px solid var(--danger); background:var(--danger); color:#fff; }
+
+      /* ── View Layout ────────────────────────────────────────────── */
+      .view { display:none; padding-bottom:32px; }
+      .view.is-active { display:block; animation:viewIn .35s var(--ease) both; }
+      @keyframes viewIn { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:none; } }
+
+      .section-head, .toolbar { display:flex; align-items:flex-end; justify-content:space-between; gap:12px; margin:22px 0 14px; }
+      .section-head h2, .toolbar h2 { margin:0; font:800 clamp(1.15rem, 4.5vw, 1.4rem)/1.15 var(--font-sans); letter-spacing:-0.03em; color:var(--paper); }
+      .section-head > span, .toolbar p { color:var(--paper-soft); font-size:12px; font-weight:600; padding-bottom:4px; margin:0; }
+      .section-head-copy h2 { margin:0 0 4px; }
+      .section-head-copy span { color:var(--paper-soft); font:650 10px/1 var(--font-mono); letter-spacing:.06em; text-transform:uppercase; }
+      .title-button {
+        min-height:38px; padding:0 13px; border:1px solid var(--line-strong); border-radius:999px;
+        background:var(--surface); color:var(--paper);
+        font:650 11.5px/1 var(--font-sans); white-space:nowrap;
+        transition:transform .15s ease, border-color .15s ease, background .15s ease;
+      }
+      .title-button:active { transform:scale(.96); background:var(--shop-surface-alt); border-color:#b9c2d0; }
+      .section-action {
+        display:grid; place-items:center; width:42px; height:42px;
+        border:1px solid var(--line); border-radius:.7rem;
+        background:var(--surface); color:var(--paper); transition:transform .2s;
+      }
+      .section-action:active { transform:scale(.92); }
+      .section-action svg { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+
+      /* ── Featured Rail ──────────────────────────────────────────── */
+      .featured-rail { display:flex; overflow-x:auto; scroll-snap-type:x mandatory; gap:12px; padding-bottom:12px; margin:0 -12px; scroll-padding-left:12px; }
+      .featured-rail::-webkit-scrollbar { display:none; }
+      .featured-rail::before { content:""; flex:0 0 1px; }
+      .featured-rail::after { content:""; flex:0 0 1px; }
+      .featured-card {
+        scroll-snap-align:start; display:grid; grid-template-rows:minmax(200px, 52vw) 1fr;
+        flex:0 0 min(280px,80vw); min-width:0;
+        border:1px solid var(--line); border-radius:1rem;
+        background:var(--surface); overflow:hidden;
+        box-shadow:0 1px 2px rgba(16,24,40,0.03);
+        transition:transform .18s var(--ease), box-shadow .18s var(--ease);
+      }
+      .featured-card:active { transform:scale(0.985); }
+      .featured-media, .product-media { position:relative; background:var(--shop-bg-soft); overflow:hidden; display:flex; align-items:center; justify-content:center; min-height:0; padding:0; }
+      .featured-media img, .product-media img { width:100%; height:100%; object-fit:cover; object-position:center; }
+      .media-placeholder, .placeholder { width:100%; height:100%; display:grid; place-items:center; font:800 1.5rem/1 var(--font-sans); color:var(--shop-ink-muted); }
+      .featured-rank {
+        position:absolute; top:10px; right:10px; display:grid; width:26px; height:26px; place-items:center;
+        border-radius:50%; background:rgba(255,255,255,.86); backdrop-filter:blur(8px);
+        color:var(--paper); font:800 11px/1 var(--font-mono); border:1px solid var(--line);
+      }
+      .featured-body, .product-body { padding:12px; display:flex; flex-direction:column; gap:4px; }
+      .featured-body h3, .product-body h3 { margin:0; font:700 15px/1.2 var(--font-sans); letter-spacing:-0.015em; color:var(--paper); }
+      .product-body h3 { font-size:14px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+      .featured-copy, .product-desc, .product-body p {
+        margin:0; color:var(--paper-soft); font-size:11.5px; line-height:1.4;
+        display:-webkit-box; -webkit-line-clamp:1; -webkit-box-orient:vertical; overflow:hidden; min-height:0;
+      }
+      .featured-foot, .product-foot { margin-top:auto; padding-top:10px; display:flex; align-items:center; justify-content:space-between; gap:8px; }
+      .featured-price, .price { display:grid; gap:3px; font:800 15px/1.05 var(--font-sans); letter-spacing:-0.02em; color:var(--paper); }
+      .featured-price small, .price small { color:var(--shop-mint); font:650 9px/1 var(--font-mono); letter-spacing:.04em; text-transform:uppercase; }
+      .price del { display:block; color:var(--paper-soft); font-size:10px; font-weight:700; text-decoration:line-through; }
+
+      /* ── Catalog Tools ──────────────────────────────────────────── */
+      .catalog-tools { margin-bottom:16px; display:grid; gap:10px; }
+      .search {
+        display:flex; align-items:center; gap:10px; min-height:46px;
+        padding:0 16px; border:1px solid var(--line-strong); border-radius:999px;
+        background:var(--surface); color:var(--paper-soft);
+        box-shadow:0 1px 2px rgba(16,24,40,0.03);
+        transition:border-color .2s, box-shadow .2s;
+      }
+      .search:focus-within { border-color:var(--paper); box-shadow:0 0 0 4px rgba(11,15,26,0.07); }
+      .search input { width:100%; min-width:0; border:0; outline:0; background:transparent; color:var(--paper); font:14.5px/1 var(--font-sans); }
+      .search input::placeholder { color:var(--shop-ink-muted); }
+      .filters { display:flex; flex-wrap:wrap; gap:8px; }
+      .filters button {
+        min-height:34px; padding:0 14px; border:1px solid var(--line);
+        border-radius:999px; background:var(--surface); color:var(--paper-soft);
+        font:650 11.5px/1 var(--font-sans); letter-spacing:0;
+        transition:all .2s;
+      }
+      .filters button.is-active { border-color:var(--paper); background:var(--paper); color:#fff; box-shadow:0 2px 8px rgba(11,15,26,0.22); }
+
+      /* ── Grid & Products ────────────────────────────────────────── */
+      .grid { display:grid; grid-template-columns:1fr; gap:12px; }
+      .catalog, .grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+      .product {
+        display:grid; grid-template-rows:minmax(168px, 42vw) 1fr;
+        border:1px solid var(--line); border-radius:1rem;
+        background:var(--surface); overflow:hidden;
+        box-shadow:0 1px 2px rgba(16,24,40,0.03);
+        animation:productUp .4s var(--ease) both;
+        transition:transform .18s var(--ease), box-shadow .18s var(--ease);
+      }
+      @media (min-width:400px) { .product { grid-template-rows:minmax(188px, 44vw) 1fr; } }
+      .product:nth-child(2) { animation-delay:.04s; }
+      .product:nth-child(3) { animation-delay:.08s; }
+      .product:nth-child(4) { animation-delay:.12s; }
+      @keyframes productUp { from { opacity:0; transform:translateY(18px) scale(.98); } to { opacity:1; transform:none; } }
+      .product:active { transform:scale(0.985); }
+      .product-body small, .product-eyebrow { color:var(--shop-ink-muted); font:650 9.5px/1 var(--font-mono); text-transform:uppercase; letter-spacing:.05em; }
+      .product-tag {
+        display:inline-flex; align-items:center; min-height:20px; padding:0 8px;
+        border-radius:999px; background:var(--shop-bg-soft); color:var(--paper-soft);
+        font:650 9.5px/1 var(--font-sans);
+      }
+      .badge, .product-badge {
+        display:inline-flex; align-items:center; gap:4px; min-height:20px; padding:0 8px;
+        border-radius:999px; background:var(--shop-bg-soft); color:var(--paper-soft);
+        font:700 9.5px/1 var(--font-sans); letter-spacing:0.01em;
+      }
+      .product select { margin-top:12px; width:100%; min-height:36px; border:1px solid var(--line-strong); border-radius:.6rem; background:var(--shop-surface-alt); color:var(--paper); font-size:12px; padding:0 8px; }
+
+      /* ── Bottom Nav ─────────────────────────────────────────────── */
+      .bottom-nav { position:fixed; z-index:20; right:12px; bottom:calc(12px + env(safe-area-inset-bottom)); left:12px; pointer-events:none; }
+      .bottom-nav-inner {
+        display:flex; max-width:400px; margin:auto;
+        border:1px solid var(--line); border-radius:999px;
+        background:var(--nav); padding:6px;
+        backdrop-filter:blur(20px) saturate(1.3); box-shadow:0 4px 12px rgba(16,24,40,0.06), 0 16px 40px -12px rgba(16,24,40,0.22);
+        pointer-events:auto;
+      }
+      .nav-button {
+        flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px;
+        min-height:54px; border-radius:999px; color:var(--paper-soft); font:650 9.5px/1 var(--font-sans); text-transform:uppercase; letter-spacing:.04em; transition:all .2s;
+      }
+      .nav-button svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:2.2; stroke-linecap:round; stroke-linejoin:round; }
+      .nav-button.is-active { background:var(--paper); color:#fff; box-shadow:0 4px 12px rgba(11,15,26,0.28); }
+      .nav-button:active { transform:scale(.92); }
+      .cart-count { display:inline-flex; min-width:18px; height:18px; align-items:center; justify-content:center; border-radius:999px; background:var(--shop-mint); color:#fff; font:700 10px/1 var(--font-sans); margin-left:4px; }
+      .nav-button.is-active .cart-count { background:#fff; color:var(--paper); }
+
+      /* ── Checkout / Cart Dock ───────────────────────────────────── */
+      .checkout-dock, #checkout-dock, .checkout-bar, .cart-dock {
+        position:fixed; z-index:15; right:12px; left:12px;
+        bottom:calc(72px + env(safe-area-inset-bottom));
+        display:flex; align-items:center; justify-content:space-between; gap:12px;
+        padding:12px 14px;
+        border:1px solid var(--line); border-radius:1.15rem;
+        background:rgba(255,255,255,0.96);
+        backdrop-filter:blur(18px) saturate(1.15);
+        box-shadow:0 2px 6px rgba(16,24,40,0.05), 0 20px 48px -16px rgba(16,24,40,0.24);
+        animation:dockUp .35s var(--ease-spring) both;
+      }
+      @keyframes dockUp { from { transform:translateY(100%); } to { transform:none; } }
+      .checkout-dock[hidden], #checkout-dock[hidden], .checkout-bar[hidden], .cart-dock[hidden] { display:none !important; }
+      .checkout-dock > div, .checkout-bar > div, .cart-dock > div { min-width:0; display:grid; gap:3px; }
+      .checkout-dock span, #checkout-dock-count, .checkout-bar small, .cart-dock-info small { display:block; color:var(--paper-soft); font:650 11px/1.2 var(--font-sans); }
+      .checkout-label { color:var(--paper-soft); font:650 11px/1.2 var(--font-sans); }
+      .checkout-dock strong, #checkout-dock-total, .checkout-bar strong, .cart-dock-info strong { font:800 19px/1.1 var(--font-sans); color:var(--paper); letter-spacing:-0.02em; }
+
+      /* ── Cart View ──────────────────────────────────────────────── */
+      .cart-panel, .orders-panel { display:grid; gap:12px; }
+      .cart-list { display:grid; gap:12px; }
+      .cart-row { display:grid; grid-template-columns:56px minmax(0,1fr); gap:12px; align-items:start; border:1px solid var(--line); border-radius:1rem; background:var(--surface); padding:12px; box-shadow:0 1px 2px rgba(16,24,40,0.03); }
+      .cart-thumb { width:56px; height:56px; border-radius:.7rem; border:1px solid var(--line); background:var(--shop-bg-soft); overflow:hidden; }
+      .cart-thumb img { width:100%; height:100%; object-fit:cover; display:block; }
+      .cart-thumb .media-placeholder { width:100%; height:100%; display:grid; place-items:center; font:800 1.1rem/1 var(--font-sans); color:var(--shop-ink-muted); }
+      .cart-row strong { display:block; font:650 14px/1.25 var(--font-sans); color:var(--paper); margin-bottom:3px; }
+      .cart-row small { color:var(--paper-soft); font-size:12px; display:block; }
+      .cart-price { font:700 14px/1 var(--font-sans); color:var(--paper); }
+      .cart-row-foot { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:8px; }
+      .qty, .cart-controls, .qty-group { display:inline-flex; align-items:center; gap:2px; background:var(--shop-bg-soft); border:1px solid var(--line); border-radius:999px; padding:3px; }
+      .qty button, .cart-controls button, .qty-group button { width:30px; height:30px; border-radius:50%; font-size:17px; display:grid; place-items:center; color:var(--paper); background:transparent; }
+      .qty button:active, .cart-controls button:active, .qty-group button:active { background:rgba(11,15,26,0.06); }
+      .qty b, .cart-controls b, .qty-group b { min-width:30px; text-align:center; font:650 13px/30px var(--font-mono); color:var(--paper); }
+      .qty .remove, .cart-controls button[data-remove], .qty-group button[data-remove] { background:transparent; color:var(--shop-ink-muted); font:650 10px/1 var(--font-sans); text-transform:uppercase; min-width:auto; width:auto; padding:0 8px; border-radius:999px; }
+      .qty .remove:active, .cart-controls button[data-remove]:active { color:var(--danger); }
+      .cart-summary { display:grid; gap:8px; border:1px solid var(--line); border-radius:1rem; background:var(--shop-surface-alt); padding:14px; }
+      .cart-trust { display:flex; flex-wrap:wrap; gap:6px 12px; color:var(--paper-soft); font:600 11px/1.4 var(--font-sans); padding:0 2px; }
+      .cart-trust span::before { content:"✓ "; color:var(--shop-mint); font-weight:800; }
+      .cart-total { display:flex; justify-content:space-between; margin-top:12px; border-top:1px solid var(--line); padding-top:13px; font-size:13px; font-weight:650; color:var(--paper-soft); }
+      .cart-total strong { font-size:20px; color:var(--paper); letter-spacing:-0.02em; }
+
+      /* ── Empty & processing states ─────────────────────────────── */
+      .empty { display:grid; justify-items:center; gap:8px; padding:36px 16px; border:1px dashed var(--line-strong); border-radius:1rem; background:var(--shop-surface-alt); color:var(--paper-soft); text-align:center; font:600 13px/1.5 var(--font-sans); }
+      .empty-icon { font-size:26px; line-height:1; opacity:.75; }
+      .empty strong { color:var(--paper); font-size:14px; }
+      .processing { display:grid; justify-items:center; gap:12px; padding:36px 16px; color:var(--paper-soft); text-align:center; font:600 13px/1.5 var(--font-sans); }
+      .processing-spinner { width:34px; height:34px; border-radius:50%; border:3px solid var(--line); border-top-color:var(--paper); animation:spin 0.9s linear infinite; }
+      @keyframes spin { to { transform:rotate(360deg); } }
+      .notice { border:1px solid var(--line); border-radius:.9rem; background:var(--notice); color:var(--paper-soft); padding:12px 14px; font:600 12px/1.5 var(--font-sans); }
+      .success-mark { display:grid; place-items:center; width:48px; height:48px; border-radius:50%; background:var(--shop-mint-soft); color:var(--shop-mint); font-size:22px; }
+
+      /* ── Modals (bottom sheets) ─────────────────────────────────── */
+      .modal-backdrop { position:fixed; z-index:30; inset:0; display:none; align-items:flex-end; background:rgba(11,15,26,.32); backdrop-filter:blur(6px); }
+      .modal-backdrop.is-open { display:flex; animation:fadeIn .2s both; }
+      @keyframes fadeIn { from{opacity:0} to{opacity:1} }
+      .modal {
+        width:100%; max-width:600px; max-height:94dvh; margin:0 auto;
+        display:flex; flex-direction:column; overflow:hidden;
+        border:1px solid var(--line); border-bottom:0; border-radius:24px 24px 0 0;
+        background:var(--shop-bg); padding:16px 16px 0;
+        box-shadow:0 -12px 48px rgba(11,15,26,0.22);
+        animation:sheetIn .35s var(--ease-spring) both;
+      }
+      @keyframes sheetIn { from { transform:translateY(100%); } to { transform:none; } }
+      .modal-grip { width:40px; height:5px; border-radius:999px; background:var(--line-strong); margin:0 auto 12px; flex:0 0 auto; }
+      .modal-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; flex:0 0 auto; }
+      .modal-head h2 { margin:0; font:800 clamp(1.15rem, 5vw, 1.4rem)/1.15 var(--font-sans); letter-spacing:-0.02em; color:var(--paper); }
+      .modal-close { width:36px; height:36px; border:1px solid var(--line); border-radius:50%; background:var(--surface); color:var(--paper-soft); font-size:20px; display:grid; place-items:center; }
+      .modal-close:active { transform:scale(.9); }
+      .modal-body {
+        flex:1 1 auto; min-height:0; overflow-y:auto;
+        padding:0 0 calc(16px + env(safe-area-inset-bottom));
+        -webkit-overflow-scrolling:touch;
+      }
+      .modal-body:has(.product-sheet) { overflow:hidden; display:flex; flex-direction:column; padding-bottom:0; }
+      .modal-body:not(:has(.product-sheet)) { overflow-y:auto; }
+
+      /* legacy detail modal (kept for compatibility) */
+      .detail-hero { margin:-20px -20px 20px; background:var(--shop-bg-soft); border-bottom:1px solid var(--line); display:flex; flex-direction:column; align-items:center; padding:24px; position:relative; }
+      .detail-media { width:200px; height:200px; object-fit:contain; filter:drop-shadow(0 12px 24px rgba(16,24,40,0.12)); }
+      .detail-copy { margin:16px 0 0; color:var(--paper-soft); font:14px/1.5 var(--font-sans); text-align:center; max-width:400px; }
+      .detail-label { margin:24px 0 12px; color:var(--paper); font:700 11px/1 var(--font-mono); letter-spacing:.08em; text-transform:uppercase; }
+      .variant-list { display:grid; gap:8px; }
+      .variant-choice {
+        display:grid; grid-template-columns:minmax(0,1fr) auto; gap:12px; align-items:center; text-align:left;
+        min-height:64px; border:1px solid var(--line-strong); border-radius:1rem;
+        background:var(--surface); padding:12px 16px; transition:all .2s;
+      }
+      .variant-choice:active:not(:disabled) { transform:scale(.98); border-color:var(--paper); }
+      .variant-choice:disabled { opacity:.4; cursor:not-allowed; }
+      .variant-choice b { font:650 15px/1.2 var(--font-sans); color:var(--paper); }
+      .variant-choice small { color:var(--paper-soft); font:500 12px/1 var(--font-sans); }
+      .variant-choice strong { font:700 17px/1 var(--font-sans); color:var(--paper); text-align:right; }
+
+      /* ── Payment forms ──────────────────────────────────────────── */
+      .method-list { display:grid; gap:8px; margin:16px 0; }
+      .method-choice {
+        display:grid; grid-template-columns:minmax(0,1fr) auto; gap:12px; align-items:center;
+        border:1px solid var(--line); border-radius:1rem; background:var(--surface); padding:14px;
+        text-align:left; transition:all .2s;
+      }
+      .method-choice:active { transform:scale(.98); }
+      .method-choice.is-selected { border-color:var(--paper); background:var(--shop-surface-alt); box-shadow:0 0 0 1px var(--paper); }
+      .method-choice-main { display:flex; min-width:0; align-items:center; gap:12px; }
+      .method-choice strong { display:block; overflow:hidden; font-size:14px; font-weight:700; color:var(--paper); text-overflow:ellipsis; white-space:nowrap; }
+      .method-choice small { display:block; margin-top:4px; color:var(--paper-soft); font-size:11px; }
+      .method-choice b { font:700 12px/1 var(--font-mono); color:var(--paper-soft); text-transform:uppercase; }
+
+      .network-mark { display:grid; flex:0 0 auto; width:36px; height:36px; place-items:center; border:1px solid var(--line); border-radius:50%; background:var(--shop-bg-soft); color:var(--paper); font-size:13px; font-weight:800; }
+      .network-mark svg { width:20px; height:20px; fill:currentColor; }
+      .network-mark[data-network="ETHEREUM"] { background:#eff6ff; color:#1d4ed8; border-color:#bfdbfe; }
+      .network-mark[data-network="BSC"] { background:#fefce8; color:#a16207; border-color:#fde047; }
+      .network-mark[data-network="SOLANA"] { background:#f3e8ff; color:#6b21a8; border-color:#d8b4fe; }
+      .network-mark[data-network="POLYGON"] { background:#faf5ff; color:#7e22ce; border-color:#e9d5ff; }
+      .network-mark[data-network="TRON"] { background:#fff1f2; color:#be123c; border-color:#fecdd3; }
+      .network-line { display:flex; align-items:center; gap:7px; margin-top:6px; color:var(--paper-soft); font-size:11px; }
+      .network-line .network-mark { width:20px; height:20px; border-width:1px; font-size:9px; }
+      .network-line .network-mark svg { width:12px; height:12px; }
+
+      .payment-box { display:grid; gap:16px; border:1px solid var(--line); border-radius:1.25rem; background:var(--shop-surface-alt); padding:18px; margin-top:16px; }
+      .payment-box h3 { color:var(--paper); font:700 18px/1.2 var(--font-sans); margin:0; }
+      .payment-box p { margin:0; color:var(--paper-soft); font-size:13px; line-height:1.5; }
+      .payment-amount { display:flex; align-items:end; justify-content:space-between; gap:10px; border-bottom:1px solid var(--line); padding-bottom:12px; }
+      .payment-amount span { color:var(--paper-soft); font:700 10px/1 var(--font-mono); text-transform:uppercase; letter-spacing:.08em; }
+      .payment-amount strong { color:var(--paper); font:800 28px/1 var(--font-sans); font-variant-numeric:tabular-nums; letter-spacing:-0.02em; }
+      .payment-qr { display:grid; justify-items:center; gap:12px; padding:16px; background:#ffffff; border:1px solid var(--line); border-radius:1rem; box-shadow:0 1px 2px rgba(16,24,40,0.04); }
+      .payment-qr img { display:block; width:min(240px, 100%); aspect-ratio:1; object-fit:contain; }
+      .payment-qr small { color:var(--paper-soft); font-size:11px; font-weight:600; text-align:center; }
+      .payment-field { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; align-items:center; }
+      .payment-field span { min-width:0; overflow-wrap:anywhere; border:1px solid var(--line); border-radius:.6rem; background:var(--surface); padding:12px; color:var(--paper); font:600 12px/1.4 var(--font-mono); }
+      .payment-field-label { display:flex; align-items:center; justify-content:space-between; gap:8px; color:var(--paper); font:700 10px/1 var(--font-mono); text-transform:uppercase; letter-spacing:.05em; }
+      .payment-field-label small { color:var(--paper-soft); font-size:10px; text-transform:none; letter-spacing:0; }
+      .payment-proof { display:grid; gap:12px; border:1px solid var(--line); border-radius:1rem; background:var(--surface); padding:16px; margin-top:16px; }
+      .payment-proof label { display:grid; gap:8px; color:var(--paper); font:700 11px/1 var(--font-mono); text-transform:uppercase; letter-spacing:.05em; }
+      .payment-proof input { width:100%; min-height:46px; border:1px solid var(--line-strong); border-radius:.6rem; background:var(--shop-bg); color:var(--paper); padding:0 12px; font-size:14px; }
+      .payment-proof input:focus { border-color:var(--paper); outline:none; box-shadow:0 0 0 3px rgba(11,15,26,0.08); }
+      .payment-proof input[type="file"] { padding:10px; font-size:12px; }
+      .payment-proof small { color:var(--paper-soft); font-size:12px; line-height:1.5; }
+      .proof-list { display:grid; gap:8px; color:var(--paper-soft); font-size:12px; margin-top:12px; }
+      .proof-item { display:flex; align-items:center; justify-content:space-between; gap:8px; border-top:1px solid var(--line); padding-top:8px; }
+      .proof-item strong { color:var(--paper); font-weight:700; }
+      .payment-status { display:inline-flex; width:max-content; border:1px solid var(--line-strong); border-radius:999px; color:var(--paper-soft); padding:5px 10px; font:700 10px/1 var(--font-mono); letter-spacing:.06em; text-transform:uppercase; }
+      .payment-status.is-paid { border-color:transparent; background:var(--shop-mint); color:#fff; }
+
+      /* ── Payment steps (3-step progress) ────────────────────────── */
+      .payment-steps { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:4px; margin:0 0 14px; padding:0; list-style:none; counter-reset:pay-step; }
+      .payment-step { position:relative; display:grid; gap:6px; justify-items:center; text-align:center; color:var(--paper-soft); font:650 10px/1.3 var(--font-sans); counter-increment:pay-step; }
+      .payment-step::before { content:counter(pay-step); display:grid; width:26px; height:26px; place-items:center; border-radius:50%; border:1.5px solid var(--line-strong); background:var(--surface); color:var(--paper-soft); font:750 11px/1 var(--font-sans); }
+      .payment-step:not(:last-child)::after { content:""; position:absolute; top:13px; left:calc(50% + 16px); width:calc(100% - 32px); height:1.5px; background:var(--line-strong); }
+      .payment-step.is-active { color:var(--paper); font-weight:750; }
+      .payment-step.is-active::before { border-color:var(--paper); background:var(--paper); color:#fff; box-shadow:0 0 0 4px rgba(11,15,26,0.08); }
+      .payment-step.is-done::before { border-color:transparent; background:var(--shop-mint); color:#fff; content:"✓"; }
+      .payment-step.is-done:not(:last-child)::after { background:var(--shop-mint); }
+      .payment-summary { display:grid; gap:6px; border:1px solid var(--line); border-radius:.9rem; background:var(--shop-surface-alt); padding:12px 14px; }
+      .payment-total { display:flex; justify-content:space-between; align-items:baseline; gap:10px; font:650 13px/1 var(--font-sans); color:var(--paper-soft); }
+      .payment-total strong { font:800 20px/1 var(--font-sans); color:var(--paper); letter-spacing:-0.02em; }
+
+      /* ── Orders view ────────────────────────────────────────────── */
+      .order-tools { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:12px; }
+      .order-filters { display:flex; gap:6px; overflow-x:auto; padding-bottom:2px; scrollbar-width:none; }
+      .order-filters::-webkit-scrollbar { display:none; }
+      .order-filter { min-height:36px; flex:0 0 auto; border:1px solid var(--line); border-radius:999px; background:var(--surface); color:var(--paper); padding:0 13px; font:650 11.5px/1 var(--font-sans); white-space:nowrap; transition:all .18s; }
+      .order-filter.is-active { border-color:transparent; background:var(--paper); color:#fff; box-shadow:0 2px 8px rgba(11,15,26,0.2); }
+      .order-insights { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:8px; margin-bottom:14px; }
+      .order-insight { display:grid; gap:3px; padding:10px 12px; border:1px solid var(--line); border-radius:.85rem; background:var(--surface); box-shadow:0 1px 2px rgba(16,24,40,0.03); }
+      .order-insight b { font:800 17px/1 var(--font-sans); color:var(--paper); letter-spacing:-0.02em; }
+      .order-insight span { color:var(--paper-soft); font:650 9.5px/1.2 var(--font-sans); text-transform:uppercase; letter-spacing:.04em; }
+      .order-insight.is-good b { color:var(--shop-mint); }
+      .order-insight.is-waiting b { color:var(--shop-sun); }
+      .order-card { border:1px solid var(--line); border-radius:1.1rem; background:var(--surface); padding:16px; box-shadow:0 1px 2px rgba(16,24,40,0.03); }
+      .order-card header { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:10px; }
+      .order-card h3 { margin:0; font:700 15px/1.2 var(--font-sans); color:var(--paper); }
+      .order-card time { color:var(--shop-ink-muted); font:500 11.5px/1 var(--font-sans); }
+      .order-card p { margin:0; color:var(--paper-soft); font:13px/1.4 var(--font-sans); }
+      .status { display:inline-flex; align-items:center; gap:6px; min-height:24px; padding:0 10px; border-radius:999px; background:var(--shop-bg-soft); color:var(--paper-soft); font:700 10px/1 var(--font-sans); text-transform:uppercase; letter-spacing:.04em; }
+      .status::before { content:""; width:6px; height:6px; border-radius:50%; background:currentColor; }
+      .status.is-pending, .status[data-status="pending"] { background:var(--shop-sun-soft); color:#a06a08; }
+      .status.is-paid, .status.is-good, .status[data-status="paid"], .status[data-status="delivered"] { background:var(--shop-mint-soft); color:#0b7a54; }
+      .status.is-failed, .status.is-bad, .status[data-status="failed"], .status[data-status="cancelled"], .status[data-status="expired"] { background:var(--shop-danger-soft); color:#b03830; }
+      .order-meta { display:flex; flex-wrap:wrap; gap:6px 12px; color:var(--paper-soft); font:600 11.5px/1.4 var(--font-sans); }
+      .order-number-wrap { display:flex; align-items:center; gap:8px; min-width:0; }
+      .order-number { font:700 12.5px/1 var(--font-mono); color:var(--paper); overflow-wrap:anywhere; }
+      .order-number-copy { display:inline-grid; width:34px; height:34px; place-items:center; border:1px solid var(--line); border-radius:.6rem; background:var(--surface); color:var(--paper-soft); padding:0; font-size:14px; }
+      .order-number-copy.is-copied { border-color:var(--shop-mint); background:var(--shop-mint-soft); color:#0b7a54; }
+      .order-facts { display:grid; grid-template-columns:repeat(auto-fit, minmax(110px, 1fr)); gap:8px; margin:12px 0; }
+      .order-fact { display:grid; gap:3px; padding:9px 11px; border-radius:.7rem; background:var(--shop-surface-alt); border:1px solid var(--line); }
+      .order-fact span { color:var(--shop-ink-muted); font:650 9px/1 var(--font-sans); text-transform:uppercase; letter-spacing:.05em; }
+      .order-fact b { color:var(--paper); font:700 12.5px/1.2 var(--font-sans); overflow-wrap:anywhere; }
+      .order-lines { display:grid; gap:8px; margin:12px 0; }
+      .order-line { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 12px; border:1px solid var(--line); border-radius:.75rem; background:var(--surface); font:600 12.5px/1.35 var(--font-sans); color:var(--paper); }
+      .order-line small { display:block; color:var(--paper-soft); font-size:11px; margin-top:2px; }
+      .order-totals { display:grid; gap:6px; border-top:1px solid var(--line); padding-top:12px; margin-top:4px; }
+      .order-total { display:flex; justify-content:space-between; align-items:baseline; font:650 13px/1 var(--font-sans); color:var(--paper); }
+      .order-total strong { font:800 19px/1 var(--font-sans); letter-spacing:-0.02em; }
+      .summary-line { display:flex; justify-content:space-between; gap:10px; color:var(--paper-soft); font:600 12.5px/1.4 var(--font-sans); }
+      .summary-line.discount-line { color:#0b7a54; }
+      .summary-line.total-line { color:var(--paper); font:700 16px/1.2 var(--font-sans); letter-spacing:-0.01em; }
+      .order-detail-summary { display:grid; gap:10px; }
+      .order-detail-actions, .order-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; }
+      .order-actions button, .order-detail-actions button {
+        flex:1; min-height:42px; border:1px solid var(--line-strong); border-radius:.8rem;
+        background:var(--surface); color:var(--paper); font:650 12px/1 var(--font-sans);
+        transition:all .2s; padding:0 12px;
+      }
+      .order-actions button:active, .order-detail-actions button:active { transform:scale(.98); }
+      .order-actions button.primary, .order-actions button[data-resume-payment], .order-actions button[data-keys] {
+        background:var(--cta-primary); color:#fff; border-color:transparent; box-shadow:var(--cta-shadow);
+      }
+      .order-actions button.primary:active { background:var(--cta-primary-press); }
+      .order-progress { display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:4px; margin:14px 0; padding:0; list-style:none; counter-reset:ord-step; }
+      .order-progress-step { position:relative; display:grid; gap:5px; justify-items:center; text-align:center; color:var(--paper-soft); font:650 9.5px/1.25 var(--font-sans); counter-increment:ord-step; }
+      .order-progress-step::before { content:counter(ord-step); display:grid; width:24px; height:24px; place-items:center; border-radius:50%; border:1.5px solid var(--line-strong); background:var(--surface); color:var(--paper-soft); font:750 10px/1 var(--font-sans); }
+      .order-progress-step:not(:last-child)::after { content:""; position:absolute; top:12px; left:calc(50% + 15px); width:calc(100% - 30px); height:1.5px; background:var(--line-strong); }
+      .order-progress-step.is-active { color:var(--paper); }
+      .order-progress-step.is-active::before { border-color:var(--paper); background:var(--paper); color:#fff; box-shadow:0 0 0 4px rgba(11,15,26,0.08); }
+      .order-progress-step.is-done::before { border-color:transparent; background:var(--shop-mint); color:#fff; content:"✓"; }
+      .order-progress-step.is-done:not(:last-child)::after { background:var(--shop-mint); }
+      .order-skeleton { display:grid; gap:10px; border:1px solid var(--line); border-radius:1.1rem; padding:16px; background:var(--surface); }
+      .order-skeleton::before, .order-skeleton::after { content:""; height:14px; border-radius:999px; background:linear-gradient(90deg, var(--shop-bg-soft) 25%, #fff 50%, var(--shop-bg-soft) 75%); background-size:200% 100%; animation:shop-skel 1.1s ease infinite; }
+      .order-skeleton::after { width:65%; }
+
+      /* ── Discount box ───────────────────────────────────────────── */
+      .discount-box { display:grid; gap:10px; border:1px dashed var(--line-strong); border-radius:1rem; background:var(--shop-surface-alt); padding:14px; }
+      .discount-head { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+      .discount-head strong { font:700 12.5px/1 var(--font-sans); color:var(--paper); }
+      .discount-form { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; }
+      .discount-form input {
+        width:100%; min-height:42px; padding:0 13px;
+        border:1px solid var(--line-strong); border-radius:.7rem;
+        background:var(--surface); color:var(--paper); font:600 13px/1 var(--font-sans);
+      }
+      .discount-form input:focus { border-color:var(--paper); outline:none; box-shadow:0 0 0 3px rgba(11,15,26,0.08); }
+      .discount-applied {
+        display:flex; align-items:center; justify-content:space-between; gap:8px;
+        padding:10px 12px; border-radius:.7rem; border:1px solid rgba(13,166,120,.3);
+        background:var(--shop-mint-soft); color:#0b7a54; font:650 12px/1.3 var(--font-sans);
+      }
+      .discount-message { margin:0; color:var(--paper-soft); font:550 11.5px/1.45 var(--font-sans); }
+      .discount-message.is-error { color:var(--danger-text); }
+
+      /* ── Key sheet (delivery reveal) ────────────────────────────── */
+      .key-sheet { display:grid; gap:14px; }
+      .key-sheet-actions { display:flex; flex-wrap:wrap; gap:8px; }
+      .key-hero { display:grid; gap:8px; justify-items:center; text-align:center; padding:18px 14px; border-radius:1.1rem; border:1px solid rgba(13,166,120,.28); background:linear-gradient(160deg, var(--shop-mint-soft), var(--surface)); }
+      .key-hero-top { display:flex; align-items:center; gap:10px; }
+      .key-order-number { font:700 12px/1 var(--font-mono); color:var(--paper); overflow-wrap:anywhere; }
+      .key-overview { color:var(--paper-soft); font:600 12px/1.5 var(--font-sans); }
+      .key-secure { display:inline-flex; align-items:center; gap:6px; color:#0b7a54; font:650 10.5px/1 var(--font-sans); text-transform:uppercase; letter-spacing:.04em; }
+      .key-deliveries { display:grid; gap:10px; }
+      .key-delivery { display:grid; gap:8px; border:1px solid var(--line); border-radius:.95rem; background:var(--surface); padding:12px; }
+      .key-delivery-head { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+      .key-delivery-index { display:grid; place-items:center; width:24px; height:24px; border-radius:50%; background:var(--shop-bg-soft); color:var(--paper); font:750 11px/1 var(--font-sans); }
+      .key-delivery-copy strong { display:block; font:650 13px/1.2 var(--font-sans); color:var(--paper); }
+      .key-delivery-copy small { display:block; margin-top:2px; color:var(--paper-soft); font:500 11px/1.3 var(--font-sans); }
+      .key-delivery-status { margin-left:auto; }
+      .key-rows { display:grid; gap:6px; }
+      .key-row { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; align-items:center; }
+      .key-row-number { color:var(--shop-ink-muted); font:650 10px/1 var(--font-mono); }
+      .key-code {
+        min-width:0; overflow-wrap:anywhere; padding:9px 11px;
+        border:1px solid var(--line); border-radius:.6rem; background:var(--shop-bg-soft);
+        color:var(--paper); font:600 11.5px/1.4 var(--font-mono);
+      }
+      .key-copy, .key-copy-all { min-height:36px; border:1px solid var(--line-strong); border-radius:.6rem; background:var(--surface); color:var(--paper); padding:0 12px; font:650 11px/1 var(--font-sans); white-space:nowrap; }
+      .key-copy:active, .key-copy-all:active { background:var(--shop-bg-soft); }
+      .key-copy.is-copied, .key-copy-all.is-copied { border-color:transparent; background:var(--shop-mint); color:#fff; }
+      .key-button-label { display:inline-flex; align-items:center; gap:6px; }
+      .key-pending { display:grid; gap:12px; justify-items:center; text-align:center; padding:24px 16px; border:1px dashed var(--line-strong); border-radius:1.1rem; background:var(--shop-surface-alt); }
+      .key-pending-orbit { width:38px; height:38px; border-radius:50%; border:3px solid var(--line); border-top-color:var(--shop-mint); animation:spin 0.9s linear infinite; }
+      .key-pending-status { color:var(--paper-soft); font:600 12px/1.5 var(--font-sans); }
+      .key-pending-actions { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; }
+
+      /* ── Toast ──────────────────────────────────────────────────── */
+      .toast {
+        position:fixed; z-index:40; right:12px; bottom:calc(90px + env(safe-area-inset-bottom)); left:12px;
+        display:none; max-width:400px; margin:auto;
+        border:1px solid var(--line); border-radius:1rem;
+        background:var(--surface); color:var(--paper);
+        padding:14px 16px; font:600 13px/1.4 var(--font-sans); text-align:center;
+        box-shadow:0 8px 32px rgba(11,15,26,0.18);
+      }
+      .toast.is-visible { display:block; animation:toastIn .3s var(--ease-spring) both; }
+      @keyframes toastIn { 0%{opacity:0;transform:translateY(24px) scale(.94)} 100%{opacity:1;transform:none} }
+
+      /* ── Unified CTA kit ────────────────────────────────────────── */
+      button.primary, .primary, .btn-cta, .btn-cta--primary,
+      .hero-cta, .product-action, .add-button, .featured-action,
+      .checkout-dock button, #checkout-dock-button, #checkout-button,
+      .checkout-bar button, .cart-dock-action,
+      .product-sheet__dock .btn-cta--primary,
+      .order-actions button.primary {
+        appearance:none; -webkit-appearance:none;
+        display:inline-flex; align-items:center; justify-content:center; gap:8px;
+        min-height:44px; padding:0 16px;
+        border:0; border-radius:999px;
+        background:var(--cta-primary); color:var(--cta-primary-ink);
+        font:650 13px/1 var(--font-sans); letter-spacing:-0.01em;
+        box-shadow:var(--cta-shadow);
+        transition:transform .16s var(--ease), box-shadow .16s var(--ease), background .16s ease, opacity .16s;
+        cursor:pointer;
+      }
+      button.primary:active, .primary:active, .btn-cta--primary:active, .hero-cta:active,
+      .product-action:active, .add-button:active, .featured-action:active,
+      .checkout-dock button:active, #checkout-dock-button:active, #checkout-button:active,
+      .checkout-bar button:active, .cart-dock-action:active {
+        transform:scale(0.97);
+        background:var(--cta-primary-press);
+        box-shadow:0 1px 4px rgba(11,15,26,0.18);
+      }
+      button.primary:disabled, .primary:disabled, .btn-cta--primary:disabled,
+      .product-action:disabled, .add-button:disabled,
+      .checkout-dock button:disabled, #checkout-dock-button:disabled, #checkout-button:disabled {
+        opacity:.42; cursor:not-allowed; transform:none; box-shadow:none;
+        background:var(--shop-bg-soft); color:var(--shop-ink-muted);
+      }
+      .product-action, .add-button, .featured-action {
+        min-height:42px; min-width:5.5rem; padding:0 12px; font:700 12px/1 var(--font-sans); white-space:nowrap;
+      }
+      .hero-cta { min-height:40px; padding:0 14px; font-size:12px; }
+
+      button.secondary, .secondary, .btn-cta--secondary,
+      .button:not(.primary), .discount-clear, .section-action, .title-button,
+      .product-sheet__dock .btn-cta--secondary {
+        appearance:none; -webkit-appearance:none;
+        display:inline-flex; align-items:center; justify-content:center; gap:6px;
+        min-height:44px; padding:0 14px;
+        border:1px solid var(--cta-secondary-line); border-radius:999px;
+        background:var(--cta-secondary-bg); color:var(--cta-secondary-ink);
+        font:650 13px/1 var(--font-sans);
+        box-shadow:0 1px 2px rgba(16,24,40,0.04);
+        transition:transform .15s ease, background .15s ease, border-color .15s ease;
+        cursor:pointer;
+      }
+      button.secondary:active, .secondary:active, .btn-cta--secondary:active,
+      .button:not(.primary):active, .title-button:active {
+        transform:scale(0.97); background:var(--shop-surface-alt); border-color:#b9c2d0;
+      }
+      .modal-close {
+        border:1px solid var(--line); background:var(--surface); color:var(--paper-soft);
+        box-shadow:none; min-height:36px; border-radius:50%; padding:0;
+      }
+
+      /* ── Product sheet (PDP in modal) ───────────────────────────── */
+      .product-sheet { flex:1 1 auto; min-height:0; display:flex; flex-direction:column; gap:0; padding-bottom:0; }
+      .product-sheet__scroll {
+        flex:1 1 auto; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch;
+        display:grid; gap:14px; padding:2px 2px 16px;
+      }
+      .product-sheet__hero {
+        margin:0 -2px; border-radius:1rem; overflow:hidden;
+        aspect-ratio:1 / 1; min-height:min(52vw, 240px); max-height:min(72vw, 340px);
+        background:var(--shop-bg-soft); border:1px solid var(--line);
+      }
+      .product-sheet__hero img { width:100%; height:100%; object-fit:cover; object-position:center; display:block; }
+      .product-sheet__head { display:grid; gap:10px; }
+      .sheet-chips { display:flex; flex-wrap:wrap; gap:6px; }
+      .sheet-chip {
+        display:inline-flex; align-items:center; min-height:26px; padding:0 11px;
+        border-radius:999px; background:var(--shop-bg-soft); border:1px solid var(--line);
+        color:var(--paper-soft); font:650 11px/1 var(--font-sans);
+      }
+      .product-sheet__lead { margin:0; color:var(--paper); font:600 15px/1.45 var(--font-sans); }
+      .product-sheet__section { display:grid; gap:10px; }
+      .product-sheet__label { margin:0; color:var(--paper-soft); font:700 10.5px/1 var(--font-sans); letter-spacing:.05em; text-transform:uppercase; }
+      .product-sheet__body { color:var(--paper-soft); font:13.5px/1.55 var(--font-sans); max-height:8rem; overflow:auto; padding-right:4px; }
+      .product-sheet__trust { padding:12px 14px; border-radius:.9rem; border:1px solid var(--line); background:var(--shop-surface-alt); }
+      .product-sheet__trust p { margin:0 0 6px; color:var(--paper); font:600 12.5px/1.4 var(--font-sans); }
+      .product-sheet__hint { margin:0; color:var(--paper-soft); font:500 11.5px/1.4 var(--font-sans); }
+
+      .plan-list { display:grid; gap:8px; }
+      .plan-card {
+        display:grid; grid-template-columns:minmax(0,1fr) auto; gap:10px; align-items:center;
+        text-align:left; min-height:64px; padding:12px 14px;
+        border:1.5px solid var(--line); border-radius:1rem; background:var(--surface);
+        transition:border-color .15s, box-shadow .15s, transform .15s, background .15s;
+      }
+      .plan-card.is-selected {
+        border-color:var(--cta-primary); background:var(--shop-surface-alt);
+        box-shadow:0 0 0 1px var(--cta-primary), 0 8px 18px -8px rgba(11,15,26,0.2);
+      }
+      .plan-card:active:not(:disabled) { transform:scale(.985); }
+      .plan-card:disabled { opacity:.45; }
+      .plan-card__main { display:grid; gap:4px; min-width:0; }
+      .plan-card__main b { font:700 14px/1.2 var(--font-sans); color:var(--paper); }
+      .plan-card__main small { color:var(--paper-soft); font:500 12px/1.3 var(--font-sans); }
+      .plan-card__price { text-align:right; display:grid; gap:3px; }
+      .plan-card__price strong { font:800 16px/1 var(--font-sans); color:var(--paper); }
+      .plan-card__price del { color:var(--paper-soft); font:600 11px/1 var(--font-sans); }
+
+      .product-sheet__dock {
+        flex:0 0 auto; z-index:4; display:grid; gap:10px;
+        margin:0 -16px; padding:12px 16px calc(12px + env(safe-area-inset-bottom));
+        border-top:1px solid var(--line);
+        background:rgba(255,255,255,.97);
+        backdrop-filter:blur(14px);
+        box-shadow:0 -10px 28px rgba(11,15,26,0.1);
+      }
+      .product-sheet__dock-price { min-width:0; display:grid; gap:2px; }
+      .product-sheet__dock-price small { color:var(--paper-soft); font:650 11px/1.2 var(--font-sans); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+      .product-sheet__dock-price strong { font:800 1.2rem/1.1 var(--font-sans); color:var(--paper); letter-spacing:-.02em; }
+      .product-sheet__dock-actions { display:grid; grid-template-columns:1fr 1.35fr; gap:8px; }
+      .product-sheet__dock-actions .btn-cta--secondary { min-height:50px; }
+      .product-sheet__dock-actions .btn-cta--primary { min-height:50px; font-size:15px; letter-spacing:-.01em; }
+      .product-sheet__related { padding-bottom:4px; }
+      .related-rail {
+        display:grid; grid-auto-flow:column; grid-auto-columns:minmax(148px, 62%);
+        gap:10px; overflow-x:auto; padding:2px 2px 8px; scroll-snap-type:x mandatory;
+        -webkit-overflow-scrolling:touch; scrollbar-width:none;
+      }
+      .related-rail::-webkit-scrollbar { display:none; }
+      .related-card {
+        scroll-snap-align:start; display:grid; gap:8px; padding:0; border:1px solid var(--line);
+        border-radius:14px; background:var(--surface); overflow:hidden; text-align:left; cursor:pointer;
+        color:inherit; font:inherit; box-shadow:0 1px 2px rgba(16,24,40,0.03);
+        transition:transform .16s ease;
+      }
+      .related-card:active { transform:scale(.985); }
+      .related-card__media { aspect-ratio:4/3; background:var(--shop-bg-soft); overflow:hidden; }
+      .related-card__media img { width:100%; height:100%; object-fit:cover; display:block; }
+      .related-card__media .media-placeholder, .related-card__media .placeholder {
+        width:100%; height:100%; display:grid; place-items:center;
+        font:800 1.4rem/1 var(--font-sans); color:var(--shop-ink-muted);
+      }
+      .related-card__body { display:grid; gap:4px; padding:0 10px 10px; min-width:0; }
+      .related-card__body b {
+        font:700 13px/1.25 var(--font-sans); color:var(--paper);
+        display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
+      }
+      .related-card__body strong { font:800 14px/1 var(--font-sans); color:var(--paper); }
+
+      /* ── Skeletons ──────────────────────────────────────────────── */
+      .catalog-skeleton, .grid-skeleton { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+      .catalog-skeleton__card, .grid-skeleton__card {
+        min-height:210px; border-radius:1rem; border:1px solid var(--line);
+        background:linear-gradient(90deg, var(--shop-bg-soft) 25%, #fff 50%, var(--shop-bg-soft) 75%);
+        background-size:200% 100%; animation:shop-skel 1.1s ease infinite;
+      }
+      @keyframes shop-skel { 0%{background-position:100% 0} 100%{background-position:-100% 0} }
+
+      /* ── Media queries ──────────────────────────────────────────── */
+      @media (min-width:600px) {
+        .grid, .catalog { grid-template-columns:repeat(3,minmax(0,1fr)); }
+        .modal { padding:32px 32px calc(32px + env(safe-area-bottom)); border-radius:32px 32px 0 0; }
+        .bottom-nav { padding-bottom:24px; }
+        .bottom-nav-inner { padding:8px; gap:12px; max-width:480px; }
+      }
+      @media (max-width:420px) {
+        .checkout-dock, #checkout-dock, .checkout-bar, .cart-dock {
+          right:10px; left:10px; bottom:calc(70px + env(safe-area-inset-bottom)); padding:10px 12px;
+        }
+        .checkout-dock button, #checkout-dock-button, #checkout-button { min-width:6.5rem; }
+      }
+      @media (max-width:359px) {
+        body { padding-right:9px; padding-left:9px; }
+        .product-action { width:100%; }
+        .order-actions { grid-template-columns:1fr; }
+      }
+      @media (prefers-reduced-motion:reduce) {
+        *,*:before,*:after { animation-duration:.01ms!important; transition-duration:.01ms!important; }
+      }
+    </style>  </head>
+  <body data-session-state="pending" data-locale={miniLocale} data-currency={miniCurrency}>
+    <div class="app">
+      <header class="topbar"><div class="brand"><span class="brand-mark" id="shop-brand-mark">{shopBranding.mark}</span><span id="shop-brand-name">{shopBranding.shopName}</span></div><div class="identity"><span class="identity-copy"><b id="hello">Telegram</b><small id="identity-status">{miniCopy.identityPending}</small></span><span class="avatar" id="avatar">{shopBranding.mark}</span></div></header>
+      <aside class="pending-banner" id="pending-payment-banner" hidden aria-live="polite"><div><span>{miniCopy.pendingOrder}</span><strong id="pending-payment-label">{miniCopy.resumePayment}</strong></div><button data-resume-payment="pending">{miniCopy.reopen}</button></aside>
+      <aside class="session-error-banner" id="session-error-banner" hidden role="alert" aria-live="assertive"><div><span id="session-error-kicker">{miniCopy.telegramConnection}</span><strong id="session-error-title">{miniCopy.sessionNotVerified}</strong><p id="session-error-copy">{miniCopy.sessionRetry}</p></div><button type="button" data-session-retry>{miniCopy.retry}</button></aside>
+      <div class="home-only"><section class="hero"><p class="hero-kicker" id="hero-kicker">{miniCopy.heroKicker}</p><h1 id="hero-title"><span id="hero-heading">{miniCopy.heroFirst}</span> <em id="hero-emphasis">{miniCopy.heroSecond}</em></h1><div class="hero-foot"><button class="hero-cta" id="hero-featured-cta" type="button">{miniCopy.featuredCta}</button><span class="hero-signal" id="session-signal">{miniCopy.verifying}</span></div></section></div>
+      <main>
+        <section class="view is-active" data-view="home">
+          <section id="featured-section"><div class="section-head"><h2>{miniCopy.featuredHeading}</h2><span id="featured-caption">{miniCopy.featuredCaption}</span></div><div class="featured-rail" id="featured-products"></div></section>
+          <section><div class="section-head"><h2>{miniCopy.allProducts}</h2><span id="result-count"></span></div><div class="catalog-tools"><label class="search"><span aria-hidden="true">⌕</span><input id="search" type="search" inputmode="search" autocomplete="off" placeholder={miniCopy.searchPlaceholder} aria-label={miniCopy.searchLabel} /></label><div class="filters" id="filters"></div></div><div class="grid" id="products"><div class="grid-skeleton" aria-hidden="true"><div class="grid-skeleton__card"></div><div class="grid-skeleton__card"></div><div class="grid-skeleton__card"></div><div class="grid-skeleton__card"></div></div></div></section>
+        </section>
+        <section class="view" data-view="cart"><div class="section-head"><h2>{miniCopy.cart}</h2><span id="cart-subtitle"></span></div><div class="cart-panel" id="cart-list"></div></section>
+        <section class="view" data-view="orders"><div class="section-head"><div class="section-head-copy"><h2>{miniCopy.orders}</h2><span id="orders-sync-status">{miniCopy.orderSync}</span></div><button class="section-action" data-refresh-orders aria-label={miniCopy.refreshOrders} title={miniCopy.refreshOrders}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.7-4L4 9"></path><path d="M4 4v5h5"></path><path d="M4 13a8 8 0 0 0 14.7 4L20 15"></path><path d="M20 20v-5h-5"></path></svg></button></div><div class="order-tools" id="order-tools" hidden></div><div class="orders-panel" id="orders-list" aria-live="polite"></div></section>
+      </main>
+    </div>
+    <div class="checkout-dock" id="checkout-dock" hidden><div><span id="checkout-dock-count">{miniCopy.checkoutCount}</span><strong id="checkout-dock-total">{miniCurrency === "USD" ? "$0.00" : "0 ₫"}</strong></div><button id="checkout-dock-button"><span class="checkout-label">{miniCopy.checkout}</span></button></div>
+    <nav class="bottom-nav" aria-label={miniCopy.storePromise}><div class="bottom-nav-inner"><button class="nav-button is-active" data-nav="home" aria-label={miniCopy.shop}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5"></path><path d="M5 9.5V21h14V9.5"></path><path d="M9 21v-7h6v7"></path></svg><span>{miniCopy.shop}</span></button><button class="nav-button" data-nav="cart" aria-label={miniCopy.cart}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h2l2.2 10.2a2 2 0 0 0 2-1.6h7.9a2 2 0 0 0 2-1.6L21 8H6"></path><circle cx="10" cy="20" r="1"></circle><circle cx="18" cy="20" r="1"></circle></svg><span>{miniCopy.cart} <span class="cart-count" id="cart-count">0</span></span></button><button class="nav-button" data-nav="orders" aria-label={miniCopy.orders}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3 2-3 2V3Z"></path><path d="M9 8h6M9 12h6"></path></svg><span>{miniCopy.orders}</span></button></div></nav>
+    <div class="modal-backdrop" id="modal-backdrop" aria-hidden="true"><section class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"><div class="modal-grip" aria-hidden="true"></div><header class="modal-head"><h2 id="modal-title">{miniCopy.checkout}</h2><button class="modal-close" id="modal-close" aria-label={miniCopy.close}>×</button></header><div class="modal-body" id="modal-body"></div></section></div>
+    <div class="toast" id="toast" role="status"></div>
+    <script is:inline type="application/json" id="products-data" set:html={serializedProducts}></script>
+    <script is:inline>
+      const products = JSON.parse(document.getElementById("products-data").textContent || "[]");
+      // This page is the legacy Vietnam Mini App. Keep browser state aligned
+      // with the server contract even if a stale cached document or local
+      // storage value contains a former global locale/currency.
+      const locale = "vi";
+      const displayCurrency = "VND";
+      const copy = locale === "en" ? {
+        available: "Ready to deliver", outOfStock: "Out of stock", remaining: "left", items: "items", all: "All",
+        service: "Service", download: "Download", licenseKey: "License key", featured: "Featured", add: "Add",
+        choosePlan: "Choose plan", searchEmpty: "No matching products.", searchHint: "Try a shorter search.",
+        productEyebrow: "Delivered directly in Telegram", productDescription: "Choose a plan and pay securely.",
+        productDetail: "Digital product delivered after payment.", choosePlanLabel: "Choose a plan",
+        orderCreated: "Order created", order: "Order", payment: "Payment", paymentPending: "Payment pending",
+        paid: "Paid", unpaid: "Unpaid", failed: "Payment failed", refunded: "Refunded", unknown: "Unknown",
+        delivery: "Delivery", delivered: "Delivered", processing: "Processing", awaitingPayment: "Awaiting payment",
+        refresh: "Refresh", checkout: "Checkout", securePayment: "Secure payment", keyReady: "Key ready",
+      } : {
+        available: "Sẵn sàng giao", outOfStock: "Hết hàng", remaining: "Còn", items: "sản phẩm", all: "Tất cả",
+        service: "Dịch vụ", download: "Download", licenseKey: "License key", featured: "Nổi bật", add: "Thêm",
+        choosePlan: "Chọn gói", searchEmpty: "Không tìm thấy sản phẩm phù hợp.", searchHint: "Thử từ khóa ngắn hơn nhé.",
+        productEyebrow: "Giao trực tiếp trong Telegram", productDescription: "Chọn gói phù hợp và thanh toán bằng VietQR.",
+        productDetail: "Sản phẩm số giao trực tiếp sau khi thanh toán.", choosePlanLabel: "Chọn gói phù hợp",
+        orderCreated: "Đơn đã tạo", order: "Đơn", payment: "Thanh toán", paymentPending: "Đang chờ thanh toán",
+        paid: "Đã thanh toán", unpaid: "Chưa thanh toán", failed: "Thanh toán lỗi", refunded: "Đã hoàn tiền", unknown: "Chưa rõ",
+        delivery: "Giao hàng", ready:"Sẵn sàng phát hành", delivered:"Đã giao đầy đủ", processing: "Đang phát hành", awaitingPayment: "Chờ thanh toán",
+        refresh: "Làm mới", checkout: "Thanh toán", securePayment: "Thanh toán an toàn", keyReady: "Key sẵn sàng",
+      };
+      const readTelegramInitData = () => {
+        const sdkValue = window.Telegram?.WebApp?.initData;
+        if (typeof sdkValue === "string" && sdkValue) return sdkValue;
+        try { return new URLSearchParams(location.hash.replace(/^#/, "")).get("tgWebAppData") || ""; } catch { return ""; }
+      };
+      const readTelegramUser = (raw) => {
+        const sdkUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
+        if (sdkUser?.id) return sdkUser;
+        try { const value = JSON.parse(new URLSearchParams(raw).get("user") || "null"); return value?.id ? value : null; } catch { return null; }
+      };
+      const tg = window.Telegram?.WebApp;
+      const telegramSupports = (version) => typeof tg?.isVersionAtLeast === "function" && tg.isVersionAtLeast(version);
+      const showTelegramBackButton = () => { if (telegramSupports("6.1")) tg.BackButton?.show(); };
+      const hideTelegramBackButton = () => { if (telegramSupports("6.1")) tg.BackButton?.hide(); };
+      let initData = readTelegramInitData();
+      let telegramUser = readTelegramUser(initData);
+      const telegramBotConfigId = (() => { try { const value = new URL(location.href).searchParams.get("bot") || ""; return /^[A-Za-z0-9_-]{8,80}$/.test(value) ? value : ""; } catch { return ""; } })();
+      const telegramBotHeader = telegramBotConfigId ? { "x-telegram-bot-config": telegramBotConfigId } : {};
+      const getTelegramInitData = () => initData || (initData = readTelegramInitData());
+      tg?.ready(); tg?.expand();
+      let telegramIdentity = String(telegramUser?.id || "guest");
+      let cartKey = `tung:telegram-mini-cart:v2:${telegramIdentity}`;
+      let pendingPaymentKey = `tung:telegram-mini-pending:v1:${telegramIdentity}`;
+      let discountKey = `tung:telegram-mini-discount:v1:${telegramIdentity}`;
+      const state = { view:"home", filter:"all", query:"", orderFilter:"all", cart:[], orders:[], pendingPayment:null, sessionReady:false, discountCode:"", discountDraft:"", discountQuote:null, discountQuoteFingerprint:"", discountBusy:false, discountError:"", shop:null };
+      const $ = (selector) => document.querySelector(selector);
+      const applyShopBranding = (shop, userFirstName = "") => {
+        if (!shop || typeof shop !== "object") return;
+        const shopName = String(shop.shopName || "").trim().slice(0, 64);
+        if (!shopName) return;
+        state.shop = shop;
+        const mark = String(shop.mark || shopName.slice(0, 1) || "S").slice(0, 2);
+        const brandMark = $("#shop-brand-mark");
+        const brandName = $("#shop-brand-name");
+        if (brandMark) brandMark.textContent = mark;
+        if (brandName) brandName.textContent = shopName;
+        document.title = `${shopName} · Telegram`;
+        const kicker = $("#hero-kicker");
+        const heading = $("#hero-heading");
+        const emphasis = $("#hero-emphasis");
+        const guest = String(userFirstName || "").trim().slice(0, 40);
+        const customized = Boolean(shop.welcomeCustomized);
+        if (customized) {
+          if (kicker && shop.welcomeKicker) kicker.textContent = String(shop.welcomeKicker).slice(0, 120);
+          if (heading && shop.welcomeHeading) heading.textContent = String(shop.welcomeHeading).slice(0, 80);
+          if (emphasis && shop.welcomeEmphasis) emphasis.textContent = String(shop.welcomeEmphasis).slice(0, 80);
+          return;
+        }
+        // Auto welcome follows the live Telegram bot name and greets the user.
+        if (kicker) {
+          kicker.textContent = guest
+            ? `${shopName} · Xin chào ${guest}`
+            : `${shopName} · Hàng số chính hãng · Mua trong Telegram`;
+        }
+        if (heading) heading.textContent = guest ? `Xin chào ${guest}.` : "Chọn nhanh.";
+        if (emphasis) emphasis.textContent = "Nhận ngay.";
+      };
+      const prefersReducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches || false;
+      const motion = {
+        play(element, keyframes, options = {}) {
+          if (!element || prefersReducedMotion || typeof element.animate !== "function") return null;
+          return element.animate(keyframes, { duration:220, easing:"cubic-bezier(.16,1,.3,1)", fill:"both", ...options });
+        },
+        reveal(selector, options = {}) {
+          if (prefersReducedMotion) return;
+          document.querySelectorAll(selector).forEach((element, index) => this.play(element, [
+            { opacity:0, transform:"translateY(10px)" },
+            { opacity:1, transform:"translateY(0)" },
+          ], { delay:Math.min(index, 8) * 35, ...options }));
+        },
+        bump(selector) {
+          const element = typeof selector === "string" ? $(selector) : selector;
+          if (!element || prefersReducedMotion) return;
+          element.classList.remove("is-bumping");
+          requestAnimationFrame(() => element.classList.add("is-bumping"));
+          setTimeout(() => element.classList.remove("is-bumping"), 420);
+        },
+      };
+      const money = (minor, currency = displayCurrency) => new Intl.NumberFormat(currency === "USD" ? "en-US" : "vi-VN", { style:"currency", currency, maximumFractionDigits: currency === "VND" ? 0 : 2 }).format(Number(minor || 0) / (currency === "VND" ? 1 : 100));
+      const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[char]));
+      const image = (product) => product.media?.[0]?.url || "";
+      const thumbnailUrl = (url) => {
+        const value = String(url || "");
+        const match = value.match(/^\/images\/(shop|blog)\/([^/?]+)\.webp(\?.*)?$/);
+        if (!match) return value;
+        const folder = match[1] === "shop" ? "shop/thumbs" : "telegram/thumbs";
+        return `/images/${folder}/${match[2]}.avif${match[3] || ""}`;
+      };
+      const thumbnail = (product) => thumbnailUrl(image(product));
+      const mediaSrcset = (product) => {
+        const original = image(product);
+        const thumb = thumbnail(product);
+        return thumb && thumb !== original ? ` srcset="${escapeHtml(thumb)} 320w, ${escapeHtml(original)} 1600w" sizes="(max-width: 519px) 102px, 320px"` : "";
+      };
+      const explicitFeatured = products.filter((product) => product.featured);
+      const featuredProducts = (explicitFeatured.length ? explicitFeatured : products.filter((product) => product.variants?.some((variant) => variant.availability !== "out_of_stock")).slice(0, 4)).slice(0, 6);
+      const featuredIds = new Set(featuredProducts.map((product) => product.id));
+      const productForVariant = (id) => products.find((product) => product.variants?.some((variant) => variant.id === id));
+      const variantForId = (id) => productForVariant(id)?.variants.find((variant) => variant.id === id);
+      const variantForSku = (sku) => products.flatMap((product) => product.variants || []).find((variant) => variant.sku === sku);
+      const availableVariants = (product) => product.variants?.filter((variant) => variant.availability !== "out_of_stock") || [];
+      const availabilityText = (variant) => variant?.availability === "unlimited" ? copy.available : variant?.availability === "out_of_stock" ? copy.outOfStock : `${copy.remaining} ${variant?.availableQuantity ?? ""} ${copy.items}`;
+      const paymentStatusText = (status) => ({ paid:copy.paid, pending:copy.paymentPending, unpaid:copy.unpaid, failed:copy.failed, refunded:copy.refunded }[String(status || "").toLowerCase()] || String(status || copy.unknown));
+      const fulfillmentStatusText = (status) => ({ awaiting_payment:copy.awaitingPayment, ready:copy.ready || copy.keyReady, partial:locale === "en" ? "Partially delivered" : "Đã giao một phần", delivered:copy.delivered, fulfilled:copy.delivered, manual:locale === "en" ? "Store is processing" : "Cửa hàng đang xử lý", pending:copy.processing, processing:copy.processing, unfulfilled:locale === "en" ? "Not delivered" : "Chưa giao", failed:locale === "en" ? "Delivery failed" : "Giao hàng lỗi", closed:locale === "en" ? "Order closed" : "Đơn đã đóng" }[String(status || "").toLowerCase()] || String(status || (locale === "en" ? "Not delivered" : "Chưa giao")));
+      const statusClass = (status) => `status-${String(status || "unknown").toLowerCase().replace(/[^a-z0-9_-]/g, "-")}`;
+      const orderDate = (value) => { const date = new Date(value); return Number.isNaN(date.getTime()) ? (locale === "en" ? "Just created" : "Vừa tạo") : date.toLocaleString(locale === "en" ? "en-US" : "vi-VN", { dateStyle:"medium", timeStyle:"short" }); };
+      const orderPaymentStatus = (order) => String(order?.paymentStatus || order?.payment_status || order?.status || "unknown").toLowerCase();
+      const orderFilterMatch = (order, filter) => {
+        const status = orderPaymentStatus(order);
+        if (filter === "paid") return status === "paid";
+        if (filter === "pending") return ["pending", "unpaid", "processing"].includes(status);
+        if (filter === "failed") return ["failed", "cancelled", "expired", "refunded"].includes(status);
+        return true;
+      };
+      const orderProgressMarkup = (paymentStatus, fulfillmentStatus) => {
+        const paid = paymentStatus === "paid";
+        const delivered = ["delivered", "fulfilled", "partial", "ready", "manual"].includes(fulfillmentStatus);
+        return `<div class="order-progress" aria-label="Tiến trình đơn hàng"><span class="order-progress-step ${paid ? "is-done" : ""}">Thanh toán</span><span class="order-progress-step ${delivered ? "is-done" : ""}">${delivered ? "Key sẵn sàng" : "Đang phát hành"}</span></div>`;
+      };
+      const paymentSteps = () => `<div class="payment-steps" aria-label="Tiến trình thanh toán"><div class="payment-step is-active"><b>1</b>Quét QR</div><div class="payment-step"><b>2</b>Xác nhận</div><div class="payment-step"><b>3</b>Nhận hàng</div></div>`;
+      const paymentQr = (url) => url ? `<div class="payment-qr-frame"><img class="payment-qr" src="${escapeHtml(url)}" alt="Mã QR thanh toán" width="240" height="240"></div>` : "";
+      const paymentPanel = (payment) => `<div class="payment-summary"><div><span class="payment-status">Đang chờ thanh toán</span><div class="payment-total">${money(payment.totalMinor, payment.currency)}</div></div><span class="order-number">#${escapeHtml(payment.number)}</span></div>${paymentSteps()}${paymentQr(payment.qrUrl)}<p class="notice">Quét đúng số tiền <strong>${money(payment.totalMinor, payment.currency)}</strong>. Trạng thái tự cập nhật; có thể đóng cửa sổ và mở lại từ thanh nhắc đơn.</p>${payment.checkoutUrl ? `<button class="primary" id="open-payment">Mở trang thanh toán</button>` : ""}<button class="secondary" id="check-payment">Tôi đã thanh toán</button>`;
+      const CART_STORAGE_MAX_BYTES = 64_000;
+      const PAYMENT_STORAGE_MAX_BYTES = 8_000;
+      const PENDING_PAYMENT_MAX_AGE_MS = 48 * 60 * 60 * 1_000;
+      const safeStorageRead = (storage, key, maxBytes) => {
+        try {
+          const raw = storage.getItem(key);
+          return typeof raw === "string" && raw.length <= maxBytes ? raw : null;
+        } catch { return null; }
+      };
+      const safeStorageWrite = (storage, key, value) => {
+        try { storage.setItem(key, value); return true; } catch { return false; }
+      };
+      const safeStorageRemove = (storage, key) => { try { storage.removeItem(key); } catch { /* private mode/quota */ } };
+      const safeHttpsUrl = (value) => {
+        if (typeof value !== "string" || value.length < 1 || value.length > 2_048) return "";
+        try {
+          const parsed = new URL(value);
+          return parsed.protocol === "https:" && !parsed.username && !parsed.password && !parsed.hash ? parsed.toString() : "";
+        } catch { return ""; }
+      };
+      const readCart = () => {
+        const raw = safeStorageRead(localStorage, cartKey, CART_STORAGE_MAX_BYTES);
+        if (!raw) return [];
+        try {
+          const parsed = JSON.parse(raw);
+          if (!Array.isArray(parsed)) return [];
+          return parsed.slice(0, 20).flatMap((item) => {
+            if (!item || typeof item !== "object" || !/^[A-Za-z0-9-]{8,80}$/.test(String(item.variantId || ""))) return [];
+            const quantity = Number(item.quantity);
+            return Number.isSafeInteger(quantity) && quantity >= 1 && quantity <= 1_000
+              ? [{ variantId: String(item.variantId), quantity }]
+              : [];
+          });
+        } catch { return []; }
+      };
+      const writeCart = () => { safeStorageWrite(localStorage, cartKey, JSON.stringify(state.cart.slice(0, 20).map(({ variantId, quantity }) => ({ variantId, quantity })))); };
+      const readDiscountCode = () => {
+        const value = safeStorageRead(localStorage, discountKey, 128) || "";
+        return /^[A-Z0-9][A-Z0-9_-]{1,99}$/.test(value) ? value : "";
+      };
+      const writeDiscountCode = () => { if (state.discountCode) safeStorageWrite(localStorage, discountKey, state.discountCode); else safeStorageRemove(localStorage, discountKey); };
+      const readPendingPayment = () => {
+        const raw = safeStorageRead(localStorage, pendingPaymentKey, PAYMENT_STORAGE_MAX_BYTES);
+        if (!raw) return null;
+        try {
+          const value = JSON.parse(raw);
+          const savedAt = Number(value?.savedAt || 0);
+          if (!value || typeof value !== "object" || !/^[A-Za-z0-9-]{8,80}$/.test(String(value.orderId || "")) || (savedAt > 0 && Date.now() - savedAt > PENDING_PAYMENT_MAX_AGE_MS)) {
+            safeStorageRemove(localStorage, pendingPaymentKey);
+            return null;
+          }
+          const totalMinor = Number(value.totalMinor);
+          const currency = typeof value.currency === "string" && /^[A-Z]{3,5}$/.test(value.currency) ? value.currency : "VND";
+          return {
+            orderId: String(value.orderId),
+            number: typeof value.number === "string" ? value.number.slice(0, 80) : "",
+            totalMinor: Number.isSafeInteger(totalMinor) && totalMinor >= 0 ? totalMinor : 0,
+            currency,
+            qrUrl: safeHttpsUrl(value.qrUrl),
+            checkoutUrl: safeHttpsUrl(value.checkoutUrl),
+            savedAt: savedAt || Date.now(),
+          };
+        } catch { return null; }
+      };
+      const writePendingPayment = () => {
+        if (!state.pendingPayment) { safeStorageRemove(localStorage, pendingPaymentKey); return; }
+        const value = { ...state.pendingPayment, savedAt: Date.now() };
+        safeStorageWrite(localStorage, pendingPaymentKey, JSON.stringify(value));
+      };
+      function bindLocalIdentity(userId) {
+        const nextIdentity = String(userId || "guest");
+        if (nextIdentity === telegramIdentity) return false;
+        telegramIdentity = nextIdentity;
+        cartKey = `tung:telegram-mini-cart:v2:${telegramIdentity}`;
+        pendingPaymentKey = `tung:telegram-mini-pending:v1:${telegramIdentity}`;
+        discountKey = `tung:telegram-mini-discount:v1:${telegramIdentity}`;
+        state.cart = readCart();
+        state.pendingPayment = readPendingPayment();
+        state.discountCode = readDiscountCode();
+        state.discountDraft = state.discountCode;
+        state.discountQuote = null;
+        state.discountQuoteFingerprint = "";
+        state.discountError = "";
+        ordersLoadedAt = 0;
+        orderDetailCache.clear();
+        reconcileCart();
+        renderCart();
+        syncPendingPaymentBanner();
+        return true;
+      }
+      let toastTimer = 0;
+      const toast = (message) => { const node = $("#toast"); node.textContent = message; node.classList.remove("is-visible"); requestAnimationFrame(() => node.classList.add("is-visible")); clearTimeout(toastTimer); toastTimer = window.setTimeout(() => node.classList.remove("is-visible"), 2600); };
+      const haptic = () => { if (telegramSupports("6.1")) tg.HapticFeedback?.impactOccurred("light"); };
+      function syncPendingPaymentBanner() {
+        const banner = $("#pending-payment-banner");
+        if (!banner) return;
+        banner.hidden = !state.pendingPayment?.orderId;
+        if (state.pendingPayment?.orderId) $("#pending-payment-label").textContent = `${copy.order} #${state.pendingPayment.number} · ${money(state.pendingPayment.totalMinor, state.pendingPayment.currency)}`;
+      }
+      function productAction(product, className = "product-action") {
+        const variants = availableVariants(product);
+        if (!variants.length) return `<button class="${className}" disabled>${copy.outOfStock}</button>`;
+        const label = product.variants.length > 1
+          ? (locale === "en" ? "Choose plan" : "Chọn gói")
+          : (locale === "en" ? "Buy" : "Mua");
+        return `<button class="${className}" data-open-product="${escapeHtml(product.slug)}" type="button">${label}</button>`;
+      }
+      function renderFilters() { const types = [...new Set(products.map((product) => product.productType))]; const node = $("#filters"); if (types.length <= 1) { node.hidden = true; node.innerHTML = ""; return; } node.hidden = false; node.innerHTML = [{ value:"all", label:copy.all }, ...types.map((value) => ({ value, label:value === "service" ? copy.service : value === "digital_download" ? copy.download : copy.licenseKey }))].map((item) => `<button class="filter ${state.filter === item.value ? "is-active" : ""}" data-filter="${item.value}">${item.label}</button>`).join(""); }
+      function renderFeatured() { const section = $("#featured-section"); const visible = state.filter === "all" && !state.query; section.hidden = !visible || !featuredProducts.length; if (section.hidden) return; $("#featured-caption").textContent = explicitFeatured.length ? (locale === "en" ? "Featured this week" : "Nổi bật trong tuần") : (locale === "en" ? "Quick picks from the catalog" : "Mua nhanh từ catalog"); $("#featured-products").innerHTML = featuredProducts.map((product, index) => { const variant = availableVariants(product)[0] || product.variants?.[0]; const src = thumbnail(product); const letter = escapeHtml(product.title.slice(0,1)); return `<article class="featured-card" data-product="${escapeHtml(product.slug)}"><div class="featured-media">${src ? `<img data-media-image data-fallback-letter="${letter}" src="${escapeHtml(src)}"${mediaSrcset(product)} alt="${escapeHtml(product.title)}" width="320" height="180" ${index === 0 ? `fetchpriority="high"` : `loading="lazy"`} decoding="async">` : `<div class="media-placeholder">${letter}</div>`}<span class="featured-rank">0${index + 1}</span></div><div class="featured-body"><h3><button class="title-button" data-open-product="${escapeHtml(product.slug)}">${escapeHtml(product.title)}</button></h3><p class="featured-copy">${escapeHtml(product.shortDescription || (locale === "en" ? "Digital product delivered instantly in Telegram." : "Sản phẩm số được giao ngay trong Telegram."))}</p><div class="featured-foot"><span class="featured-price">${money(product.minPriceMinor, product.currency)}<small>${availabilityText(variant)}</small></span>${productAction(product, "featured-action")}</div></div></article>`; }).join(""); }
+      function renderProducts() { const query = state.query.toLowerCase(); const showFeatured = state.filter === "all" && !query; const visible = products.filter((product) => (state.filter === "all" || product.productType === state.filter) && (!query || `${product.title} ${product.eyebrow || ""} ${product.shortDescription || ""}`.toLowerCase().includes(query))); const catalog = showFeatured ? visible.filter((product) => !featuredIds.has(product.id)) : visible; $("#result-count").textContent = `${visible.length} ${copy.items}`; $("#products").innerHTML = catalog.length ? catalog.map((product, index) => { const variant = availableVariants(product)[0] || product.variants?.[0]; const src = thumbnail(product); const letter = escapeHtml(product.title.slice(0,1)); return `<article class="product" data-product="${escapeHtml(product.slug)}" style="animation-delay:${Math.min(index, 8) * 35}ms"><div class="product-media">${src ? `<img data-media-image data-fallback-letter="${letter}" src="${escapeHtml(src)}"${mediaSrcset(product)} alt="${escapeHtml(product.title)}" width="320" height="180" loading="lazy" decoding="async">` : `<div class="media-placeholder">${letter}</div>`}${product.featured ? `<span class="product-tag">${copy.featured}</span>` : ""}</div><div class="product-body"><p class="product-eyebrow">${escapeHtml(product.eyebrow || copy.productEyebrow)}</p><h3><button class="title-button" data-open-product="${escapeHtml(product.slug)}">${escapeHtml(product.title)}</button></h3><p class="product-desc">${escapeHtml(product.shortDescription || copy.productDescription)}</p><div class="product-foot"><span class="price">${money(product.minPriceMinor, product.currency)}<small>${product.variants?.length || 1} ${locale === "en" ? "plans" : "gói"} · ${availabilityText(variant).toLowerCase()}</small></span>${productAction(product)}</div></div></article>`; }).join("") : `<div class="empty">${copy.searchEmpty}<br>${copy.searchHint}</div>`; }
+      function cartLineFromVariant(variantId, quantity = 1) {
+        const variant = variantForId(variantId);
+        const product = productForVariant(variantId);
+        if (!variant || !product || variant.availability === "out_of_stock") return null;
+        const cap = Math.max(1, Math.min(variant.maxPerOrder || 10, (variant.availableQuantity ?? variant.maxPerOrder ?? 10)));
+        return {
+          variantId: variant.id,
+          quantity: Math.max(1, Math.min(cap, quantity)),
+          maxQuantity: cap,
+          title: product.title,
+          variantTitle: variant.title,
+          sku: variant.sku,
+          priceMinor: variant.priceMinor,
+          currency: variant.currency,
+          imageUrl: thumbnail(product),
+        };
+      }
+      function addVariantToCart(variantId) {
+        const line = cartLineFromVariant(variantId, 1);
+        if (!line) return false;
+        if (state.cart.length && state.cart[0].currency !== line.currency) {
+          toast(locale === "en" ? "One order can only use one currency." : "Một đơn chỉ dùng một loại tiền tệ.");
+          return false;
+        }
+        const existing = state.cart.find((item) => item.variantId === line.variantId);
+        if (existing) existing.quantity = Math.min(existing.maxQuantity || line.maxQuantity, existing.quantity + 1);
+        else state.cart.push(line);
+        invalidateDiscountQuote();
+        writeCart();
+        renderCart();
+        motion.bump("#cart-count");
+        toast(locale === "en" ? "Added · open Cart to pay" : "Đã thêm vào giỏ · Chạm Giỏ để thanh toán");
+        haptic();
+        return true;
+      }
+      /** Express checkout: single selected plan → create VietQR immediately. */
+      async function buyNowVariant(variantId) {
+        const line = cartLineFromVariant(variantId, 1);
+        if (!line) {
+          toast(locale === "en" ? "This plan is unavailable." : "Gói này hiện không mua được.");
+          return;
+        }
+        state.cart = [line];
+        invalidateDiscountQuote();
+        writeCart();
+        renderCart();
+        haptic();
+        await checkout();
+      }
+      function deliveryText(product, variant) {
+        const mode = variant?.deliveryMode || product.deliveryMode || "automatic";
+        if (mode === "manual") return locale === "en" ? "Manual fulfillment after payment review" : "Xử lý thủ công sau khi thanh toán được xác nhận";
+        return locale === "en" ? "Automatic key delivery after verified payment" : "Giao key tự động sau khi thanh toán được xác minh";
+      }
+      function relatedProductsFor(product, limit = 4) {
+        const key = product.categorySlug || product.productType || product.category || "";
+        const pool = products.filter((item) => item.slug !== product.slug);
+        const same = pool.filter((item) => (item.categorySlug || item.productType || item.category || "") === key);
+        const rest = pool.filter((item) => !same.includes(item));
+        return [...same, ...rest].slice(0, limit);
+      }
+      function relatedRailMarkup(product) {
+        const related = relatedProductsFor(product, 4);
+        if (!related.length) return "";
+        const label = locale === "en" ? "Related products" : "Sản phẩm liên quan";
+        const cards = related.map((item) => {
+          const plan = (item.variants || []).find((v) => v.availability !== "out_of_stock") || item.variants?.[0];
+          const src = thumbnail(item) || item.coverUrl || "";
+          const price = plan ? money(plan.priceMinor, plan.currency) : "—";
+          return `<button type="button" class="related-card" data-open-product="${escapeHtml(item.slug)}">
+            <div class="related-card__media">${src ? `<img src="${escapeHtml(src)}" alt="" width="240" height="180" loading="lazy" decoding="async">` : `<div class="media-placeholder">${escapeHtml(item.title.slice(0,1))}</div>`}</div>
+            <span class="related-card__body"><b>${escapeHtml(item.title)}</b><strong>${price}</strong></span>
+          </button>`;
+        }).join("");
+        return `<div class="product-sheet__section product-sheet__related"><h3 class="product-sheet__label">${label}</h3><div class="related-rail">${cards}</div></div>`;
+      }
+      function productSheetMarkup(product, selectedId) {
+        const plans = product.variants || [];
+        const selected = plans.find((item) => item.id === selectedId) || plans.find((item) => item.availability !== "out_of_stock") || plans[0];
+        const src = thumbnail(product) || product.coverUrl || "";
+        const lead = product.shortDescription || copy.productDescription;
+        const body = product.description && product.description !== lead ? product.description : "";
+        const badges = Array.isArray(product.badges) ? product.badges : [];
+        const stock = selected ? availabilityText(selected) : copy.outOfStock;
+        const canBuy = selected && selected.availability !== "out_of_stock";
+        const plansHtml = plans.map((variant) => {
+          const active = selected && variant.id === selected.id;
+          const disabled = variant.availability === "out_of_stock";
+          return `<button type="button" class="plan-card ${active ? "is-selected" : ""}" data-select-plan="${escapeHtml(variant.id)}" data-product-slug="${escapeHtml(product.slug)}" ${disabled ? "disabled" : ""}>
+            <span class="plan-card__main"><b>${escapeHtml(variant.title || variant.sku)}</b>
+            <small>${escapeHtml(variant.benefitLine || availabilityText(variant))}</small></span>
+            <span class="plan-card__price"><strong>${money(variant.priceMinor, variant.currency)}</strong>
+            ${variant.compareAtMinor ? `<del>${money(variant.compareAtMinor, variant.currency)}</del>` : ""}</span>
+          </button>`;
+        }).join("");
+        const badgeHtml = [product.category || product.eyebrow, stock, ...(badges || [])].filter(Boolean)
+          .map((label) => `<span class="sheet-chip">${escapeHtml(String(label))}</span>`).join("");
+        const addLabel = locale === "en" ? "Add to cart" : "Thêm giỏ";
+        const buyLabel = locale === "en" ? "Buy now" : "Mua ngay";
+        return `<div class="product-sheet" data-sheet-product="${escapeHtml(product.slug)}">
+          <div class="product-sheet__scroll">
+            <div class="product-sheet__hero">${src ? `<img src="${escapeHtml(src)}" alt="${escapeHtml(product.title)}" width="640" height="480" decoding="async">` : `<div class="media-placeholder">${escapeHtml(product.title.slice(0,1))}</div>`}
+            </div>
+            <div class="product-sheet__head">
+              <div class="sheet-chips">${badgeHtml}</div>
+              <p class="product-sheet__lead">${escapeHtml(lead)}</p>
+            </div>
+            <div class="product-sheet__section">
+              <h3 class="product-sheet__label">${copy.choosePlanLabel}</h3>
+              <div class="plan-list">${plansHtml || `<p class="detail-copy">${copy.outOfStock}</p>`}</div>
+            </div>
+            ${body ? `<div class="product-sheet__section"><h3 class="product-sheet__label">${locale === "en" ? "What's included" : "Chi tiết gói"}</h3><div class="product-sheet__body">${escapeHtml(body).replaceAll("\n", "<br>")}</div></div>` : ""}
+            <div class="product-sheet__section product-sheet__trust">
+              <h3 class="product-sheet__label">${locale === "en" ? "Delivery" : "Cách nhận hàng"}</h3>
+              <p>${escapeHtml(deliveryText(product, selected))}</p>
+              <p class="product-sheet__hint">${locale === "en" ? "Pay securely in Telegram. Track the order anytime in Orders." : "Thanh toán an toàn trong Telegram. Theo dõi đơn ở tab Đơn hàng."}</p>
+            </div>
+            ${relatedRailMarkup(product)}
+          </div>
+          <div class="product-sheet__dock">
+            <div class="product-sheet__dock-price">
+              <small id="sheet-plan-label">${escapeHtml(selected?.title || "—")}</small>
+              <strong id="sheet-plan-price">${selected ? money(selected.priceMinor, selected.currency) : "—"}</strong>
+            </div>
+            <div class="product-sheet__dock-actions">
+              <button type="button" class="btn-cta--secondary" id="sheet-add" data-variant-add="${escapeHtml(selected?.id || "")}" ${canBuy ? "" : "disabled"}>
+                ${canBuy ? addLabel : copy.outOfStock}
+              </button>
+              <button type="button" class="btn-cta--primary primary" id="sheet-buy" data-variant-buy-now="${escapeHtml(selected?.id || "")}" ${canBuy ? "" : "disabled"}>
+                ${canBuy ? buyLabel : copy.outOfStock}
+              </button>
+            </div>
+          </div>
+        </div>`;
+      }
+      function selectPlanInSheet(productSlug, variantId) {
+        const product = products.find((item) => item.slug === productSlug);
+        if (!product) return;
+        const body = document.getElementById("modal-body");
+        if (!body) return;
+        body.innerHTML = productSheetMarkup(product, variantId);
+        haptic?.();
+      }
+      function openProduct(slug) {
+        const product = products.find((item) => item.slug === slug);
+        if (!product) return;
+        const first = (product.variants || []).find((item) => item.availability !== "out_of_stock") || product.variants?.[0];
+        openModal(product.title, productSheetMarkup(product, first?.id || ""));
+        showTelegramBackButton?.();
+      }
+      function reconcileCart() { state.cart = state.cart.flatMap((item) => { const variant = variantForId(item.variantId); const product = productForVariant(item.variantId); if (!variant || !product || variant.availability === "out_of_stock") return []; const cap = Math.max(1, Math.min(variant.maxPerOrder || 10, (variant.availableQuantity ?? variant.maxPerOrder ?? 10))); return [{ ...item, title:product.title, variantTitle:variant.title, sku:variant.sku, priceMinor:variant.priceMinor, currency:variant.currency, imageUrl:thumbnail(product), quantity:Math.min(Math.max(1, item.quantity), cap), maxQuantity:cap }]; }); writeCart(); }
+      function closeProductDetail() { closeModal(); hideTelegramBackButton(); }
+      const cartItemsPayload = () => state.cart.map((item) => ({ variantId:item.variantId, quantity:item.quantity }));
+      const cartFingerprint = (code = state.discountCode) => `${state.cart.map((item) => `${item.variantId}:${item.quantity}`).join("|")}::discount:${String(code || "").trim().toUpperCase()}`;
+      const activeDiscountQuote = () => state.discountCode && state.discountQuote && state.discountQuoteFingerprint === cartFingerprint() ? state.discountQuote : null;
+      const discountErrorText = (code) => ({
+        discount_invalid:"Mã không tồn tại hoặc đã bị nhập sai.",
+        discount_not_applicable:"Mã không áp dụng cho sản phẩm trong giỏ.",
+        discount_outside_window:"Mã chưa mở hoặc đã hết hạn.",
+        discount_limit_reached:"Mã đã hết lượt sử dụng.",
+        discount_customer_limit_reached:"Bạn đã dùng hết lượt của mã này.",
+        discount_minimum_not_met:"Đơn chưa đủ giá trị tối thiểu của mã.",
+        discount_currency_mismatch:"Mã không dùng được cho loại tiền trong giỏ.",
+        discount_quote_rate_limited:"Bạn kiểm tra quá nhiều lần. Vui lòng đợi một phút.",
+        zero_total_checkout_not_supported:"Mã giảm quá nhiều; tổng đơn phải lớn hơn 0.",
+      }[String(code || "")] || "Không kiểm tra được mã lúc này.");
+      const invalidateDiscountQuote = () => { if (!state.discountCode) return; state.discountQuote = null; state.discountQuoteFingerprint = ""; state.discountError = ""; };
+      const renderDiscountBox = () => {
+        const quote = activeDiscountQuote();
+        const message = state.discountBusy ? "Đang kiểm tra mã an toàn…" : state.discountError ? discountErrorText(state.discountError) : quote ? `Đã áp dụng · tiết kiệm ${money(quote.discountMinor, quote.currency)}` : state.discountCode ? "Giỏ hàng đã thay đổi — kiểm tra lại mã trước khi thanh toán." : "Nhập mã nếu bạn có ưu đãi.";
+        return `<div class="discount-box"><div class="discount-head"><strong>Mã giảm giá</strong><span>Không bắt buộc</span></div><div class="discount-form"><input id="discount-code" value="${escapeHtml(state.discountDraft || state.discountCode)}" maxlength="100" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="VD: SALE10" aria-label="Mã giảm giá" ${state.discountBusy ? "disabled" : ""}><button type="button" data-discount-apply ${state.discountBusy ? "disabled aria-busy=\"true\"" : ""}>${state.discountBusy ? "Đang kiểm tra…" : "Áp dụng"}</button></div>${quote ? `<div class="discount-applied"><div><strong>${escapeHtml(quote.discountCode || state.discountCode)}</strong><span>Tiết kiệm ${money(quote.discountMinor, quote.currency)}</span></div><button class="discount-clear" type="button" data-discount-clear>Gỡ mã</button></div>` : ""}<span class="discount-message ${state.discountError ? "is-error" : quote ? "is-success" : ""}" role="status" aria-live="polite">${escapeHtml(message)}</span></div>`;
+      };
+      async function requestDiscountQuote(rawCode, { silent = false } = {}) {
+        const code = String(rawCode || "").trim().toUpperCase();
+        state.discountCode = code;
+        state.discountDraft = code;
+        if (!/^[A-Z0-9][A-Z0-9_-]{1,99}$/.test(code)) {
+          state.discountError = "discount_invalid";
+          state.discountQuote = null;
+          state.discountQuoteFingerprint = "";
+          safeStorageRemove(localStorage, discountKey);
+          if (!silent) renderCart();
+          throw Object.assign(new Error("discount_invalid"), { code:"discount_invalid" });
+        }
+        if (!state.cart.length) return null;
+        const fingerprint = cartFingerprint(code);
+        if (state.discountQuote && state.discountQuoteFingerprint === fingerprint) return state.discountQuote;
+        state.discountBusy = true;
+        state.discountError = "";
+        if (!silent) renderCart();
+        try {
+          const result = await api("quote", { method:"POST", body:JSON.stringify({ items:cartItemsPayload(), discountCode:code }) });
+          state.discountCode = result.discountCode || code;
+          state.discountDraft = state.discountCode;
+          state.discountQuote = result;
+          state.discountQuoteFingerprint = fingerprint;
+          state.discountError = "";
+          writeDiscountCode();
+          toast(`Đã áp dụng mã ${state.discountCode}`);
+          return result;
+        } catch (error) {
+          state.discountQuote = null;
+          state.discountQuoteFingerprint = "";
+          state.discountError = error.code || "discount_invalid";
+          safeStorageRemove(localStorage, discountKey);
+          throw error;
+        } finally {
+          state.discountBusy = false;
+          if (!silent) renderCart();
+        }
+      }
+      function clearDiscount() { state.discountCode = ""; state.discountDraft = ""; state.discountQuote = null; state.discountQuoteFingerprint = ""; state.discountError = ""; writeDiscountCode(); renderCart(); toast("Đã gỡ mã giảm giá"); }
+      function syncCheckoutDock() { const count = state.cart.reduce((sum, item) => sum + item.quantity, 0); const subtotal = state.cart.reduce((sum, item) => sum + item.priceMinor * item.quantity, 0); const quote = activeDiscountQuote(); const total = quote?.totalMinor ?? subtotal; const dock = $("#checkout-dock"); const visible = state.view === "cart" && count > 0; dock.hidden = !visible; document.body.classList.toggle("cart-dock-visible", visible); if (visible) { $("#checkout-dock-count").textContent = `${count} sản phẩm · ${quote ? "Đã áp mã" : "VietQR"}`; $("#checkout-dock-total").textContent = money(total, quote?.currency || state.cart[0].currency); } }
+      function renderCart() { const count = state.cart.reduce((sum, item) => sum + item.quantity, 0); $("#cart-count").textContent = count; $("#cart-subtitle").textContent = count ? `${count} món đã chọn` : "Chưa chọn gì"; if (!state.cart.length) { $("#cart-list").innerHTML = `<div class="empty"><span class="empty-icon" aria-hidden="true">＋</span>Giỏ hàng đang trống.<br>Chọn một gói phù hợp để bắt đầu.<br><br><button class="primary" data-nav="home">Xem sản phẩm</button></div>`; syncCheckoutDock(); return; } const subtotal = state.cart.reduce((sum, item) => sum + item.priceMinor * item.quantity, 0); const quote = activeDiscountQuote(); const total = quote?.totalMinor ?? subtotal; $("#cart-list").innerHTML = `${state.cart.map((item) => `<div class="cart-row"><img class="cart-thumb" src="${escapeHtml(item.imageUrl || "")}" alt="" width="72" height="72"><div><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.variantTitle || item.sku)}</small><div class="cart-row-foot"><div class="qty"><button aria-label="Giảm số lượng" data-qty="${item.variantId}" data-delta="-1">−</button><b aria-live="polite">${item.quantity}</b><button aria-label="Tăng số lượng" data-qty="${item.variantId}" data-delta="1">+</button></div><div class="cart-price"><b>${money(item.priceMinor * item.quantity, item.currency)}</b><button class="remove" data-remove="${item.variantId}">Xóa</button></div></div></div></div>`).join("")}<div class="cart-summary">${renderDiscountBox()}<div class="summary-line"><span>Tạm tính</span><strong>${money(quote?.subtotalMinor ?? subtotal, quote?.currency || state.cart[0].currency)}</strong></div>${quote && quote.discountMinor > 0 ? `<div class="summary-line discount-line"><span>Giảm giá <b>${escapeHtml(quote.discountCode || state.discountCode)}</b></span><strong>−${money(quote.discountMinor, quote.currency)}</strong></div>` : ""}<div class="summary-line total-line"><span>Tổng cộng</span><strong>${money(total, quote?.currency || state.cart[0].currency)}</strong></div><p class="cart-trust">✓ Không cần đăng nhập thêm<br>✓ Thanh toán an toàn qua VietQR<br>✓ Key nằm trong mục Đơn hàng sau xác nhận</p>
+<button type="button" class="secondary" data-share-bridge style="width:100%;margin-top:10px">Chia sẻ giỏ (link)</button>
+<button type="button" class="secondary" data-suggest-products style="width:100%;margin-top:8px">Gợi ý gói phù hợp</button>
+</div>`; syncCheckoutDock(); }
+      function renderOrders() {
+        const tools = $("#order-tools");
+        const list = $("#orders-list");
+        const counts = state.orders.reduce((result, order) => {
+          const status = orderPaymentStatus(order);
+          result.all += 1;
+          if (status === "paid") result.paid += 1;
+          else if (["pending", "unpaid", "processing"].includes(status)) result.pending += 1;
+          else if (["failed", "cancelled", "expired", "refunded"].includes(status)) result.failed += 1;
+          return result;
+        }, { all:0, paid:0, pending:0, failed:0 });
+        if (tools) {
+          tools.hidden = !state.orders.length;
+          tools.innerHTML = state.orders.length ? `<div class="order-insights" aria-label="Tổng quan đơn hàng"><div class="order-insight"><span>Tất cả</span><strong>${counts.all}</strong></div><div class="order-insight is-good"><span>Đã thanh toán</span><strong>${counts.paid}</strong></div><div class="order-insight is-waiting"><span>Đang xử lý</span><strong>${counts.pending}</strong></div></div><div class="order-filters" role="tablist" aria-label="Lọc đơn hàng">${[{ value:"all", label:"Tất cả" }, { value:"paid", label:"Đã thanh toán" }, { value:"pending", label:"Đang xử lý" }, { value:"failed", label:"Đã đóng" }].map((item) => `<button class="order-filter ${state.orderFilter === item.value ? "is-active" : ""}" data-order-filter="${item.value}" role="tab" aria-selected="${state.orderFilter === item.value}">${item.label} <span>(${counts[item.value]})</span></button>`).join("")}</div>` : "";
+        }
+        const visibleOrders = state.orders.filter((order) => orderFilterMatch(order, state.orderFilter));
+        list.innerHTML = visibleOrders.length ? visibleOrders.map((order) => {
+          const paymentStatus = orderPaymentStatus(order);
+          const fulfillmentStatus = String(order.fulfillmentStatus || order.fulfillment_status || "pending").toLowerCase();
+          const canResume = paymentStatus !== "paid" && state.pendingPayment?.orderId === order.id;
+          const canReveal = paymentStatus === "paid";
+          const actionCount = Number(canResume) + 1 + Number(canReveal);
+          const itemCount = Number(order.itemCount || order.lineCount || 0);
+          const discountCopy = Number(order.discountMinor || 0) > 0 ? ` · Đã giảm ${money(order.discountMinor, order.currency)}` : "";
+          const keyAction = ["delivered", "partial", "manual"].includes(String(order.deliveryReadiness || "")) ? "Xem key" : "Nhận key";
+          const orderNumber = order.number || order.order_number || "";
+          return `<article class="order-card" data-payment-status="${escapeHtml(paymentStatus)}"><div class="order-meta"><span class="order-number-wrap"><span class="order-number">#${escapeHtml(orderNumber)}</span><button class="order-number-copy" type="button" data-copy-order-number="${escapeHtml(orderNumber)}" aria-label="Sao chép mã đơn" title="Sao chép mã đơn">⧉</button></span><span class="status ${statusClass(paymentStatus)}">${escapeHtml(paymentStatusText(paymentStatus))}</span></div><div class="order-total">${money(order.totalMinor ?? order.total_minor, order.currency)}</div><small>${escapeHtml(orderDate(order.createdAt || order.created_at))}${itemCount ? ` · ${itemCount} sản phẩm` : ""}${escapeHtml(discountCopy)}</small>${orderProgressMarkup(paymentStatus, String(order.deliveryReadiness || fulfillmentStatus).toLowerCase())}<div class="order-facts"><div class="order-fact"><span>Thanh toán</span><strong>${escapeHtml(paymentStatusText(paymentStatus))}</strong></div><div class="order-fact"><span>Giao hàng</span><strong>${escapeHtml(fulfillmentStatusText(order.deliveryReadiness || fulfillmentStatus))}</strong></div></div><div class="order-actions" data-action-count="${actionCount}">${canResume ? `<button data-resume-payment="${escapeHtml(order.id)}">Tiếp tục trả</button>` : ""}<button data-order="${escapeHtml(order.id)}">Xem chi tiết</button>${canReveal ? `<button data-keys="${escapeHtml(order.id)}"><span class="key-button-label">${keyAction}</span></button>` : ""}</div></article>`;
+        }).join("") : state.orders.length ? `<div class="empty"><span class="empty-icon" aria-hidden="true">⌁</span><strong>Không có đơn phù hợp</strong><br><span>Thử bộ lọc khác để xem toàn bộ lịch sử.</span><br><br><button class="secondary" data-clear-order-filter>Xem tất cả đơn</button></div>` : `<div class="empty"><span class="empty-icon" aria-hidden="true">⌁</span><strong>Chưa có đơn hàng</strong><br><span>Đơn mới sẽ tự xuất hiện sau khi bạn thanh toán bằng tài khoản Telegram này.</span><br><br><button class="secondary" data-refresh-orders>Làm mới lịch sử</button></div>`;
+        motion.reveal(".order-card");
+      }
+      function showView(view) { state.view = view; let activeView = null; document.querySelectorAll("[data-view]").forEach((node) => { node.classList.toggle("is-active", node.dataset.view === view); if (node.dataset.view === view) activeView = node; }); document.querySelectorAll(".home-only").forEach((node) => { node.hidden = view !== "home"; }); document.querySelectorAll("[data-nav]").forEach((node) => { node.classList.toggle("is-active", node.dataset.nav === view); if (node.dataset.nav) node.setAttribute("aria-current", node.dataset.nav === view ? "page" : "false"); }); motion.play(activeView, [{ opacity:0, transform:"translateX(8px)" }, { opacity:1, transform:"translateX(0)" }], { duration:240 }); syncCheckoutDock(); window.scrollTo({ top:0, behavior:prefersReducedMotion ? "auto" : "smooth" }); if (view === "orders") void loadOrders().catch(() => undefined); haptic(); }
+      let activeKeyReveal = null;
+      let visibleKeyMaterial = [];
+      let modalReturnFocus = null;
+      const modalBackgroundState = new Map();
+      function setModalBackgroundInert(blocked) {
+        document.querySelectorAll(".app, .bottom-nav, #checkout-dock").forEach((node) => {
+          if (!(node instanceof HTMLElement)) return;
+          if (blocked) {
+            if (!modalBackgroundState.has(node)) modalBackgroundState.set(node, { inert:node.hasAttribute("inert"), ariaHidden:node.getAttribute("aria-hidden") });
+            node.setAttribute("inert", "");
+            node.setAttribute("aria-hidden", "true");
+            return;
+          }
+          const previous = modalBackgroundState.get(node);
+          if (!previous) return;
+          node.toggleAttribute("inert", previous.inert);
+          if (previous.ariaHidden === null) node.removeAttribute("aria-hidden"); else node.setAttribute("aria-hidden", previous.ariaHidden);
+          modalBackgroundState.delete(node);
+        });
+      }
+      function openModal(title, html) { modalReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null; $("#modal-title").textContent = title; $("#modal-body").innerHTML = html; const backdrop = $("#modal-backdrop"); setModalBackgroundInert(true); backdrop.removeAttribute("aria-hidden"); backdrop.classList.add("is-open"); document.body.classList.add("modal-open"); motion.play(backdrop, [{ opacity:0 }, { opacity:1 }], { duration:180 }); $("#modal-close").focus(); }
+      function replaceModal(title, html) { const backdrop = $("#modal-backdrop"); if (!backdrop.classList.contains("is-open")) { openModal(title, html); return; } $("#modal-title").textContent = title; $("#modal-body").innerHTML = html; $("#modal-body").scrollTop = 0; motion.play($("#modal-body"), [{ opacity:0, transform:"translateY(8px)" }, { opacity:1, transform:"translateY(0)" }], { duration:220 }); }
+      function closeModal() { if (activePaymentPoll) { activePaymentPoll.cancelled = true; activePaymentPoll.controller?.abort(); activePaymentPoll = null; } if (activeKeyReveal) { activeKeyReveal.cancelled = true; activeKeyReveal.controller?.abort(); activeKeyReveal = null; } clearVisibleKeys(); const backdrop = $("#modal-backdrop"); const returnFocus = modalReturnFocus; backdrop.classList.remove("is-open"); document.body.classList.remove("modal-open"); setModalBackgroundInert(false); hideTelegramBackButton(); returnFocus?.focus?.(); if (backdrop.contains(document.activeElement) && document.activeElement instanceof HTMLElement) document.activeElement.blur(); backdrop.setAttribute("aria-hidden", "true"); modalReturnFocus = null; }
+      const fetchWithTimeout = async (url, options = {}, timeoutMs = 12_000) => {
+        const controller = new AbortController();
+        const callerSignal = options.signal;
+        const abort = () => controller.abort();
+        if (callerSignal?.aborted) controller.abort();
+        else callerSignal?.addEventListener?.("abort", abort, { once:true });
+        const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+        try { return await fetch(url, { ...options, signal:controller.signal }); }
+        finally { window.clearTimeout(timer); callerSignal?.removeEventListener?.("abort", abort); }
+      };
+      const wait = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
+      const retryableHttpStatus = (status) => status === 408 || status === 425 || status >= 500;
+      async function fetchWithRetry(url, options = {}, timeoutMs = 12_000, retries = 0) {
+        let lastError = null;
+        for (let attempt = 0; attempt <= retries; attempt += 1) {
+          try {
+            const response = await fetchWithTimeout(url, options, timeoutMs);
+            if (!retryableHttpStatus(response.status) || attempt >= retries) return response;
+            await wait(180 * (attempt + 1));
+          } catch (error) {
+            lastError = error;
+            if (options.signal?.aborted) throw error;
+            if (attempt >= retries) throw error;
+            await wait(180 * (attempt + 1));
+          }
+        }
+        throw lastError || new Error("request_failed");
+      }
+      let sessionPromise = null;
+      let sessionRetryBusy = false;
+      let nextBotUrl = "";
+      const telegramSessionError = (code, details = {}) => Object.assign(new Error(code), { code, ...details });
+      async function waitForTelegramInitData(maxWaitMs = 2_800) {
+        let raw = getTelegramInitData();
+        const startedAt = Date.now();
+        let delayMs = 80;
+        while (!raw && Date.now() - startedAt < maxWaitMs) {
+          await wait(delayMs);
+          raw = getTelegramInitData();
+          if (!telegramUser) telegramUser = readTelegramUser(raw);
+          delayMs = Math.min(320, Math.round(delayMs * 1.45));
+        }
+        return raw;
+      }
+      function sessionFailureCopy(code) {
+        if (code === "telegram_identity_mismatch") return ["Sai tài khoản Telegram", "Phiên hiện tại không khớp tài khoản đang mở. Đóng Mini App rồi mở lại từ đúng bot."];
+        if (["telegram_auth_expired", "telegram_auth_replayed", "telegram_session_required"].includes(String(code || ""))) return ["Phiên Telegram đã hết hạn", "Đóng Mini App và mở lại từ nút Shop trong Telegram để nhận chữ ký mới."];
+        if (code === "telegram_bot_context_invalid") return ["Bot đang được chuyển đổi", "Bot này không còn là bot bán hàng hiện tại. Mở Mini App từ bot mới để tiếp tục."];
+        if (!navigator.onLine) return ["Đang ngoại tuyến", "Kết nối mạng đã ngắt. Khi online trở lại, hãy bấm thử lại."];
+        return ["Kết nối chưa ổn định", "Giữ Mini App mở và thử lại sau ít giây. Giỏ hàng và đơn hàng không bị mất."];
+      }
+      function markTelegramSessionFailure(code, details = {}) {
+        const expired = ["telegram_auth_expired", "telegram_auth_replayed", "telegram_session_required"].includes(String(code || ""));
+        const mismatch = code === "telegram_identity_mismatch";
+        const [title, copy] = sessionFailureCopy(code);
+        nextBotUrl = code === "telegram_bot_context_invalid" && /^https:\/\/t\.me\/[A-Za-z0-9_]{5,32}$/.test(String(details.nextBotUrl || "")) ? String(details.nextBotUrl) : "";
+        const retryButton = $("[data-session-retry]");
+        document.body.dataset.sessionState = "error";
+        $("#identity-status").textContent = mismatch ? "Sai tài khoản Telegram" : expired ? "Phiên Telegram hết hạn" : "Chưa xác minh Telegram";
+        $("#session-signal").textContent = code === "telegram_bot_context_invalid" ? "Mở bot mới" : "Thử xác minh lại";
+        $("#session-error-title").textContent = title;
+        $("#session-error-copy").textContent = copy;
+        if (retryButton) {
+          retryButton.textContent = nextBotUrl ? "Mở bot mới" : "Thử lại";
+          if (nextBotUrl) retryButton.dataset.sessionOpenBot = "";
+          else delete retryButton.dataset.sessionOpenBot;
+        }
+        $("#session-error-banner").hidden = false;
+      }
+      let catalogRefreshPromise = null;
+      async function refreshCatalog() {
+        if (catalogRefreshPromise) return catalogRefreshPromise;
+        catalogRefreshPromise = (async () => {
+          try {
+            const result = await api("catalog");
+            if (!result.ok || !Array.isArray(result.products) || !result.products.length) return;
+            products.length = 0;
+            products.push(...result.products);
+            const nextFeatured = products.filter((p) => p.featured);
+            const autoFeatured = nextFeatured.length ? nextFeatured : products.filter((p) => p.variants?.some((v) => v.availability !== "out_of_stock")).slice(0, 4);
+            featuredProducts.length = 0;
+            featuredProducts.push(...autoFeatured.slice(0, 6));
+            featuredIds.clear();
+            featuredProducts.forEach((p) => featuredIds.add(p.id));
+            reconcileCart();
+            renderFilters();
+            renderFeatured();
+            renderProducts();
+            renderCart();
+          } catch { /* catalog refresh is best-effort; SSR data remains usable */ }
+        })().finally(() => { catalogRefreshPromise = null; });
+        return catalogRefreshPromise;
+      }
+      async function bootstrapSession() {
+        if (state.sessionReady) return true;
+        if (sessionPromise) return sessionPromise;
+        sessionPromise = (async () => {
+          const raw = await waitForTelegramInitData();
+          // Never reuse a browser cookie when this bootstrap has no fresh,
+          // signed Telegram payload; otherwise a stale account could bleed
+          // into a different WebView identity.
+          if (!raw) throw telegramSessionError("telegram_auth_unavailable");
+          const response = await fetchWithRetry("/api/shop/telegram-mini/session", {
+            credentials: "include",
+            headers: { "x-telegram-init-data": raw, ...telegramBotHeader },
+          }, 12_000, 2);
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok || !result.ok || !result.user?.id) throw telegramSessionError(result.code || "telegram_session_failed", { nextBotUsername: result.nextBotUsername, nextBotUrl: result.nextBotUrl });
+          const verifiedId = String(result.user.id);
+          if (telegramUser?.id && String(telegramUser.id) !== verifiedId) throw telegramSessionError("telegram_identity_mismatch");
+          telegramUser = result.user;
+          bindLocalIdentity(verifiedId);
+          state.sessionReady = true;
+          document.body.dataset.sessionState = "ready";
+          applyShopBranding(result.shop, result.user.firstName || "");
+          $("#hello").textContent = result.user.firstName || "Telegram";
+          $("#avatar").textContent = (result.user.firstName || "T").slice(0, 1).toUpperCase();
+          $("#identity-status").textContent = "Đã xác minh Telegram";
+          $("#session-signal").textContent = "Phiên Telegram an toàn";
+          nextBotUrl = "";
+          $("#session-error-banner").hidden = true;
+          // Refresh catalog in the background so product changes made after
+          // the SSR snapshot are picked up without a full page reload.
+          void refreshCatalog();
+          return true;
+        })().catch((error) => {
+          state.sessionReady = false;
+          markTelegramSessionFailure(error?.code || "telegram_session_failed", error);
+          throw error;
+        }).finally(() => { sessionPromise = null; });
+        return sessionPromise;
+      }
+      async function retryTelegramSession() {
+        if (sessionRetryBusy || state.sessionReady) return;
+        sessionRetryBusy = true;
+        const button = $("[data-session-retry]");
+        if (button) { button.disabled = true; button.setAttribute("aria-busy", "true"); button.textContent = "Đang thử lại…"; }
+        try {
+          initData = "";
+          telegramUser = readTelegramUser("") || telegramUser;
+          await bootstrapSession();
+          toast("Đã kết nối lại Telegram.");
+          if (state.view === "orders") await loadOrders({ force:true }).catch(() => undefined);
+        } catch (error) {
+          markTelegramSessionFailure(error?.code || "telegram_session_failed", error);
+        } finally {
+          sessionRetryBusy = false;
+          if (button) { button.disabled = false; button.removeAttribute("aria-busy"); button.textContent = nextBotUrl ? "Mở bot mới" : "Thử lại"; }
+        }
+      }
+      function openActiveBot() {
+        if (!nextBotUrl) return;
+        if (typeof tg?.openTelegramLink === "function") tg.openTelegramLink(nextBotUrl);
+        else window.location.assign(nextBotUrl);
+      }
+      let ordersPromise = null;
+      let ordersLoadedAt = 0;
+      const orderDetailCache = new Map();
+      const ORDERS_CACHE_TTL_MS = 5_000;
+      async function api(path, options = {}, attempt = 0) {
+        await bootstrapSession();
+        const method = String(options.method || "GET").toUpperCase();
+        const retryableRequest = method === "GET" || path === "quote";
+        const response = await fetchWithRetry(`/api/shop/telegram-mini/${path}`, {
+          ...options,
+          credentials: "include",
+          headers: { ...(options.body !== undefined ? { "content-type":"application/json" } : {}), ...telegramBotHeader, ...(options.headers || {}) },
+        }, path.includes("/keys") ? 15_000 : path === "checkout" ? 20_000 : 12_000, retryableRequest ? 2 : 0);
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || !result.ok) {
+          // A Mini App can outlive its cookie. Re-bootstrap one time with the
+          // current signed payload, then surface the original error.
+          const authRetryable = new Set(["telegram_session_required", "telegram_auth_required", "telegram_auth_expired", "telegram_auth_replayed", "telegram_identity_mismatch"]);
+          if (attempt === 0 && (response.status === 401 || (response.status === 403 && authRetryable.has(result.code))) && path !== "session") {
+            state.sessionReady = false;
+            initData = readTelegramInitData();
+            telegramUser = readTelegramUser(initData) || telegramUser;
+            try { await bootstrapSession(); return api(path, options, 1); } catch { /* show a stable auth error below */ }
+          }
+          const error = Object.assign(new Error(result.code || "request_failed"), { code: result.code || "request_failed", status: response.status, retryAfter: Number(response.headers.get("retry-after") || 0) || 0, nextBotUsername: result.nextBotUsername, nextBotUrl: result.nextBotUrl }); throw error;
+        }
+        return result;
+      }
+      async function loadOrders({ silent = false, force = false } = {}) {
+        if (ordersPromise) return ordersPromise;
+        if (!force && ordersLoadedAt > 0 && Date.now() - ordersLoadedAt < ORDERS_CACHE_TTL_MS) return state.orders;
+        const list = $("#orders-list");
+        const refreshButton = document.querySelector("[data-refresh-orders]");
+        if (!silent) list.innerHTML = `<div class="order-skeleton" role="status" aria-label="Đang tải lịch sử đơn hàng"><i></i><i></i><i></i><i></i></div>`;
+        list.setAttribute("aria-busy", "true");
+        $("#orders-sync-status").textContent = "Đang đồng bộ…";
+        refreshButton?.setAttribute("aria-busy", "true");
+        if (refreshButton instanceof HTMLButtonElement) refreshButton.disabled = true;
+        ordersPromise = api("me").then((result) => {
+          state.orders = Array.isArray(result.orders) ? result.orders : [];
+          ordersLoadedAt = Date.now();
+          renderOrders();
+          $("#orders-sync-status").textContent = `Cập nhật ${new Date().toLocaleTimeString("vi-VN", { hour:"2-digit", minute:"2-digit" })}`;
+          return state.orders;
+        }).catch((error) => {
+          const authError = error.code === "telegram_auth_unavailable" || error.code === "telegram_auth_expired" || error.code === "telegram_auth_replayed";
+          list.innerHTML = `<div class="empty"><span class="empty-icon" aria-hidden="true">!</span><strong>${authError ? "Phiên Telegram cần mở lại" : "Không tải được đơn hàng"}</strong><br><span>${authError ? "Đóng và mở lại Mini App từ Telegram để đồng bộ đúng tài khoản." : "Kiểm tra kết nối rồi thử lại; đơn hàng không bị mất."}</span><br><br><button class="secondary" data-refresh-orders>Thử lại</button></div>`;
+          $("#orders-sync-status").textContent = authError ? "Cần xác minh lại" : "Chưa đồng bộ";
+          toast(authError ? "Hãy mở lại Mini App từ Telegram." : "Không tải được lịch sử đơn.");
+          throw error;
+        }).finally(() => {
+          list.removeAttribute("aria-busy");
+          document.querySelectorAll("[data-refresh-orders]").forEach((button) => { button.removeAttribute("aria-busy"); if (button instanceof HTMLButtonElement) button.disabled = false; });
+          ordersPromise = null;
+        });
+        return ordersPromise;
+      }
+      const orderDetailMarkup = (result) => {
+        const order = result.order || {};
+        const summary = state.orders.find((item) => item.id === order.id) || {};
+        const paymentStatus = String(order.payment_status || order.paymentStatus || summary.paymentStatus || "unknown").toLowerCase();
+        const fulfillmentStatus = String(order.fulfillment_status || order.fulfillmentStatus || summary.fulfillmentStatus || "pending").toLowerCase();
+        const lines = Array.isArray(result.lines) ? result.lines : Array.isArray(order.lines) ? order.lines : [];
+        const subtotal = order.subtotal_minor ?? order.subtotalMinor ?? result.subtotalMinor ?? summary.subtotalMinor;
+        const discount = order.discount_minor ?? order.discountMinor ?? result.discountMinor ?? summary.discountMinor;
+        const total = order.total_minor ?? order.totalMinor ?? result.totalMinor ?? summary.totalMinor ?? 0;
+        const currency = order.currency || summary.currency || "VND";
+        const lineMarkup = lines.length ? `<div class="order-lines" aria-label="Sản phẩm trong đơn">${lines.map((line) => `<div class="order-line"><span><b>${escapeHtml(line.productTitle || line.product_title || line.variantTitle || line.variant_title || line.sku || "Sản phẩm")}</b><small>${escapeHtml(line.variantTitle || line.variant_title || line.sku || "")} · SL ${Number(line.quantity || 1)}${line.fulfillmentStatus ? ` · ${escapeHtml(fulfillmentStatusText(line.fulfillmentStatus))}` : ""}</small></span><strong>${money(line.totalMinor ?? line.total_minor ?? 0, currency)}</strong></div>`).join("")}</div>` : `<p class="notice">Chi tiết sản phẩm đang được đồng bộ. Tổng đơn đã được lưu an toàn.</p>`;
+        const totals = subtotal !== undefined || discount !== undefined ? `<div class="order-totals">${subtotal !== undefined ? `<div class="summary-line"><span>Tạm tính</span><strong>${money(subtotal, currency)}</strong></div>` : ""}${Number(discount || 0) > 0 ? `<div class="summary-line"><span>Giảm giá</span><strong>−${money(discount, currency)}</strong></div>` : ""}<div class="summary-line"><span>Tổng cộng</span><strong>${money(total, currency)}</strong></div></div>` : "";
+        const resume = paymentStatus !== "paid" && state.pendingPayment?.orderId === order.id ? `<button class="primary" data-resume-payment="${escapeHtml(order.id)}">Tiếp tục thanh toán</button>` : "";
+        const key = paymentStatus === "paid" ? `<button class="primary" data-keys="${escapeHtml(order.id)}"><span class="key-button-label">Nhận key an toàn</span></button>` : "";
+        const canReorder = lines.some((line) => { const variant = variantForSku(line.sku || line.sku_snapshot); return variant && variant.availability !== "out_of_stock"; });
+        const reorder = canReorder ? `<button class="secondary reorder-button" data-reorder-order="${escapeHtml(order.id)}">Mua lại sản phẩm</button>` : "";
+        const actions = resume || key || reorder ? `<div class="order-detail-actions">${key || resume}${reorder}</div>` : "";
+        return `<div class="order-detail-summary"><div><span>Thanh toán</span><strong>${escapeHtml(paymentStatusText(paymentStatus))}</strong></div><div><span>Giao hàng</span><strong>${escapeHtml(fulfillmentStatusText(fulfillmentStatus))}</strong></div><div><span>Mã đơn</span><strong class="order-number">#${escapeHtml(order.order_number || order.orderNumber || summary.number || "")}</strong></div><div><span>Thời gian</span><strong>${escapeHtml(orderDate(order.created_at || order.createdAt || summary.createdAt))}</strong></div></div>${lineMarkup}${totals}${actions}<button class="secondary" data-refresh-orders>Quay lại lịch sử đơn</button>`;
+      };
+      async function openOrderDetail(orderId) {
+        openModal("Đang tải chi tiết đơn", `<div class="processing" role="status"><i class="processing-spinner" aria-hidden="true"></i><strong>Đang đồng bộ đơn</strong><span>Kiểm tra trạng thái thanh toán và nội dung giao hàng…</span></div>`);
+        try {
+          const result = await api(`orders/${orderId}`);
+          const order = result.order || {};
+          const payment = result.payment || {};
+          orderDetailCache.set(orderId, Array.isArray(result.lines) ? result.lines.slice(0, 8) : []);
+          const paymentStatus = String(order.payment_status || order.paymentStatus || "").toLowerCase();
+          if (paymentStatus !== "paid" && (payment.qr_image_url || payment.qrUrl || payment.checkout_url || payment.checkoutUrl)) {
+            state.pendingPayment = { orderId, number:order.order_number || order.orderNumber || "", totalMinor:order.total_minor ?? order.totalMinor ?? 0, currency:order.currency || "VND", qrUrl:payment.qr_image_url || payment.qrUrl || "", checkoutUrl:payment.checkout_url || payment.checkoutUrl || "" };
+            writePendingPayment();
+            syncPendingPaymentBanner();
+          }
+          $("#modal-title").textContent = `Đơn #${order.order_number || order.orderNumber || orderId}`;
+          $("#modal-body").innerHTML = orderDetailMarkup(result);
+          motion.play($("#modal-body"), [{ opacity:0, transform:"translateY(8px)" }, { opacity:1, transform:"translateY(0)" }], { duration:220 });
+        } catch (error) {
+          $("#modal-body").innerHTML = `<div class="empty"><span class="empty-icon" aria-hidden="true">!</span><strong>Không tải được chi tiết đơn</strong><br><span>${error.code === "order_not_found" ? "Đơn không thuộc tài khoản Telegram này." : "Kiểm tra mạng rồi thử lại."}</span><br><br><button class="secondary" data-order="${escapeHtml(orderId)}">Thử lại</button></div>`;
+          toast("Không tải được chi tiết đơn.");
+        }
+      }
+      function reorderOrder(orderId) {
+        const lines = orderDetailCache.get(orderId) || [];
+        let added = 0;
+        let unavailable = 0;
+        for (const line of lines) {
+          const variant = variantForSku(line.sku || line.sku_snapshot);
+          const product = variant ? productForVariant(variant.id) : null;
+          if (!variant || !product || variant.availability === "out_of_stock") { unavailable += 1; continue; }
+          if (state.cart.length && state.cart[0].currency !== variant.currency) { unavailable += 1; continue; }
+          const cap = Math.max(1, Math.min(variant.maxPerOrder || 10, variant.availableQuantity ?? variant.maxPerOrder ?? 10));
+          const quantity = Math.min(cap, Math.max(1, Number(line.quantity) || 1));
+          const existing = state.cart.find((item) => item.variantId === variant.id);
+          if (existing) existing.quantity = Math.min(cap, existing.quantity + quantity);
+          else state.cart.push({ variantId:variant.id, quantity, maxQuantity:cap, title:product.title, variantTitle:variant.title, sku:variant.sku, priceMinor:variant.priceMinor, currency:variant.currency, imageUrl:thumbnail(product) });
+          added += 1;
+        }
+        if (!added) { toast("Các gói trong đơn hiện không còn bán."); return; }
+        invalidateDiscountQuote();
+        writeCart();
+        renderCart();
+        closeModal();
+        showView("cart");
+        toast(unavailable ? `Đã thêm ${added} gói · ${unavailable} gói tạm hết` : "Đã thêm lại toàn bộ sản phẩm vào giỏ.");
+      }
+      function clearVisibleKeys() { visibleKeyMaterial.splice(0, visibleKeyMaterial.length); const body = $("#modal-body"); if (body?.querySelector(".key-sheet")) body.replaceChildren(); }
+      const keyPendingMarkup = (orderNumber, attempt = 0) => `<div class="key-pending" role="status" aria-live="polite"><div class="key-pending-orbit" aria-hidden="true"></div><span class="key-pending-status">Thanh toán thành công · Bước 3/3</span><h3>Đang phát hành key</h3><p>Đơn #${escapeHtml(orderNumber || "")} đã được xác nhận. Hệ thống đang mở khoá đúng key theo từng sản phẩm${attempt ? ` · lần kiểm tra ${attempt + 1}` : ""}.</p></div>`;
+      const keyFailureMarkup = (orderId, orderNumber, errorCode) => {
+        const limited = errorCode === "key_reveal_rate_limited";
+        const unavailable = errorCode === "fulfillment_key_unavailable";
+        const inProgress = errorCode === "order_delivery_in_progress";
+        const title = limited ? "Tạm khoá nhận key" : unavailable ? "Key cần được kiểm tra" : inProgress ? "Đang phát hành key" : "Key chưa sẵn sàng";
+        const copy = limited ? "Bạn đã thao tác quá nhiều lần. Hãy thử lại sau khoảng một giờ để bảo vệ tài khoản." : unavailable ? "Kho key đang được cửa hàng kiểm tra. Đơn và thanh toán của bạn vẫn được lưu an toàn." : inProgress ? "Thanh toán đã xong. Hệ thống đang gắn đúng key vào từng sản phẩm; đợi ít giây rồi thử lại một lần." : "Kết nối hoặc tiến trình giao hàng chưa hoàn tất. Bạn có thể thử lại mà không tạo thêm đơn.";
+        return `<div class="key-pending"><span class="key-pending-status">Đơn #${escapeHtml(orderNumber || "")}</span><div class="empty-icon" aria-hidden="true">!</div><h3>${title}</h3><p>${copy}</p><div class="key-pending-actions">${limited ? "" : `<button class="primary" data-keys="${escapeHtml(orderId)}"><span class="key-button-label">Thử nhận key lại</span></button>`}<button class="secondary" data-nav="orders">Về lịch sử đơn</button></div></div>`;
+      };
+      const manualDeliveryMarkup = (orderId, orderNumber, detail) => {
+        const readiness = detail?.delivery?.readiness || "processing";
+        const label = readiness === "manual" ? "Cửa hàng đang xử lý" : "Đang hoàn tất giao hàng";
+        return `<div class="key-pending"><span class="key-pending-status">Thanh toán thành công</span><div class="success-mark" aria-hidden="true">✓</div><h3>${label}</h3><p>Đơn #${escapeHtml(orderNumber || "")} không có key tự động sẵn sàng lúc này. Trạng thái được lưu theo Telegram ID và sẽ cập nhật trong lịch sử đơn.</p><div class="key-pending-actions"><button class="primary" data-order="${escapeHtml(orderId)}">Xem chi tiết đơn</button><button class="secondary" data-nav="orders">Về lịch sử đơn</button></div></div>`;
+      };
+      function keyDeliveryMarkup(result, detail) {
+        const lines = Array.isArray(detail?.lines) ? detail.lines : [];
+        const lineById = new Map(lines.map((line, index) => [line.itemId, { ...line, index }]));
+        const deliveries = [...(Array.isArray(result.deliveries) ? result.deliveries : [])].sort((left, right) => (lineById.get(left.itemId)?.index ?? 999) - (lineById.get(right.itemId)?.index ?? 999));
+        visibleKeyMaterial.splice(0, visibleKeyMaterial.length);
+        const groups = deliveries.flatMap((delivery, deliveryIndex) => {
+          const keys = Array.isArray(delivery.keys) ? delivery.keys.filter((key) => typeof key === "string" && key) : [];
+          if (!keys.length) return [];
+          const line = lineById.get(delivery.itemId);
+          const title = line?.productTitle || delivery.title || line?.variantTitle || delivery.sku || `Sản phẩm ${deliveryIndex + 1}`;
+          const variant = line?.variantTitle && line.variantTitle !== title ? line.variantTitle : "";
+          const rows = keys.map((key, keyIndex) => {
+            const materialIndex = visibleKeyMaterial.push({ key, itemId:delivery.itemId, title, sku:delivery.sku || line?.sku || "" }) - 1;
+            return `<div class="key-row"><span class="key-row-number">${String(keyIndex + 1).padStart(2, "0")}</span><code class="key-code" title="Key ${keyIndex + 1}">${escapeHtml(key)}</code><button class="key-copy" data-copy-key-index="${materialIndex}" aria-label="Sao chép key ${keyIndex + 1} của ${escapeHtml(title)}">Sao chép</button></div>`;
+          }).join("");
+          return [`<section class="key-delivery"><header class="key-delivery-head"><span class="key-delivery-index">${String(deliveryIndex + 1).padStart(2, "0")}</span><div class="key-delivery-copy"><b>${escapeHtml(title)}</b><small>${escapeHtml([variant, delivery.sku || line?.sku, `SL ${delivery.quantity || keys.length}`].filter(Boolean).join(" · "))}</small></div><span class="key-delivery-status">Đã giao ${keys.length}/${delivery.quantity || keys.length}</span></header><div class="key-rows">${rows}</div></section>`];
+        });
+        const keyCount = visibleKeyMaterial.length;
+        const orderNumber = result.orderNumber || detail?.order?.order_number || "";
+        if (!keyCount) return "";
+        return `<div class="key-sheet"><section class="key-hero"><div class="key-hero-top"><span class="key-secure">Đúng Telegram ID</span><span class="key-order-number">#${escapeHtml(orderNumber)}</span></div><h3>Key đã sẵn sàng.</h3><p>Đã mở khoá ${keyCount} key theo đúng thứ tự sản phẩm. Key được giữ tạm trong màn hình của phiên hiện tại.</p></section><div class="key-overview"><div><span>Sản phẩm</span><strong>${groups.length} dòng</strong></div><div><span>Key đã giao</span><strong>${keyCount} key</strong></div></div><div class="key-deliveries">${groups.join("")}</div><p class="notice">Nếu sao chép, key sẽ nằm trong clipboard của thiết bị. Hãy lưu ở nơi an toàn và không chia sẻ ảnh chụp màn hình.</p><div class="key-sheet-actions"><button class="key-copy-all" data-copy-all-keys>Sao chép tất cả</button><button class="secondary key-done" data-nav="orders">Xong</button></div></div>`;
+      }
+      async function writeClipboard(value) {
+        if (!value) throw new Error("clipboard_empty");
+        if (navigator.clipboard?.writeText) { try { await navigator.clipboard.writeText(value); return; } catch { /* Telegram WebView fallback below */ } }
+        const field = document.createElement("textarea");
+        field.value = value;
+        field.setAttribute("readonly", "");
+        field.style.position = "fixed";
+        field.style.opacity = "0";
+        field.style.pointerEvents = "none";
+        document.body.append(field);
+        field.select();
+        const fallbackCopy = Reflect.get(document, "execCommand");
+        const copied = typeof fallbackCopy === "function" && fallbackCopy.call(document, "copy");
+        field.remove();
+        if (!copied) throw new Error("clipboard_unavailable");
+      }
+      async function copyVisibleKey(index, button) {
+        const material = visibleKeyMaterial[Number(index)];
+        if (!material) return;
+        try { await writeClipboard(material.key); button?.classList.add("is-copied"); if (button) button.textContent = "Đã chép"; toast("Đã sao chép key."); tg?.HapticFeedback?.notificationOccurred?.("success"); window.setTimeout(() => { button?.classList.remove("is-copied"); if (button) button.textContent = "Sao chép"; }, 1600); } catch { toast("Không thể sao chép tự động. Hãy chạm giữ key để sao chép."); }
+      }
+      async function copyAllVisibleKeys(button) {
+        const value = visibleKeyMaterial.map((item) => item.key).join("\n");
+        if (!value) return;
+        try { await writeClipboard(value); button?.classList.add("is-copied"); if (button) button.textContent = `Đã chép ${visibleKeyMaterial.length} key`; toast("Đã sao chép tất cả key theo thứ tự."); tg?.HapticFeedback?.notificationOccurred?.("success"); window.setTimeout(() => { button?.classList.remove("is-copied"); if (button) button.textContent = "Sao chép tất cả"; }, 1800); } catch { toast("Không thể sao chép tự động trên thiết bị này."); }
+      }
+      async function copyOrderNumber(value, button) {
+        const number = String(value || "").trim();
+        if (!number) return;
+        try { await writeClipboard(`#${number}`); button?.classList.add("is-copied"); toast("Đã sao chép mã đơn."); tg?.HapticFeedback?.notificationOccurred?.("success"); window.setTimeout(() => button?.classList.remove("is-copied"), 1400); } catch { toast("Không thể sao chép mã đơn tự động."); }
+      }
+      function revealOrderKeys(orderId, options = {}) {
+        if (activeKeyReveal?.orderId === orderId) return activeKeyReveal.promise;
+        if (activeKeyReveal) { activeKeyReveal.cancelled = true; activeKeyReveal.controller?.abort(); }
+        const job = { orderId, cancelled:false, controller:new AbortController(), promise:null };
+        job.promise = (async () => {
+          clearVisibleKeys();
+          const providedDetail = options.detail && typeof options.detail === "object" ? options.detail : null;
+          const detailPromise = providedDetail ? Promise.resolve(providedDetail) : api(`orders/${orderId}`, { signal:job.controller.signal }).catch(() => null);
+          const orderNumber = options.orderNumber || providedDetail?.order?.order_number || state.orders.find((order) => order.id === orderId)?.number || "";
+          replaceModal(options.automatic ? "Thanh toán thành công" : "Đang nhận key", keyPendingMarkup(orderNumber));
+          if (job.cancelled) return null;
+          try {
+            const result = await api(`orders/${orderId}/keys`, { method:"POST", body:"{}", signal:job.controller.signal });
+            if (job.cancelled) return null;
+            const detail = await detailPromise;
+            if (job.cancelled) return null;
+            const markup = keyDeliveryMarkup(result, detail);
+            if (!markup) { replaceModal(`Đơn #${result.orderNumber || orderNumber}`, manualDeliveryMarkup(orderId, result.orderNumber || orderNumber, detail)); return result; }
+            if (job.cancelled) return null;
+            replaceModal(`Key đơn #${result.orderNumber || orderNumber}`, markup);
+            tg?.HapticFeedback?.notificationOccurred?.("success");
+            void loadOrders({ silent:true, force:true }).catch(() => undefined);
+            return result;
+          } catch (error) {
+            if (job.cancelled) return null;
+            replaceModal(error.code === "order_delivery_in_progress" ? "Đang phát hành key" : "Chưa thể nhận key", keyFailureMarkup(orderId, orderNumber, error.code));
+            toast(error.code === "key_reveal_rate_limited" ? "Tạm khóa thao tác nhận key để bảo vệ tài khoản." : error.code === "order_delivery_in_progress" ? "Key đang được phát hành. Đợi ít giây rồi thử lại." : "Key chưa sẵn sàng. Đơn hàng vẫn được lưu.");
+            return null;
+          }
+        })().finally(() => { if (activeKeyReveal === job) activeKeyReveal = null; });
+        activeKeyReveal = job;
+        return job.promise;
+      }
+      let activePaymentPoll = null;
+      function pollPayment(orderId, orderNumber) {
+        if (activePaymentPoll?.orderId === orderId) return activePaymentPoll.promise;
+        if (activePaymentPoll) { activePaymentPoll.cancelled = true; activePaymentPoll.controller?.abort(); }
+        const poll = { orderId, cancelled:false, controller:new AbortController(), promise:null };
+        poll.promise = (async () => {
+          for (let attempt = 0; attempt < 36 && !poll.cancelled; attempt += 1) {
+            if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, document.hidden ? 10_000 : 5_000));
+            if (poll.cancelled) return;
+            try {
+              const result = await api(`orders/${orderId}`, { signal:poll.controller.signal });
+              if (poll.cancelled) return;
+              const order = result.order || {};
+              if (order.payment_status === "paid") {
+                if (state.pendingPayment?.orderId === orderId) { state.pendingPayment = null; writePendingPayment(); syncPendingPaymentBanner(); }
+                void loadOrders({ silent:true }).catch(() => undefined);
+                await revealOrderKeys(orderId, { automatic:true, detail:result, orderNumber });
+                haptic();
+                return;
+              }
+              if (["expired", "cancelled"].includes(order.status)) {
+                if (state.pendingPayment?.orderId === orderId) { state.pendingPayment = null; writePendingPayment(); syncPendingPaymentBanner(); }
+                openModal(`Đơn #${escapeHtml(orderNumber)} đã đóng`, `<p class="notice">Phiên thanh toán đã hết hạn. Bạn có thể tạo lại đơn từ catalog.</p><button class="primary" data-nav="home">Về cửa hàng</button>`);
+                return;
+              }
+              if (attempt === 0) toast("Đang chờ ngân hàng xác nhận giao dịch…");
+            } catch { /* keep polling through transient failures */ }
+          }
+          if (!poll.cancelled) toast("Chưa nhận được xác nhận. Bạn có thể kiểm tra lại trong Đơn hàng.");
+        })().finally(() => { if (activePaymentPoll === poll) activePaymentPoll = null; });
+        activePaymentPoll = poll;
+        return poll.promise;
+      }
+      function resumePayment() { const pending = state.pendingPayment; if (!pending) return; openModal(`Đơn #${escapeHtml(pending.number)}`, paymentPanel(pending)); void pollPayment(pending.orderId, pending.number); $("#open-payment")?.addEventListener("click", () => tg?.openLink(pending.checkoutUrl)); $("#check-payment")?.addEventListener("click", () => { toast("Đang kiểm tra giao dịch…"); void pollPayment(pending.orderId, pending.number); }); }
+      let checkoutBusy = false;
+      function setCheckoutBusy(busy) { const button = $("#checkout-dock-button, #checkout-button"); if (!button) return; button.disabled = busy; button.setAttribute("aria-busy", String(busy)); $(".checkout-label").textContent = busy ? "Đang tạo…" : "Thanh toán"; }
+      async function checkout() {
+        try { await bootstrapSession(); } catch { toast("Hãy mở Mini App trực tiếp từ Telegram rồi thử lại."); return; }
+        if (checkoutBusy || !state.cart.length) return;
+        checkoutBusy = true;
+        setCheckoutBusy(true);
+        if (state.discountCode) {
+          openModal("Đang kiểm tra ưu đãi", `<div class="processing" role="status" aria-live="polite"><i class="processing-spinner" aria-hidden="true"></i><strong>Đang xác nhận mã giảm giá</strong><span>Giá và điều kiện được kiểm tra lại ngay trước khi tạo đơn.</span></div>`);
+          try {
+            await requestDiscountQuote(state.discountCode, { silent:true });
+            renderCart();
+          } catch (error) {
+            renderCart();
+            openModal("Mã giảm giá chưa áp dụng", `<p class="notice">${escapeHtml(discountErrorText(error.code))}</p><button class="secondary" data-nav="cart">Sửa mã trong giỏ hàng</button>`);
+            checkoutBusy = false;
+            setCheckoutBusy(false);
+            return;
+          }
+        }
+        const discountCode = state.discountCode || "";
+        const fingerprint = cartFingerprint(discountCode);
+        const draftKey = `tung:telegram-mini-checkout:${telegramIdentity}`;
+        let key = "";
+        try { const saved = JSON.parse(safeStorageRead(sessionStorage, draftKey, 1_024) || "null"); if (saved?.fingerprint === fingerprint && /^[A-Za-z0-9_-]{20,200}$/.test(saved.key)) key = saved.key; } catch { /* fresh key */ }
+        if (!key) { key = crypto.randomUUID(); safeStorageWrite(sessionStorage, draftKey, JSON.stringify({ fingerprint, key })); }
+        openModal("Đang tạo thanh toán", `<div class="processing" role="status" aria-live="polite"><i class="processing-spinner" aria-hidden="true"></i><strong>Đang giữ giỏ hàng</strong><span>Hệ thống đang tạo đơn và mã VietQR an toàn. Không cần bấm lại.</span></div>`);
+        try {
+          let externalReference = "";
+          try {
+            const attr = JSON.parse(localStorage.getItem("tung:shop:attribution:v1") || "null");
+            const parts = [];
+            if (attr?.ref) parts.push(`ref=${String(attr.ref).slice(0,40)}`);
+            if (attr?.discountCode || discountCode) parts.push(`promo=${String(attr?.discountCode || discountCode).slice(0,40)}`);
+            parts.push("ch=telegram");
+            parts.push(`n=${crypto.randomUUID().replace(/-/g,"").slice(0,12)}`);
+            externalReference = parts.join("|").slice(0, 180);
+          } catch { externalReference = `ch=telegram|n=${crypto.randomUUID().replace(/-/g,"").slice(0,12)}`; }
+          const result = await api("checkout", { method:"POST", body:JSON.stringify({ items:cartItemsPayload(), idempotencyKey:key, ...(discountCode ? { discountCode } : {}), ...(externalReference ? { externalReference } : {}) }) });
+          const payment = result.payment || {};
+          if (!payment.qrUrl && !payment.checkoutUrl) { openModal(`Đơn #${escapeHtml(result.order.number)}`, `<p class="notice">Đơn đã được tạo nhưng cổng thanh toán chưa trả về mã QR. Vào mục <strong>Đơn hàng</strong> để tải lại trạng thái; giỏ hàng vẫn được giữ.</p>`); return; }
+          state.pendingPayment = { orderId:result.order.id, number:result.order.number, totalMinor:result.order.totalMinor, currency:result.order.currency, qrUrl:payment.qrUrl || "", checkoutUrl:payment.checkoutUrl || "" }; writePendingPayment();
+          syncPendingPaymentBanner();
+          openModal(`Đơn #${escapeHtml(result.order.number)}`, paymentPanel(state.pendingPayment));
+          void pollPayment(result.order.id, result.order.number);
+          safeStorageRemove(localStorage, cartKey); safeStorageRemove(localStorage, discountKey); safeStorageRemove(sessionStorage, draftKey); state.cart = []; state.discountCode = ""; state.discountDraft = ""; state.discountQuote = null; state.discountQuoteFingerprint = ""; state.discountError = ""; renderCart();
+          $("#open-payment")?.addEventListener("click", () => tg?.openLink(payment.checkoutUrl));
+          $("#check-payment")?.addEventListener("click", () => { toast("Đang kiểm tra giao dịch…"); void pollPayment(result.order.id, result.order.number); });
+        } catch (error) {
+          const code = String(error.code || "");
+          const discountFailure = code.startsWith("discount_") || code === "zero_total_checkout_not_supported";
+          if (discountFailure) { state.discountQuote = null; state.discountQuoteFingerprint = ""; state.discountError = code; renderCart(); }
+          const checkoutErrorText = (c) => ({
+            insufficient_inventory:"Sản phẩm trong giỏ đã hết hàng hoặc không đủ số lượng. Giảm số lượng hoặc chọn gói khác.",
+            variant_not_available:"Sản phẩm hoặc gói bạn chọn không còn được bán. Xóa khỏi giỏ rồi chọn lại.",
+            variant_not_found:"Không tìm thấy sản phẩm. Xóa giỏ hàng rồi chọn lại từ danh sách.",
+            quantity_limit_exceeded:"Số lượng vượt giới hạn cho phép. Giảm số lượng rồi thử lại.",
+            checkout_conflict:"Có người khác vừa mua cùng sản phẩm. Thử lại sau vài giây.",
+            checkout_active_order_limit:"Bạn đang có đơn chưa thanh toán. Vào mục Đơn hàng để thanh toán hoặc đợi đơn cũ hết hạn (15 phút).",
+            checkout_rate_limited:"Bạn tạo đơn quá nhanh. Vui lòng đợi 1 phút rồi thử lại.",
+            cart_empty:"Giỏ hàng trống. Chọn sản phẩm trước khi thanh toán.",
+            customer_blocked:"Tài khoản của bạn đã bị khóa. Liên hệ hỗ trợ.",
+            idempotency_key_reused:"Giỏ hàng đã thay đổi nhưng mã thanh toán cũ vẫn còn. Đợi vài giây rồi thử lại.",
+            idempotency_in_progress:"Đơn đang được tạo ở lần bấm trước. Đợi vài giây.",
+            telegram_order_identity_mismatch:"Lỗi xác minh tài khoản Telegram. Đóng và mở lại Mini App.",
+            telegram_auth_expired:"Phiên Telegram đã hết hạn, hãy đóng và mở lại Mini App.",
+            telegram_mini_app_unavailable:"Hệ thống đang bận. Thử lại sau ít giây.",
+            mixed_currency_not_supported:"Giỏ hàng có sản phẩm dùng loại tiền khác nhau. Chỉ giữ sản phẩm cùng loại tiền.",
+          }[c] || "");
+          const fallback = "Đơn chưa được tạo. Thử lại sau ít giây hoặc kiểm tra mục Đơn hàng.";
+          const msg = discountFailure ? escapeHtml(discountErrorText(code)) : escapeHtml(checkoutErrorText(code) || fallback);
+          const title = discountFailure ? "Mã giảm giá chưa áp dụng" : code === "checkout_active_order_limit" ? "Đơn chưa thanh toán" : code === "insufficient_inventory" ? "Hết hàng" : code === "checkout_rate_limited" ? "Đợi chút nhé" : "Không thể tạo thanh toán";
+          const buttons = code === "checkout_active_order_limit"
+            ? `<button class="primary" data-nav="orders">Xem đơn hàng</button><button class="secondary" data-nav="cart">Quay lại giỏ hàng</button>`
+            : `<button class="secondary" data-nav="cart">Quay lại giỏ hàng</button>`;
+          openModal(title, `<p class="notice">${msg}</p>${buttons}`);
+        } finally { checkoutBusy = false; setCheckoutBusy(false); }
+      }
+      document.addEventListener("click", (event) => {
+        const target = event.target instanceof Element ? event.target.closest("button") : null;
+        if (!target) return;
+        const modalOpen = $("#modal-backdrop").classList.contains("is-open");
+        if (target.dataset.nav && modalOpen) closeModal();
+        if (target.dataset.nav) showView(target.dataset.nav);
+        if (target.dataset.sessionOpenBot !== undefined) { openActiveBot(); return; }
+        if (target.dataset.sessionRetry !== undefined) void retryTelegramSession();
+        if (target.dataset.refreshOrders !== undefined) { if (modalOpen) closeModal(); showView("orders"); void loadOrders({ force:true }).catch(() => undefined); }
+        if (target.dataset.filter) { state.filter = target.dataset.filter; renderFilters(); renderFeatured(); renderProducts(); motion.reveal(".product", { duration:260 }); }
+        if (target.dataset.orderFilter) { state.orderFilter = target.dataset.orderFilter; renderOrders(); haptic(); }
+        if (target.dataset.clearOrderFilter !== undefined) { state.orderFilter = "all"; renderOrders(); }
+        if (target.dataset.openProduct) { openProduct(target.dataset.openProduct); showTelegramBackButton(); }
+        if (target.dataset.add) addVariantToCart(target.dataset.add);
+        
+        if (target.dataset.shareBridge !== undefined) {
+          // share-bridge handler
+          void (async () => {
+            if (!state.cart.length) { toast("Giỏ đang trống"); return; }
+            try {
+              const attr = JSON.parse(localStorage.getItem("tung:shop:attribution:v1") || "null");
+              const res = await fetch("/api/shop/bridge", {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({
+                  items: state.cart.map((item) => ({
+                    variantId: item.variantId, quantity: item.quantity, maxQuantity: item.maxQuantity,
+                    title: item.title, variantTitle: item.variantTitle, priceMinor: item.priceMinor,
+                    currency: item.currency, imageUrl: item.imageUrl, slug: item.slug, productId: item.productId,
+                  })),
+                  attribution: attr, channel: "telegram",
+                }),
+              });
+              const data = await res.json();
+              if (!res.ok || !data.url) throw new Error(data.code || "bridge_failed");
+              if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(data.url);
+              toast("Đã copy link giỏ");
+              tg?.showAlert?.("Link giỏ đã copy. Gửi sang thiết bị khác hoặc web.");
+            } catch (e) { toast("Chưa tạo được link giỏ"); }
+          })();
+          return;
+        }
+        if (target.dataset.suggestProducts !== undefined) {
+          void (async () => {
+            try {
+              const q = state.query || state.filter || "ai";
+              const res = await fetch(`/api/shop/recommend?locale=vi&limit=4&q=${encodeURIComponent(q)}`);
+              const data = await res.json();
+              if (!data.ok) throw new Error("fail");
+              const rows = (data.results || []).map((r) => {
+                const p = r.product || {};
+                return `<button type="button" class="secondary" data-open-product="${escapeHtml(p.slug || "")}" style="width:100%;text-align:left;margin:6px 0"><strong>${escapeHtml(p.title || "")}</strong><br><small>${escapeHtml((r.reasons||[]).join(" · "))}</small></button>`;
+              }).join("");
+              openModal("Gợi ý gói", `<p class="notice">${escapeHtml(data.assistantMessage || "")}</p>${rows || "<p>Chưa có gợi ý.</p>"}`);
+            } catch { toast("Không lấy được gợi ý"); }
+          })();
+          return;
+        }
+if (target.dataset.discountApply !== undefined) void requestDiscountQuote(state.discountDraft || $("#discount-code")?.value).catch((error) => toast(discountErrorText(error.code)));
+        if (target.dataset.discountClear !== undefined) clearDiscount();
+        if (target.dataset.delta) { const item = state.cart.find((row) => row.variantId === target.dataset.qty); if (item) item.quantity = Math.max(0, Math.min(item.maxQuantity || 10, item.quantity + Number(target.dataset.delta))); state.cart = state.cart.filter((item) => item.quantity > 0); invalidateDiscountQuote(); writeCart(); renderCart(); motion.bump("#checkout-dock-total"); }
+        if (target.dataset.remove) { state.cart = state.cart.filter((item) => item.variantId !== target.dataset.remove); invalidateDiscountQuote(); writeCart(); renderCart(); toast("Đã xóa khỏi giỏ"); }
+        if (target.id === "checkout" || target.id === "checkout-dock-button") void checkout();
+        if (target.dataset.resumePayment) resumePayment();
+        if (target.dataset.order) void openOrderDetail(target.dataset.order);
+        if (target.dataset.reorderOrder) reorderOrder(target.dataset.reorderOrder);
+        if (target.dataset.copyKeyIndex !== undefined) void copyVisibleKey(target.dataset.copyKeyIndex, target);
+        if (target.dataset.copyAllKeys !== undefined) void copyAllVisibleKeys(target);
+        if (target.dataset.copyOrderNumber !== undefined) void copyOrderNumber(target.dataset.copyOrderNumber, target);
+        if (target.dataset.keys) void revealOrderKeys(target.dataset.keys);
+      });
+      document.addEventListener("click", (event) => {
+        const element = event.target instanceof Element ? event.target : null;
+        if (!element) return;
+        const selectPlan = element.closest("[data-select-plan]");
+        if (selectPlan && !selectPlan.disabled) {
+          selectPlanInSheet(selectPlan.dataset.productSlug, selectPlan.dataset.selectPlan);
+          return;
+        }
+        const openBtn = element.closest("[data-open-product]");
+        if (openBtn) {
+          openProduct(openBtn.dataset.openProduct);
+          showTelegramBackButton();
+          return;
+        }
+        const buyNowButton = element.closest("[data-variant-buy-now]");
+        if (buyNowButton && !buyNowButton.disabled) {
+          void buyNowVariant(buyNowButton.dataset.variantBuyNow);
+          return;
+        }
+        const variantButton = element.closest("[data-variant-add]");
+        if (variantButton && !variantButton.disabled) {
+          if (addVariantToCart(variantButton.dataset.variantAdd)) closeProductDetail();
+          return;
+        }
+        if (element.closest("button")) return;
+        const productCard = element.closest("[data-product]");
+        if (productCard) {
+          openProduct(productCard.dataset.product);
+          showTelegramBackButton();
+        }
+      });
+      document.addEventListener("error", (event) => {
+        const imageNode = event.target instanceof HTMLImageElement ? event.target : null;
+        if (!imageNode?.dataset.mediaImage || imageNode.dataset.failed) return;
+        imageNode.dataset.failed = "true";
+        imageNode.hidden = true;
+        const holder = imageNode.parentElement;
+        if (!holder || holder.querySelector(".media-error")) return;
+        const fallback = document.createElement("div");
+        fallback.className = "media-error";
+        fallback.setAttribute("aria-hidden", "true");
+        fallback.textContent = imageNode.dataset.fallbackLetter || "T";
+        holder.prepend(fallback);
+      }, true);
+      document.addEventListener("input", (event) => { if (event.target instanceof HTMLInputElement && event.target.id === "discount-code") { state.discountDraft = event.target.value.toUpperCase().replace(/\s+/g, "").slice(0, 100); if (event.target.value !== state.discountDraft) event.target.value = state.discountDraft; } });
+      document.addEventListener("keydown", (event) => { if (event.key === "Enter" && event.target instanceof HTMLInputElement && event.target.id === "discount-code") { event.preventDefault(); void requestDiscountQuote(state.discountDraft).catch((error) => toast(discountErrorText(error.code))); } });
+      let searchFrame = 0;
+      $("#search").addEventListener("input", (event) => { state.query = event.target.value.trim(); cancelAnimationFrame(searchFrame); searchFrame = requestAnimationFrame(() => { renderFeatured(); renderProducts(); }); });
+      $("#hero-featured-cta").addEventListener("click", () => $("#featured-section").scrollIntoView({ behavior:"smooth", block:"start" }));
+      $("#modal-close").addEventListener("click", closeModal); $("#modal-backdrop").addEventListener("click", (event) => { if (event.target.id === "modal-backdrop") closeModal(); });
+      document.addEventListener("keydown", (event) => { const modal = $("#modal-backdrop"); if (!modal.classList.contains("is-open")) return; if (event.key === "Escape") { event.preventDefault(); closeModal(); return; } if (event.key !== "Tab") return; const focusable = [...modal.querySelectorAll('button:not([disabled]),a[href],input:not([disabled]),[tabindex]:not([tabindex="-1"])')]; if (!focusable.length) return; const first = focusable[0]; const last = focusable.at(-1); if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); } else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); } });
+      function syncOnlineState() {
+        document.body.dataset.online = navigator.onLine ? "true" : "false";
+        if (navigator.onLine && document.body.dataset.sessionState === "error" && !nextBotUrl) void retryTelegramSession();
+      }
+      window.addEventListener("online", syncOnlineState);
+      window.addEventListener("offline", syncOnlineState);
+      document.addEventListener("visibilitychange", () => { if (!document.hidden && document.body.dataset.sessionState === "error" && navigator.onLine && !nextBotUrl) void retryTelegramSession(); });
+      if (telegramSupports("6.1")) { tg.BackButton?.onClick(closeProductDetail); try { tg.setHeaderColor?.("#ffffff"); tg.setBackgroundColor?.("#ffffff"); } catch { tg.setHeaderColor?.("secondary_bg_color"); tg.setBackgroundColor?.("bg_color"); } }
+      document.documentElement.dataset.tgScheme = tg?.colorScheme || "light";
+      tg?.onEvent?.("themeChanged", () => { document.documentElement.dataset.tgScheme = tg.colorScheme || "light"; });
+      window.addEventListener("pagehide", () => { if (activePaymentPoll) { activePaymentPoll.cancelled = true; activePaymentPoll.controller?.abort(); } if (activeKeyReveal) { activeKeyReveal.cancelled = true; activeKeyReveal.controller?.abort(); activeKeyReveal = null; } clearVisibleKeys(); });
+      // F1/F8: capture affiliate + promo from deep link / start_param
+      try {
+        const ATTR_KEY = "tung:shop:attribution:v1";
+        const params = new URLSearchParams(location.search);
+        let start = "";
+        try { start = String(tg?.initDataUnsafe?.start_param || ""); } catch {}
+        if (start) {
+          // formats: ref_KOL or ref_KOL__SAVE10 or discount_SAVE10
+          start.split(/__|_/).forEach((part) => {
+            if (/^ref/i.test(part) && part.length > 3) params.set("ref", part.replace(/^ref[_-]?/i, ""));
+            else if (/^discount|promo|code/i.test(part)) params.set("discount", part.replace(/^(discount|promo|code)[_-]?/i, ""));
+            else if (/^[A-Z0-9_-]{3,}$/i.test(part) && !params.get("ref")) params.set("ref", part);
+          });
+        }
+        const existing = (() => { try { return JSON.parse(localStorage.getItem(ATTR_KEY) || "{}"); } catch { return {}; } })();
+        const clean = (v) => String(v || "").trim().toUpperCase().replace(/[^A-Z0-9_-]/g, "").slice(0, 40);
+        const next = {
+          ...existing,
+          channel: "telegram",
+          ref: clean(params.get("ref") || params.get("affiliate") || existing.ref || "") || existing.ref || null,
+          discountCode: clean(params.get("discount") || params.get("promo") || params.get("code") || existing.discountCode || "") || existing.discountCode || null,
+          capturedAt: existing.capturedAt || new Date().toISOString(),
+          landingPath: "/telegram/shop",
+        };
+        localStorage.setItem(ATTR_KEY, JSON.stringify(next));
+        if (next.discountCode && !state.discountCode) {
+          state.discountCode = next.discountCode;
+          state.discountDraft = next.discountCode;
+          try { localStorage.setItem("tung:tg:discount", next.discountCode); } catch {}
+        }
+      } catch {}
+      state.cart = readCart(); state.pendingPayment = readPendingPayment(); state.discountCode = readDiscountCode(); state.discountDraft = state.discountCode; reconcileCart(); syncOnlineState(); if (telegramUser || tg || getTelegramInitData()) { $("#hello").textContent = telegramUser?.first_name || "Telegram"; $("#avatar").textContent = (telegramUser?.first_name || "T").slice(0,1).toUpperCase(); $("#identity-status").textContent = "Đang xác minh…"; $("#session-signal").textContent = "Đang xác minh Telegram"; void bootstrapSession().catch(() => undefined); } else { document.body.dataset.sessionState = "preview"; $("#session-signal").textContent = "Chế độ xem trước"; $("#identity-status").textContent = "Chưa gắn Telegram"; } renderFilters(); renderFeatured(); renderProducts(); renderCart(); syncPendingPaymentBanner(); motion.reveal(".hero > *, .trust-strip > div", { duration:360 });
+    </script>
+  </body>
+</html>

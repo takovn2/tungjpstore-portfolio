@@ -1,0 +1,28 @@
+---
+import NotFoundPage from "../../components/pages/NotFoundPage.astro";
+import PostPage from "../../components/pages/PostPage.astro";
+import UnavailablePage from "../../components/pages/UnavailablePage.astro";
+import { type Locale } from "../../i18n/dictionaries";
+import { resolveRequestLocale } from "../../i18n/locale-preference";
+import { curateLabPost } from "../../lib/curated-lab-content";
+import { loadPublicContentItem } from "../../lib/public-runtime";
+import { postFromPublished, setPublicCache } from "../../lib/public-content";
+
+export const prerender = false;
+
+const pageLocale: Locale = resolveRequestLocale(Astro.request);
+const slug = String(Astro.params.slug ?? "");
+setPublicCache(Astro.response.headers);
+const result = await loadPublicContentItem({ type: "post", slug, locale: pageLocale });
+const unavailable = result.status === "unavailable";
+const post = result.status === "ready" ? curateLabPost(postFromPublished(result.item), pageLocale) : null;
+const labPost = post?.surface === "lab" ? post : null;
+if (unavailable) {
+  Astro.response.status = 503;
+  setPublicCache(Astro.response.headers, "unavailable");
+} else if (!labPost) {
+  Astro.response.status = 404;
+  setPublicCache(Astro.response.headers, "not-found");
+}
+---
+{unavailable ? <UnavailablePage locale={pageLocale} /> : labPost ? <PostPage locale={pageLocale} post={labPost} availableLocales={result.locales} /> : <NotFoundPage locale={pageLocale} />}

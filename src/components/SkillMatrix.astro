@@ -1,0 +1,180 @@
+---
+import Icon from "./Icon.astro";
+import type { SkillGroup } from "../content/portfolio-evidence";
+
+interface Props {
+  groups: SkillGroup[];
+  compact?: boolean;
+}
+
+const { groups, compact = false } = Astro.props;
+
+const moduleIcons = ["compass", "layout", "database", "cloud"] as const;
+---
+
+<div class:list={["capability-ledger", compact && "capability-ledger--compact"]}>
+  {groups.map((group, groupIndex) => (
+    <section class="capability-module">
+      <header class="capability-module__header">
+        <div class="capability-module__marker" aria-hidden="true">
+          <span class="capability-module__icon">
+            <Icon name={moduleIcons[groupIndex] ?? "layers"} size={22} />
+          </span>
+          <span class="capability-module__number">0{groupIndex + 1}</span>
+        </div>
+        <h3>{group.label}</h3>
+        <p>{group.description}</p>
+      </header>
+      <ul class="capability-module__skills">
+        {group.skills.map((skill) => (
+          <li class="capability-skill">
+            <strong>{skill.name}</strong>
+          </li>
+        ))}
+      </ul>
+    </section>
+  ))}
+</div>
+
+<style>
+  .capability-ledger {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    border-block: 1px solid var(--line-strong);
+  }
+
+  .capability-module {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    padding: clamp(1.4rem, 2.2vw, 2.25rem);
+    border-left: 1px solid var(--line);
+  }
+
+  .capability-module:first-child {
+    border-left: 0;
+  }
+
+  .capability-module__header {
+    display: grid;
+    align-content: start;
+  }
+
+  .capability-module__marker {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: clamp(1.6rem, 3vw, 2.8rem);
+  }
+
+  .capability-module__icon {
+    display: grid;
+    width: 2.75rem;
+    height: 2.75rem;
+    place-items: center;
+    border: 1px solid var(--line-strong);
+    color: var(--accent);
+  }
+
+  .capability-module__number {
+    color: var(--paper-soft);
+    font: 600 .63rem/1 var(--font-mono);
+    letter-spacing: .12em;
+  }
+
+  .capability-module h3 {
+    margin: 0;
+    font: 400 clamp(1.55rem, 2.15vw, 2.25rem)/1 var(--font-serif);
+    letter-spacing: -.035em;
+  }
+
+  .capability-module__header > p {
+    min-height: 6.4em;
+    margin: .8rem 0 0;
+    color: var(--paper-soft);
+    font-size: .86rem;
+    line-height: 1.6;
+  }
+
+  .capability-module__skills {
+    display: grid;
+    margin: auto 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .capability-skill {
+    display: grid;
+    gap: .55rem;
+    padding: 1rem 0;
+    border-top: 1px solid var(--line);
+  }
+
+  .capability-skill:last-child {
+    padding-bottom: 0;
+  }
+
+  .capability-skill strong {
+    min-width: 0;
+    font-size: .82rem;
+    font-weight: 550;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+  }
+
+  .capability-ledger--compact .capability-module {
+    padding: clamp(1.25rem, 1.8vw, 1.8rem);
+  }
+
+  .capability-ledger--compact .capability-module__marker {
+    margin-bottom: clamp(1.4rem, 2.2vw, 2.2rem);
+  }
+
+  @media (max-width: 1100px) {
+    .capability-ledger {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .capability-module:nth-child(odd) {
+      border-left: 0;
+    }
+
+    .capability-module:nth-child(n + 3) {
+      border-top: 1px solid var(--line);
+    }
+
+    .capability-module__header > p {
+      min-height: 3.2em;
+    }
+  }
+
+  @media (max-width: 620px) {
+    .capability-ledger {
+      grid-template-columns: 1fr;
+    }
+
+    .capability-module,
+    .capability-module:nth-child(odd) {
+      padding: 1.4rem 0;
+      border-top: 1px solid var(--line);
+      border-left: 0;
+    }
+
+    .capability-module:first-child {
+      border-top: 0;
+    }
+
+    .capability-module__marker {
+      margin-bottom: 1.5rem;
+    }
+
+    .capability-module__header > p {
+      min-height: 0;
+      max-width: 34rem;
+    }
+
+    .capability-module__skills {
+      margin-top: 1.5rem;
+    }
+  }
+</style>

@@ -1,0 +1,389 @@
+---
+import { localizePath, type Locale } from "../../i18n/dictionaries";
+import { formatProductPrice, getShopCopy, type ProductViewModel } from "../../i18n/shop";
+import { versionShopImageUrl } from "../../lib/shop/media";
+import { getShopProductDisplayTitle } from "../../lib/shop/seo";
+
+interface Props {
+  product: ProductViewModel;
+  locale: Locale;
+  index?: number;
+  priority?: boolean;
+}
+
+const { product, locale, index = 0, priority = false } = Astro.props;
+const displayTitle = getShopProductDisplayTitle(product, locale);
+const copy = getShopCopy(locale);
+const media = [...product.media].sort((left, right) => left.sortOrder - right.sortOrder);
+const cover = media.find((item) => item.type === "image") ?? null;
+const coverUrl = versionShopImageUrl(cover?.url ?? "");
+const primaryVariant = product.variants.find((variant) => variant.availability !== "out_of_stock") ?? product.variants[0] ?? null;
+const productHref = localizePath(`/shop/${product.slug}`, locale);
+const productType = copy.productType[product.productType];
+const priceLabel = formatProductPrice(product, locale);
+const purchasable = Boolean(primaryVariant && primaryVariant.availability !== "out_of_stock");
+const categoryLabel = product.category || productType;
+const multiPlan = product.variants.length > 1;
+const optionCountLabel = locale === "vi"
+  ? `${product.variants.length} lựa chọn`
+  : locale === "ja"
+    ? `${product.variants.length}種類`
+    : locale === "zh"
+      ? `${product.variants.length}个选项`
+      : `${product.variants.length} options`;
+const deliveryMode = primaryVariant?.deliveryMode ?? "automatic";
+const deliveryBadge = deliveryMode === "automatic"
+  ? (locale === "vi" ? "Giao nhanh" : locale === "ja" ? "自動配信" : locale === "zh" ? "自动交付" : "Instant")
+  : (locale === "vi" ? "Thủ công" : locale === "ja" ? "手動" : locale === "zh" ? "人工" : "Manual");
+const hasDeal = Boolean(
+  primaryVariant?.compareAtMinor
+  && primaryVariant.compareAtMinor > primaryVariant.priceMinor,
+) || product.badges.some((badge) => /deal|sale|hot|giảm/i.test(badge));
+const dealBadge = locale === "vi" ? "Ưu đãi" : locale === "ja" ? "セール" : locale === "zh" ? "优惠" : "Deal";
+const addLabel = multiPlan
+  ? (locale === "vi" ? "Chọn" : locale === "ja" ? "選ぶ" : locale === "zh" ? "选择" : "Pick")
+  : (locale === "vi" ? "Thêm" : locale === "ja" ? "追加" : locale === "zh" ? "加入" : "Add");
+
+const cartPayload = JSON.stringify({
+  productId: product.id,
+  variantId: primaryVariant?.id ?? "",
+  slug: product.slug,
+  title: displayTitle,
+  variantTitle: primaryVariant?.title ?? productType,
+  priceMinor: primaryVariant?.priceMinor ?? 0,
+  currency: primaryVariant?.currency ?? product.currency,
+  maxQuantity: Math.max(1, Math.min(
+    primaryVariant?.maxPerOrder ?? 10,
+    primaryVariant?.availableQuantity == null ? (primaryVariant?.maxPerOrder ?? 10) : primaryVariant.availableQuantity,
+  )),
+  availability: primaryVariant?.availability ?? product.availability,
+  imageUrl: coverUrl,
+});
+---
+
+<article class="shop-product-card" data-category={product.categorySlug || product.productType} data-availability={product.availability} style={`--shop-card-delay: ${Math.min(index, 8) * 45}ms`}>
+  <a class="shop-product-card__media" href={productHref} aria-label={`${copy.card.viewDetails}: ${displayTitle}`}>
+    {cover ? (
+      <img src={coverUrl} alt={cover.alt} loading={priority ? "eager" : "lazy"} decoding="async" fetchpriority={priority ? "high" : undefined} width="200" height="200" />
+    ) : (
+      <div class="shop-product-card__placeholder" aria-hidden="true">
+        <span>{categoryLabel.charAt(0).toUpperCase()}</span>
+      </div>
+    )}
+  </a>
+  <div class="shop-product-card__body">
+    <div class="shop-product-card__top">
+      <span class="shop-product-card__eyebrow">{categoryLabel}</span>
+      <div class="shop-product-card__badges">
+        {product.availability === "low_stock" ? <span class="shop-badge badge--scarcity">{locale === "vi" ? "Sắp hết" : locale === "ja" ? "残りわずか" : locale === "zh" ? "即将售罄" : "Low Stock"}</span> : null}
+        {hasDeal ? <span class="shop-badge badge--deal">{dealBadge}</span> : <span class="shop-product-card__delivery-badge">{deliveryBadge}</span>}
+      </div>
+    </div>
+    <h2><a href={productHref}>{displayTitle}</a></h2>
+    <p class="shop-product-card__variant">
+      {primaryVariant?.title || categoryLabel}
+      {multiPlan ? <span> · {optionCountLabel}</span> : null}
+    </p>
+    <div class="shop-product-card__buy-row">
+      <div class="shop-product-card__price-stack">
+        <strong class="shop-product-card__price">{priceLabel}</strong>
+        <span class:list={["shop-product-card__stock", { "shop-product-card__stock--empty": !purchasable }]}>
+          <i aria-hidden="true"></i>{copy.availability[product.availability]}
+        </span>
+      </div>
+      {multiPlan ? (
+        <a class="shop-product-card__add shop-product-card__add--link" href={productHref} aria-label={`${addLabel}: ${displayTitle}`}>
+          <span>{addLabel}</span>
+        </a>
+      ) : (
+        <button type="button" class="shop-product-card__add" data-cart-add data-cart-product={cartPayload} disabled={!purchasable} aria-label={`${addLabel}: ${displayTitle}`}>
+          <span>{addLabel}</span>
+        </button>
+      )}
+    </div>
+  </div>
+</article>
+
+<style>
+  .shop-product-card {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid var(--shop-line, #e9ecf1);
+    border-radius: var(--shop-radius-lg, 1.25rem);
+    background: #ffffff;
+    box-shadow: var(--shop-shadow-soft, 0 1px 2px rgba(16, 24, 40, 0.04));
+    transition: border-color 0.22s var(--shop-ease, ease), box-shadow 0.22s var(--shop-ease, ease), transform 0.22s var(--shop-ease, ease);
+  }
+  .shop-product-card:hover {
+    border-color: #dbe1ea;
+    box-shadow: var(--shop-shadow, 0 8px 24px -6px rgba(16, 24, 40, 0.08));
+    transform: translateY(-3px);
+  }
+  :global(.shop-product-card[hidden]) { display: none !important; }
+
+  .shop-product-card__media {
+    position: relative;
+    display: block;
+    width: 100%;
+    aspect-ratio: 16 / 10;
+    padding: 0;
+    margin: 0;
+    background: var(--shop-surface-alt, #fafbfc);
+    overflow: hidden;
+    text-decoration: none;
+  }
+  .shop-product-card__media::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: -70%;
+    width: 45%;
+    height: 100%;
+    background: linear-gradient(105deg, transparent, rgba(255, 255, 255, 0.5), transparent);
+    transform: skewX(-18deg);
+    transition: left 0.6s var(--shop-ease, ease);
+    pointer-events: none;
+  }
+  .shop-product-card:hover .shop-product-card__media::after { left: 125%; }
+  .shop-product-card__media img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+    transition: transform 420ms var(--shop-ease, ease);
+  }
+  .shop-product-card:hover .shop-product-card__media img {
+    transform: scale(1.05);
+  }
+
+  .shop-product-card__placeholder {
+    display: grid;
+    width: 100%;
+    height: 100%;
+    place-items: center;
+    background: var(--shop-surface-alt, #fafbfc);
+    color: var(--shop-ink-muted, #94a3b8);
+    font: 700 1.5rem/1 var(--font-sans);
+  }
+
+  .shop-product-card__body {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    gap: 0.35rem;
+    padding: 1rem;
+  }
+  .shop-product-card__top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.4rem;
+  }
+  .shop-product-card__eyebrow {
+    margin: 0;
+    color: var(--shop-ink-muted, #94a3b8);
+    font: 600 0.68rem/1.2 var(--font-sans);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .shop-product-card__badges {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+  }
+  .badge--scarcity {
+    font: 600 0.68rem/1 var(--font-sans);
+    color: #cf1322;
+    background: #fff1f0;
+    border: 1px solid #ffccc7;
+    padding: 0.2rem 0.45rem;
+    border-radius: 0.25rem;
+  }
+  .shop-product-card__delivery-badge {
+    font: 550 0.68rem/1 var(--font-sans);
+    color: var(--shop-ink-soft, #475569);
+    background: var(--shop-surface-alt, #fafbfc);
+    padding: 0.2rem 0.45rem;
+    border-radius: 0.25rem;
+  }
+  .shop-product-card h2 {
+    margin: 0.15rem 0 0;
+    font: 650 0.98rem/1.3 var(--font-sans);
+    letter-spacing: -0.015em;
+    color: var(--shop-ink, #0b0f1a);
+  }
+  .shop-product-card h2 a {
+    color: inherit;
+    text-decoration: none;
+    background-image: linear-gradient(currentColor, currentColor);
+    background-size: 0% 1px;
+    background-repeat: no-repeat;
+    background-position: 0 100%;
+    transition: background-size 0.25s var(--shop-ease, ease);
+  }
+  .shop-product-card h2 a:hover { background-size: 100% 1px; }
+
+  .shop-product-card__variant {
+    margin: 0;
+    color: var(--shop-ink-soft, #64748b);
+    font: 450 0.78rem/1.35 var(--font-sans);
+  }
+  .shop-product-card__buy-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-top: auto;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--shop-line, #e9ecf1);
+  }
+  .shop-product-card__price-stack {
+    display: grid;
+    gap: 0.1rem;
+  }
+  .shop-product-card__price {
+    font: 750 1.05rem/1 var(--font-sans);
+    letter-spacing: -0.02em;
+    color: var(--shop-ink, #0b0f1a);
+  }
+  .shop-product-card__stock {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    color: var(--shop-mint, #0da678);
+    font: 550 0.68rem/1 var(--font-sans);
+  }
+  .shop-product-card__stock i {
+    width: 0.35rem;
+    height: 0.35rem;
+    border-radius: 50%;
+    background: currentColor;
+    flex-shrink: 0;
+  }
+  .shop-product-card__stock--empty { color: var(--shop-ink-muted, #94a3b8); }
+
+  .shop-product-card__add {
+    display: inline-flex;
+    min-width: 4rem;
+    height: 2.2rem;
+    padding: 0 0.9rem;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    cursor: pointer;
+    border: 1px solid var(--shop-ink, #0b0f1a);
+    border-radius: var(--shop-radius-btn, 0.5rem);
+    background: var(--shop-ink, #0b0f1a);
+    color: #ffffff;
+    font: 600 0.78rem/1 var(--font-sans);
+    text-decoration: none;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    transition: all 0.15s ease;
+  }
+  .shop-product-card__add:hover {
+    background: var(--shop-accent-hover, #252e42);
+    border-color: var(--shop-accent-hover, #252e42);
+    transform: translateY(-1px);
+    color: #ffffff;
+  }
+  .shop-product-card__add:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+    background: var(--shop-surface-alt, #fafbfc);
+    border-color: var(--shop-line, #e9ecf1);
+    color: var(--shop-ink-muted, #94a3b8);
+    transform: none;
+    box-shadow: none;
+  }
+
+  @media (max-width: 640px) {
+    .shop-product-card__media {
+      padding: 0;
+      aspect-ratio: 16 / 10;
+    }
+    .shop-product-card__body {
+      padding: 0.75rem;
+      gap: 0.25rem;
+    }
+    .shop-product-card h2 {
+      font-size: 0.86rem;
+      min-height: 2.2em;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .shop-product-card__price {
+      font-size: 0.95rem;
+    }
+    .shop-product-card__buy-row {
+      padding-top: 0.5rem;
+    }
+    .shop-product-card__add {
+      min-width: 3.4rem;
+      height: 2rem;
+      padding: 0 0.65rem;
+      font-size: 0.72rem;
+    }
+  }
+
+  @media (max-width: 420px) {
+    .shop-product-card__media {
+      padding: 0;
+    }
+    .shop-product-card__body {
+      padding: 0.6rem;
+    }
+    .shop-product-card__top {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.2rem;
+    }
+    .shop-product-card__delivery-badge {
+      display: none;
+    }
+    .shop-product-card h2 {
+      font-size: 0.8rem;
+    }
+    .shop-product-card__price {
+      font-size: 0.88rem;
+    }
+  }
+
+  /* Portfolio dark shell */
+  :global(body:not(.chrome-store)) .shop-product-card {
+    background: var(--surface);
+    border-color: var(--line);
+    box-shadow: none;
+  }
+  :global(body:not(.chrome-store)) .shop-product-card:hover {
+    border-color: var(--line-strong);
+  }
+  :global(body:not(.chrome-store)) .shop-product-card__media {
+    background: var(--ink-soft);
+  }
+  :global(body:not(.chrome-store)) .shop-product-card__price,
+  :global(body:not(.chrome-store)) .shop-product-card h2 {
+    color: var(--paper);
+  }
+  :global(body:not(.chrome-store)) .shop-product-card__add {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-ink);
+    box-shadow: none;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .shop-product-card { transition: none; }
+    .shop-product-card:hover { transform: none; }
+    .shop-product-card__media img,
+    .shop-product-card__media::after,
+    .shop-product-card h2 a,
+    .shop-product-card__add { transition: none; }
+    .shop-product-card__media::after { display: none; }
+    .shop-product-card__add:hover { transform: none; }
+  }
+</style>

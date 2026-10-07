@@ -1,0 +1,20 @@
+---
+import { buildOrderTrustTimeline, type OrderLifecycleState } from "../../lib/shop/platform/trust";
+import type { Locale } from "../../i18n/dictionaries";
+
+interface Props {
+  locale: Locale;
+  state?: OrderLifecycleState;
+}
+
+const { locale, state = "awaiting_payment" } = Astro.props;
+const steps = buildOrderTrustTimeline(state, locale);
+---
+
+<ol class="shop-progress order-trust-timeline" data-order-trust-timeline aria-label={locale === "vi" ? "Tiến trình đơn" : "Order progress"}>
+  {steps.map((step) => (
+    <li class={`is-${step.status}`} data-step-id={step.id}>
+      <span>{step.label}</span>
+    </li>
+  ))}
+</ol>

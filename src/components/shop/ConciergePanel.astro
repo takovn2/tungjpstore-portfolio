@@ -1,0 +1,550 @@
+---
+import { localizePath, type Locale } from "../../i18n/dictionaries";
+
+/**
+ * Concierge chatbot — traditional floating chat widget.
+ * Talks to GET /api/shop/recommend (catalog+stock matcher, LLM disabled).
+ * Fully self-contained: markup, styles and behavior live in this component.
+ */
+interface Props {
+  locale: Locale;
+}
+const { locale } = Astro.props;
+
+const isVi = locale === "vi";
+const copy = isVi ? {
+  fabLabel: "Trợ lý mua sắm",
+  title: "Trợ lý TUNG",
+  subtitle: "Đang hoạt động · So khớp catalog & tồn kho thật",
+  intro: "Xin chào 👋 Mô tả nhu cầu của bạn — tôi sẽ gợi ý gói phù hợp nhất từ catalog đang có.",
+  placeholder: "Tôi cần…",
+  send: "Gửi",
+  close: "Đóng trò chuyện",
+  chips: ["ChatGPT giá rẻ", "Canva Pro", "Tool lập trình", "Xem video/phim"],
+  resultsTitle: "Gợi ý phù hợp:",
+  typing: "Đang tìm…",
+  error: "Không lấy được gợi ý lúc này. Thử lại sau nhé.",
+  empty: "Nhập nhu cầu để nhận gợi ý sản phẩm phù hợp.",
+  viewLabel: "Xem chi tiết",
+  hint: "So khớp theo catalog & tồn kho thật — chưa dùng API LLM.",
+} : {
+  fabLabel: "Shopping assistant",
+  title: "TUNG Assistant",
+  subtitle: "Online · Matches live catalog & stock",
+  intro: "Hi there 👋 Describe what you need — I'll suggest the best-fit plans from the live catalog.",
+  placeholder: "I need…",
+  send: "Send",
+  close: "Close chat",
+  chips: ["Cheap ChatGPT", "Canva Pro", "Coding tools", "Streaming"],
+  resultsTitle: "Best matches:",
+  typing: "Searching…",
+  error: "Could not load suggestions right now. Please try again.",
+  empty: "Describe a need to get matching products.",
+  viewLabel: "View details",
+  hint: "Matches live catalog & stock — LLM API is disabled for now.",
+};
+const shopBase = localizePath("/shop", locale);
+---
+
+<div class="concierge" data-market-concierge data-locale={locale} data-shop-base={shopBase}>
+  <button type="button" class="concierge__fab" data-concierge-fab aria-expanded="false" aria-controls="concierge-panel">
+    <svg class="concierge__fab-icon" aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+    <svg class="concierge__fab-close" aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+    <span class="concierge__fab-text">{copy.fabLabel}</span>
+    <i class="concierge__fab-dot" aria-hidden="true"></i>
+  </button>
+
+  <section class="concierge__panel" id="concierge-panel" data-concierge-panel role="dialog" aria-modal="false" aria-labelledby="concierge-title" hidden>
+    <header class="concierge__head">
+      <span class="concierge__avatar" aria-hidden="true">T</span>
+      <div class="concierge__head-copy">
+        <strong id="concierge-title">{copy.title}</strong>
+        <small><i aria-hidden="true"></i>{copy.subtitle}</small>
+      </div>
+      <button type="button" class="concierge__close" data-concierge-close aria-label={copy.close}>
+        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </header>
+
+    <div class="concierge__log" data-concierge-log role="log" aria-live="polite">
+      <div class="concierge__msg concierge__msg--bot">
+        <p>{copy.intro}</p>
+      </div>
+      <div class="concierge__chips" data-concierge-chips>
+        {copy.chips.map((chip) => (
+          <button type="button" data-concierge-chip>{chip}</button>
+        ))}
+      </div>
+    </div>
+
+    <p class="concierge__hint">{copy.hint}</p>
+
+    <form class="concierge__form" data-concierge-form>
+      <input type="search" name="q" maxlength="200" placeholder={copy.placeholder} autocomplete="off" aria-label={copy.placeholder} data-concierge-input />
+      <button type="submit" data-concierge-submit aria-label={copy.send} disabled>
+        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/></svg>
+      </button>
+    </form>
+  </section>
+</div>
+
+<script is:inline define:vars={{ copy, shopBase }}>
+  (() => {
+    if (window.__shopConciergeInit) return;
+    window.__shopConciergeInit = true;
+    const root = document.querySelector("[data-market-concierge]");
+    if (!root) return;
+    const fab = root.querySelector("[data-concierge-fab]");
+    const panel = root.querySelector("[data-concierge-panel]");
+    const log = root.querySelector("[data-concierge-log]");
+    const form = root.querySelector("[data-concierge-form]");
+    const input = root.querySelector("[data-concierge-input]");
+    const submit = root.querySelector("[data-concierge-submit]");
+    const locale = root.getAttribute("data-locale") || "vi";
+
+    const esc = (value) => String(value || "")
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+    const scrollLog = () => { if (log) log.scrollTop = log.scrollHeight; };
+
+    const appendNode = (node) => { log?.appendChild(node); scrollLog(); };
+
+    const makeMsg = (text, who) => {
+      const bubble = document.createElement("div");
+      bubble.className = `concierge__msg concierge__msg--${who}`;
+      const p = document.createElement("p");
+      p.textContent = text;
+      bubble.appendChild(p);
+      return bubble;
+    };
+
+    const makeTyping = () => {
+      const bubble = document.createElement("div");
+      bubble.className = "concierge__msg concierge__msg--bot concierge__msg--typing";
+      bubble.innerHTML = "<span></span><span></span><span></span>";
+      return bubble;
+    };
+
+    const makeProducts = (items) => {
+      const wrap = document.createElement("div");
+      wrap.className = "concierge__msg concierge__msg--products";
+      const label = document.createElement("p");
+      label.className = "concierge__products-label";
+      label.textContent = copy.resultsTitle;
+      wrap.appendChild(label);
+      const list = document.createElement("ul");
+      list.className = "concierge__products";
+      list.innerHTML = items.map((row) => {
+        const product = row.product || {};
+        const href = `${shopBase}/${encodeURIComponent(product.slug || "")}`;
+        const reasons = Array.isArray(row.reasons) ? row.reasons.join(" · ") : "";
+        return `<li><a href="${esc(href)}"><strong>${esc(product.title)}</strong><small>${esc(reasons)}</small><span class="concierge__products-cta">${esc(copy.viewLabel)}<svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></span></a></li>`;
+      }).join("");
+      wrap.appendChild(list);
+      return wrap;
+    };
+
+    let openState = false;
+    let lastFocus = null;
+    const setPanel = (open) => {
+      openState = open;
+      if (!panel || !fab) return;
+      if (open) {
+        lastFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        panel.hidden = false;
+        requestAnimationFrame(() => panel.classList.add("is-open"));
+        fab.setAttribute("aria-expanded", "true");
+        fab.classList.add("is-open");
+        window.setTimeout(() => input?.focus(), 120);
+      } else {
+        panel.classList.remove("is-open");
+        fab.setAttribute("aria-expanded", "false");
+        fab.classList.remove("is-open");
+        window.setTimeout(() => { panel.hidden = true; }, 220);
+        if (lastFocus?.isConnected) { lastFocus.focus(); lastFocus = null; }
+      }
+    };
+
+    fab?.addEventListener("click", () => setPanel(!openState));
+    root.querySelector("[data-concierge-close]")?.addEventListener("click", () => setPanel(false));
+    document.addEventListener("keydown", (event) => { if (event.key === "Escape" && openState) setPanel(false); });
+    document.addEventListener("click", (event) => {
+      if (!openState || !(event.target instanceof Node)) return;
+      if (root.contains(event.target)) return;
+      setPanel(false);
+    });
+
+    const chipsWrap = root.querySelector("[data-concierge-chips]");
+    chipsWrap?.addEventListener("click", (event) => {
+      const chip = event.target instanceof Element ? event.target.closest("[data-concierge-chip]") : null;
+      if (!chip) return;
+      if (input) input.value = chip.textContent || "";
+      form?.requestSubmit();
+    });
+
+    input?.addEventListener("input", () => { if (submit) submit.disabled = !String(input.value || "").trim(); });
+
+    let busy = false;
+    form?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (busy) return;
+      const q = String(input?.value || "").trim();
+      if (!q) return;
+      busy = true;
+      if (submit) submit.disabled = true;
+      const chips = root.querySelector("[data-concierge-chips]");
+      if (chips) chips.remove();
+      appendNode(makeMsg(q, "user"));
+      if (input) input.value = "";
+      const typing = makeTyping();
+      appendNode(typing);
+      try {
+        const url = `/api/shop/recommend?locale=${encodeURIComponent(locale)}&limit=4&q=${encodeURIComponent(q)}`;
+        const response = await fetch(url, { headers: { accept: "application/json" } });
+        const data = await response.json();
+        if (!response.ok || !data?.ok) throw new Error(data?.code || "failed");
+        typing.remove();
+        appendNode(makeMsg(data.assistantMessage || copy.empty, "bot"));
+        const items = Array.isArray(data.results) ? data.results : [];
+        if (items.length) appendNode(makeProducts(items));
+      } catch {
+        typing.remove();
+        appendNode(makeMsg(copy.error, "bot"));
+      } finally {
+        busy = false;
+        if (submit) submit.disabled = !String(input?.value || "").trim();
+        scrollLog();
+      }
+    });
+  })();
+</script>
+
+<style>
+  .concierge {
+    position: fixed;
+    right: clamp(0.85rem, 2.5vw, 1.5rem);
+    bottom: calc(clamp(0.85rem, 2.5vw, 1.5rem) + env(safe-area-inset-bottom, 0px));
+    z-index: 60;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.65rem;
+    font-family: var(--font-sans);
+  }
+
+  /* ── FAB ─────────────────────────────────────────────── */
+  .concierge__fab {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-height: 3.1rem;
+    padding: 0 1.05rem 0 0.95rem;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: var(--shop-radius-pill, 999px);
+    background: linear-gradient(160deg, #1c2536, var(--shop-ink, #0b0f1a));
+    color: #ffffff;
+    font: 650 0.85rem/1 var(--font-sans);
+    letter-spacing: -0.01em;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(11, 15, 26, 0.28), 0 14px 34px -10px rgba(11, 15, 26, 0.45),
+      inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    transition: transform 0.2s var(--shop-ease), box-shadow 0.2s var(--shop-ease);
+  }
+  .concierge__fab:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 3px 8px rgba(11, 15, 26, 0.3), 0 20px 44px -12px rgba(11, 15, 26, 0.5),
+      inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  }
+  .concierge__fab:active { transform: translateY(0) scale(0.97); }
+  .concierge__fab:focus-visible { outline: 2px solid var(--shop-ink); outline-offset: 3px; }
+  .concierge__fab-icon, .concierge__fab-close { flex: 0 0 auto; }
+  .concierge__fab-close { display: none; }
+  .concierge__fab.is-open .concierge__fab-icon { display: none; }
+  .concierge__fab.is-open .concierge__fab-close { display: block; }
+  .concierge__fab-dot {
+    position: absolute;
+    top: 0.3rem;
+    right: 0.45rem;
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background: var(--shop-mint, #0da678);
+    box-shadow: 0 0 0 3px rgba(13, 166, 120, 0.22);
+  }
+  .concierge__fab.is-open .concierge__fab-text { display: none; }
+
+  /* ── Panel ───────────────────────────────────────────── */
+  .concierge__panel {
+    display: flex;
+    width: min(23.5rem, calc(100vw - 1.7rem));
+    height: min(31rem, max(24rem, 72vh));
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid var(--shop-line, #e9ecf1);
+    border-radius: var(--shop-radius-lg, 1.25rem);
+    background: var(--shop-surface, #ffffff);
+    box-shadow: 0 2px 6px rgba(16, 24, 40, 0.06), 0 28px 70px -18px rgba(16, 24, 40, 0.35);
+    opacity: 0;
+    transform: translateY(12px) scale(0.97);
+    transform-origin: bottom right;
+    transition: opacity 0.22s var(--shop-ease), transform 0.22s var(--shop-ease);
+  }
+  .concierge__panel.is-open { opacity: 1; transform: none; }
+  .concierge__panel[hidden] { display: none !important; }
+
+  .concierge__head {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    padding: 0.85rem 0.95rem;
+    border-bottom: 1px solid var(--shop-line, #e9ecf1);
+    background: linear-gradient(180deg, var(--shop-surface-alt, #fafbfc), var(--shop-surface, #ffffff));
+  }
+  .concierge__avatar {
+    display: grid;
+    width: 2.15rem;
+    height: 2.15rem;
+    flex: 0 0 auto;
+    place-items: center;
+    border-radius: var(--shop-radius-sm, 0.625rem);
+    background: linear-gradient(160deg, #1c2536, var(--shop-ink, #0b0f1a));
+    color: #ffffff;
+    font: 750 0.95rem/1 var(--font-sans);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  }
+  .concierge__head-copy { display: grid; gap: 0.14rem; min-width: 0; flex: 1 1 auto; }
+  .concierge__head-copy strong {
+    color: var(--shop-ink, #0b0f1a);
+    font: 700 0.9rem/1.1 var(--font-sans);
+    letter-spacing: -0.01em;
+  }
+  .concierge__head-copy small {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    color: var(--shop-ink-muted, #9aa3b2);
+    font: 500 0.68rem/1 var(--font-sans);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .concierge__head-copy small i {
+    width: 0.4rem;
+    height: 0.4rem;
+    border-radius: 50%;
+    background: var(--shop-mint, #0da678);
+    box-shadow: 0 0 0 3px rgba(13, 166, 120, 0.15);
+    animation: concierge-pulse 2.4s ease-in-out infinite;
+  }
+  .concierge__close {
+    display: grid;
+    width: 2rem;
+    height: 2rem;
+    flex: 0 0 auto;
+    place-items: center;
+    border: 1px solid var(--shop-line, #e9ecf1);
+    border-radius: var(--shop-radius-sm, 0.625rem);
+    background: var(--shop-surface, #ffffff);
+    color: var(--shop-ink-soft, #4b5565);
+    cursor: pointer;
+    transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+  }
+  .concierge__close:hover { border-color: var(--shop-line-strong, #d4dae3); color: var(--shop-ink, #0b0f1a); }
+  .concierge__close:focus-visible { outline: 2px solid var(--shop-ink); outline-offset: 2px; }
+
+  /* ── Message log ─────────────────────────────────────── */
+  .concierge__log {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 0.55rem;
+    padding: 0.95rem;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    background:
+      radial-gradient(60% 40% at 80% 0%, rgba(59, 130, 246, 0.03), transparent 70%),
+      var(--shop-surface, #ffffff);
+  }
+  .concierge__msg { max-width: 88%; }
+  .concierge__msg p {
+    margin: 0;
+    padding: 0.6rem 0.85rem;
+    border-radius: 1.1rem;
+    font: 450 0.84rem/1.5 var(--font-sans);
+  }
+  .concierge__msg--bot { align-self: flex-start; }
+  .concierge__msg--bot p {
+    background: var(--shop-surface-alt, #f4f6f9);
+    border: 1px solid var(--shop-line, #e9ecf1);
+    border-top-left-radius: 0.35rem;
+    color: var(--shop-ink, #0b0f1a);
+  }
+  .concierge__msg--user { align-self: flex-end; }
+  .concierge__msg--user p {
+    background: var(--shop-ink, #0b0f1a);
+    color: #ffffff;
+    border-top-right-radius: 0.35rem;
+  }
+  .concierge__msg--typing { display: inline-flex; gap: 0.28rem; padding: 0.7rem 0.85rem; }
+  .concierge__msg--typing span {
+    width: 0.4rem;
+    height: 0.4rem;
+    border-radius: 50%;
+    background: var(--shop-ink-muted, #9aa3b2);
+    animation: concierge-bounce 1.1s ease-in-out infinite;
+  }
+  .concierge__msg--typing span:nth-child(2) { animation-delay: 0.15s; }
+  .concierge__msg--typing span:nth-child(3) { animation-delay: 0.3s; }
+
+  .concierge__chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    align-self: flex-start;
+    max-width: 92%;
+  }
+  .concierge__chips button {
+    min-height: 1.9rem;
+    padding: 0.3rem 0.75rem;
+    border: 1px solid var(--shop-line-strong, #d4dae3);
+    border-radius: var(--shop-radius-pill, 999px);
+    background: var(--shop-surface, #ffffff);
+    color: var(--shop-ink-soft, #4b5565);
+    font: 600 0.74rem/1 var(--font-sans);
+    cursor: pointer;
+    transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+  }
+  .concierge__chips button:hover {
+    border-color: var(--shop-ink, #0b0f1a);
+    color: var(--shop-ink, #0b0f1a);
+    background: var(--shop-surface-alt, #fafbfc);
+    transform: translateY(-1px);
+  }
+  .concierge__chips button:focus-visible { outline: 2px solid var(--shop-ink); outline-offset: 2px; }
+
+  .concierge__msg--products { align-self: stretch; max-width: 100%; }
+  .concierge__products-label {
+    margin: 0 0 0.35rem;
+    color: var(--shop-ink-muted, #9aa3b2);
+    font: 650 0.68rem/1 var(--font-sans);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .concierge__products {
+    display: grid;
+    gap: 0.45rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .concierge__products a {
+    display: grid;
+    gap: 0.2rem;
+    padding: 0.7rem 0.8rem;
+    border: 1px solid var(--shop-line, #e9ecf1);
+    border-radius: var(--shop-radius, 0.875rem);
+    background: var(--shop-surface, #ffffff);
+    text-decoration: none;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+  }
+  .concierge__products a:hover {
+    border-color: #cfd6e2;
+    box-shadow: var(--shop-shadow, 0 8px 24px -6px rgba(16, 24, 40, 0.08));
+    transform: translateY(-1px);
+  }
+  .concierge__products strong {
+    color: var(--shop-ink, #0b0f1a);
+    font: 650 0.84rem/1.25 var(--font-sans);
+    letter-spacing: -0.008em;
+  }
+  .concierge__products small {
+    color: var(--shop-ink-soft, #4b5565);
+    font: 450 0.72rem/1.4 var(--font-sans);
+  }
+  .concierge__products-cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    margin-top: 0.2rem;
+    color: var(--shop-ink, #0b0f1a);
+    font: 650 0.72rem/1 var(--font-sans);
+  }
+
+  .concierge__hint {
+    margin: 0;
+    padding: 0.45rem 0.95rem 0.55rem;
+    border-top: 1px solid var(--shop-line, #e9ecf1);
+    background: var(--shop-surface-alt, #fafbfc);
+    color: var(--shop-ink-muted, #9aa3b2);
+    font: 450 0.66rem/1.4 var(--font-sans);
+  }
+
+  .concierge__form {
+    display: flex;
+    gap: 0.5rem;
+    padding: 0.75rem 0.95rem calc(0.75rem + env(safe-area-inset-bottom, 0px) * 0.4);
+    border-top: 1px solid var(--shop-line, #e9ecf1);
+    background: var(--shop-surface, #ffffff);
+  }
+  .concierge__form input {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 2.5rem;
+    padding: 0 0.95rem;
+    border: 1px solid var(--shop-line-strong, #d4dae3);
+    border-radius: var(--shop-radius-pill, 999px);
+    background: var(--shop-surface, #ffffff);
+    color: var(--shop-ink, #0b0f1a);
+    font: 450 0.85rem/1 var(--font-sans);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .concierge__form input:focus {
+    outline: none;
+    border-color: var(--shop-ink, #0b0f1a);
+    box-shadow: var(--shop-ring, 0 0 0 4px rgba(11, 15, 26, 0.07));
+  }
+  .concierge__form input::placeholder { color: var(--shop-ink-muted, #9aa3b2); }
+  .concierge__form button {
+    display: grid;
+    width: 2.5rem;
+    height: 2.5rem;
+    flex: 0 0 auto;
+    place-items: center;
+    border: 1px solid var(--shop-ink, #0b0f1a);
+    border-radius: 50%;
+    background: var(--shop-ink, #0b0f1a);
+    color: #ffffff;
+    cursor: pointer;
+    transition: background 0.15s ease, transform 0.15s ease, opacity 0.15s ease;
+  }
+  .concierge__form button:hover:not(:disabled) { background: var(--shop-accent-hover, #252e42); transform: translateY(-1px); }
+  .concierge__form button:disabled { opacity: 0.35; cursor: not-allowed; }
+  .concierge__form button:focus-visible { outline: 2px solid var(--shop-ink); outline-offset: 2px; }
+
+  @keyframes concierge-pulse {
+    0%, 100% { box-shadow: 0 0 0 3px rgba(13, 166, 120, 0.15); }
+    50% { box-shadow: 0 0 0 5px rgba(13, 166, 120, 0.05); }
+  }
+  @keyframes concierge-bounce {
+    0%, 60%, 100% { transform: translateY(0); opacity: 0.5; }
+    30% { transform: translateY(-0.22rem); opacity: 1; }
+  }
+
+  @media (max-width: 480px) {
+    .concierge__panel {
+      position: fixed;
+      right: 0.85rem;
+      bottom: calc(4.4rem + env(safe-area-inset-bottom, 0px));
+      height: min(30rem, 68vh);
+    }
+    .concierge__fab-text { display: none; }
+    .concierge__fab { padding: 0; width: 3.4rem; height: 3.4rem; justify-content: center; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .concierge__fab, .concierge__panel, .concierge__products a, .concierge__chips button { transition: none; }
+    .concierge__msg--typing span, .concierge__head-copy small i { animation: none; }
+    .concierge__fab:hover, .concierge__products a:hover { transform: none; }
+  }
+</style>

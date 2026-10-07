@@ -1,0 +1,47 @@
+---
+import { env } from "cloudflare:workers";
+import ShopPage from "../components/pages/ShopPage.astro";
+import UnavailablePage from "../components/pages/UnavailablePage.astro";
+import { type Locale } from "../i18n/dictionaries";
+import { resolveRequestLocale } from "../i18n/locale-preference";
+import { listPublicProducts } from "../lib/shop/repository";
+import { setPublicCache } from "../lib/public-content";
+import { createCatalogFilter, listCatalogRules, resolveMarket } from "../lib/shop/market";
+import { createPriceResolver, loadPriceBookContext } from "../lib/shop/price-book";
+
+export const prerender = false;
+
+const shopLocale: Locale = resolveRequestLocale(Astro.request, Astro.locals.markets);
+if (shopLocale !== "vi") {
+  return Astro.redirect(`/${shopLocale}/shop${Astro.url.search}`, 302);
+}
+
+setPublicCache(Astro.response.headers);
+// Catalogue prices depend on the visitor's market, which travels in a cookie.
+// The edge caches this page, so without Vary the CDN can serve one market's
+// prices to another market's visitor.
+Astro.response.headers.set("Vary", "Cookie");
+const db = env.CONTENT_DB;
+let products: Awaited<ReturnType<typeof listPublicProducts>> = [];
+let unavailable = !db;
+if (db) {
+  try {
+    const market = Astro.locals.market?.market ?? resolveMarket({}).market;
+    const priceResolver = createPriceResolver(
+      await loadPriceBookContext(db, market.priceBookId, market.currency),
+    );
+    const catalogFilter = createCatalogFilter(
+      market.catalogScope,
+      await listCatalogRules(db, market.id),
+    );
+    products = await listPublicProducts(db, { locale: shopLocale, limit: 48, priceResolver, catalogFilter });
+  } catch {
+    unavailable = true;
+  }
+}
+if (unavailable) {
+  Astro.response.status = 503;
+  setPublicCache(Astro.response.headers, "unavailable");
+}
+---
+{unavailable ? <UnavailablePage locale={shopLocale} /> : <ShopPage locale={shopLocale} products={products} />}

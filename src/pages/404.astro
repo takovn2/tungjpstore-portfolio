@@ -1,0 +1,10 @@
+---
+import NotFoundPage from "../components/pages/NotFoundPage.astro";
+import { type Locale } from "../i18n/dictionaries";
+import { resolveRequestLocale } from "../i18n/locale-preference";
+
+export const prerender = true;
+const pageLocale: Locale = resolveRequestLocale(Astro.request);
+Astro.response.status = 404;
+---
+<NotFoundPage locale={pageLocale} />

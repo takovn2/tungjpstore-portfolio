@@ -1,0 +1,946 @@
+---
+import { env } from "cloudflare:workers";
+import { serializeMiniCatalog } from "../../lib/shop/product-view";
+import { listPublicProducts } from "../../lib/shop/repository";
+
+export const prerender = false;
+Astro.response.headers.set("Cache-Control", "private, no-store, max-age=0");
+Astro.response.headers.set("Cloudflare-CDN-Cache-Control", "no-store, max-age=0");
+Astro.response.headers.set("CDN-Cache-Control", "no-store, max-age=0");
+Astro.response.headers.set("Pragma", "no-cache");
+Astro.response.headers.set("X-Robots-Tag", "noindex, nofollow");
+
+const botConfigId = Astro.url.searchParams.get("bot")?.match(/^[A-Za-z0-9_-]{8,80}$/)?.[0] ?? "";
+const products = env.CONTENT_DB
+  ? await listPublicProducts(env.CONTENT_DB, { locale: "en", limit: 60 }).catch(() => [])
+  : [];
+const serializedCatalog = serializeMiniCatalog(products);
+---
+
+<!doctype html>
+<html lang="en" data-currency="USD">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <meta name="theme-color" content="#ffffff" />
+    <meta name="robots" content="noindex,nofollow" />
+    <link rel="preconnect" href="https://telegram.org" />
+    <title>GLB Store · Global digital goods</title>
+    <script is:inline src="https://telegram.org/js/telegram-web-app.js"></script>
+<style is:global>
+
+      /* ══════════════════════════════════════════════════════════════
+         GLB Store · Telegram Mini App
+         Design System v6 — Porcelain White (unified with VN mini app)
+         ══════════════════════════════════════════════════════════════ */
+
+      /* ── Design Tokens ─────────────────────────────────────────── */
+      :root {
+        --shop-bg: #ffffff;
+        --shop-bg-soft: #f6f7f9;
+        --shop-surface: #ffffff;
+        --shop-surface-alt: #fafbfc;
+        --shop-ink: #0b0f1a;
+        --shop-ink-soft: #4b5565;
+        --shop-ink-muted: #9aa3b2;
+        --shop-accent: #0b0f1a;
+        --shop-accent-hover: #252e42;
+        --shop-accent-ink: #ffffff;
+        --shop-mint: #0da678;
+        --shop-mint-soft: #e8f8f1;
+        --shop-sun: #e8930c;
+        --shop-sun-soft: #fdf4e3;
+        --shop-danger: #e0483f;
+        --shop-danger-soft: #fdeeed;
+        --ink: var(--shop-bg);
+        --ink-soft: var(--shop-bg-soft);
+        --surface: var(--shop-surface);
+        --paper: var(--shop-ink);
+        --paper-soft: var(--shop-ink-soft);
+        --line: #e9ecf1;
+        --line-strong: #d4dae3;
+        --accent: var(--shop-accent);
+        --accent-ink: #ffffff;
+        --danger: var(--shop-danger);
+        --card: var(--shop-surface);
+        --card-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 8px 24px -8px rgba(16, 24, 40, 0.08);
+        --nav: rgba(255, 255, 255, 0.94);
+        --notice: var(--shop-bg-soft);
+        --cta-primary: var(--shop-ink);
+        --cta-primary-press: var(--shop-accent-hover);
+        --cta-primary-ink: #ffffff;
+        --cta-secondary-bg: #ffffff;
+        --cta-secondary-ink: var(--shop-ink);
+        --cta-secondary-line: var(--line-strong);
+        --cta-shadow: 0 1px 2px rgba(11, 15, 26, 0.2), 0 10px 24px -10px rgba(11, 15, 26, 0.32);
+        --font-sans: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+        --font-serif: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+        --font-mono: "SFMono-Regular", Menlo, Consolas, monospace;
+        --ease: cubic-bezier(0.16, 1, 0.3, 1);
+        --ease-spring: cubic-bezier(0.3, 1.4, 0.4, 1);
+        color-scheme: light;
+      }
+
+      /* ── Reset & Base ──────────────────────────────────────────── */
+      * { box-sizing:border-box; }
+      html,body {
+        margin:0; min-height:100%;
+        background-color:var(--shop-bg);
+        color:var(--paper);
+        font-family:var(--font-sans);
+        -webkit-font-smoothing:antialiased;
+      }
+      body {
+        padding:env(safe-area-inset-top) 12px calc(88px + env(safe-area-inset-bottom));
+        background-image:radial-gradient(72% 30% at 50% -40px, rgba(59, 130, 246, 0.045), transparent 72%);
+        background-repeat:no-repeat;
+      }
+      body.cart-dock-visible { padding-bottom:calc(168px + env(safe-area-inset-bottom)); }
+      body.modal-open { overflow:hidden; }
+      button,input,select { font:inherit; }
+      button { color:inherit; cursor:pointer; touch-action:manipulation; -webkit-tap-highlight-color:transparent; }
+      button:focus-visible,input:focus-visible,select:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+      img { display:block; }
+      .app { width:100%; max-width:760px; margin:0 auto; }
+      .shell { width:100%; max-width:860px; margin:0 auto; }
+
+      /* ── Topbar ─────────────────────────────────────────────────── */
+      .topbar {
+        display:flex; align-items:center; justify-content:space-between;
+        margin-bottom:12px; padding:10px 12px;
+        border:1px solid var(--line); border-radius:0.95rem;
+        background:var(--surface);
+        box-shadow:0 1px 2px rgba(16,24,40,0.03);
+      }
+      .brand { display:flex; align-items:center; gap:10px; min-width:0; font:700 14px/1 var(--font-sans); letter-spacing:-0.01em; color:var(--paper); }
+      .brand-mark {
+        display:grid; place-items:center; width:28px; height:28px;
+        background:linear-gradient(160deg, #1c2536, var(--shop-ink)); color:#fff; border-radius:8px;
+        font:800 14px/1 var(--font-sans);
+        box-shadow:0 2px 6px -1px rgba(11,15,26,0.3), inset 0 1px 0 rgba(255,255,255,0.14);
+      }
+      .identity { display:flex; align-items:center; gap:10px; text-align:right; }
+      .identity span { display:grid; }
+      .identity strong { font:700 13px/1 var(--font-sans); color:var(--paper); }
+      .identity small { font:600 10px/1 var(--font-mono); color:var(--shop-ink-muted); text-transform:uppercase; margin-top:3px; letter-spacing:.06em; }
+      .identity .avatar {
+        display:grid; place-items:center; width:34px; height:34px;
+        border-radius:50%; background:var(--notice); border:1px solid var(--line);
+        color:var(--paper); font:700 13px/1 var(--font-sans);
+      }
+
+      /* ── Hero ───────────────────────────────────────────────────── */
+      .hero {
+        position:relative; overflow:hidden;
+        padding:16px 14px 14px; border:1px solid var(--line); border-radius:1.1rem;
+        background:
+          radial-gradient(80% 120% at 85% -20%, rgba(59,130,246,0.05), transparent 70%),
+          radial-gradient(60% 100% at 10% 120%, rgba(13,166,120,0.05), transparent 70%),
+          var(--surface);
+        text-align:left; margin-bottom:4px;
+        box-shadow:0 1px 2px rgba(16,24,40,0.03);
+      }
+      .hero-kicker, .kicker {
+        display:inline-flex; align-items:center; gap:6px;
+        font:700 10px/1 var(--font-sans); letter-spacing:.05em;
+        text-transform:uppercase; color:var(--paper-soft); margin-bottom:8px;
+        padding:5px 10px; border:1px solid var(--line); border-radius:999px;
+        background:var(--shop-surface-alt);
+      }
+      .hero h1 { margin:0 0 10px; font:800 clamp(1.3rem, 5.5vw, 1.65rem)/1.15 var(--font-sans); letter-spacing:-0.03em; color:var(--paper); }
+      .hero h1 em { font-style:normal; color:var(--paper); background:linear-gradient(120deg, var(--shop-mint), #3b82f6); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
+      .hero p { margin:0 auto 16px; max-width:480px; color:var(--paper-soft); font:13px/1.6 var(--font-sans); }
+      .hero-foot { display:flex; flex-direction:row; align-items:center; justify-content:space-between; gap:10px; width:100%; }
+      .signal { display:flex; align-items:center; gap:8px; color:var(--paper-soft); font:700 10px/1 var(--font-mono); letter-spacing:.06em; text-transform:uppercase; }
+      .signal:before { width:8px; height:8px; border-radius:50%; background:var(--shop-mint); box-shadow:0 0 0 4px rgba(13,166,120,0.14); content:""; flex:0 0 auto; }
+
+      /* ── Session error ──────────────────────────────────────────── */
+      .session-error {
+        display:grid; grid-template-columns:minmax(0,1fr) auto; gap:12px; align-items:center;
+        margin-top:12px; border-radius:0.9rem; padding:14px;
+        border:1px solid rgba(224,72,63,.28); background:var(--shop-danger-soft);
+      }
+      .session-error span { display:block; font:700 10px/1 var(--font-mono); letter-spacing:.08em; text-transform:uppercase; color:#b03830; }
+      .session-error strong { display:block; margin-top:4px; font:700 1.05rem/1.2 var(--font-sans); color:var(--paper); }
+      .session-error p { margin:4px 0 0; color:var(--paper-soft); font-size:.76rem; line-height:1.4; }
+      .session-error button { min-height:40px; border:1px solid var(--danger); border-radius:.6rem; background:var(--danger); color:#fff; font:650 11px/1 var(--font-sans); padding:0 14px; }
+
+      /* ── View layout ────────────────────────────────────────────── */
+      .view { display:none; padding-bottom:32px; }
+      .view.is-active { display:block; animation:viewIn .35s var(--ease) both; }
+      @keyframes viewIn { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:none; } }
+      .section-head, .toolbar { display:flex; align-items:flex-end; justify-content:space-between; gap:12px; margin:22px 0 14px; }
+      .section-head h2, .toolbar h2 { margin:0; font:800 clamp(1.15rem, 4.5vw, 1.4rem)/1.15 var(--font-sans); letter-spacing:-0.03em; color:var(--paper); }
+      .section-head > span, .toolbar p { color:var(--paper-soft); font-size:12px; font-weight:600; padding-bottom:4px; margin:0; }
+      .title-button {
+        min-height:38px; padding:0 13px; border:1px solid var(--line-strong); border-radius:999px;
+        background:var(--surface); color:var(--paper);
+        font:650 11.5px/1 var(--font-sans); white-space:nowrap;
+        transition:transform .15s ease, border-color .15s ease, background .15s ease;
+      }
+      .title-button:active { transform:scale(.96); background:var(--shop-surface-alt); border-color:#b9c2d0; }
+
+      /* ── Catalog ────────────────────────────────────────────────── */
+      .search {
+        display:flex; align-items:center; gap:10px; min-height:46px;
+        padding:0 16px; border:1px solid var(--line-strong); border-radius:999px;
+        background:var(--surface); color:var(--paper-soft);
+        box-shadow:0 1px 2px rgba(16,24,40,0.03);
+        transition:border-color .2s, box-shadow .2s;
+      }
+      .search:focus-within { border-color:var(--paper); box-shadow:0 0 0 4px rgba(11,15,26,0.07); }
+      .search input { width:100%; min-width:0; border:0; outline:0; background:transparent; color:var(--paper); font:14.5px/1 var(--font-sans); }
+      .search input::placeholder { color:var(--shop-ink-muted); }
+      .grid, .catalog { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+      .product {
+        display:grid; grid-template-rows:minmax(168px, 42vw) 1fr;
+        border:1px solid var(--line); border-radius:1rem;
+        background:var(--surface); overflow:hidden;
+        box-shadow:0 1px 2px rgba(16,24,40,0.03);
+        animation:productUp .4s var(--ease) both;
+        transition:transform .18s var(--ease), box-shadow .18s var(--ease);
+      }
+      @media (min-width:400px) { .product { grid-template-rows:minmax(188px, 44vw) 1fr; } }
+      .product:nth-child(2) { animation-delay:.04s; }
+      .product:nth-child(3) { animation-delay:.08s; }
+      .product:nth-child(4) { animation-delay:.12s; }
+      @keyframes productUp { from { opacity:0; transform:translateY(18px) scale(.98); } to { opacity:1; transform:none; } }
+      .product:active { transform:scale(0.985); }
+      .product-media { position:relative; background:var(--shop-bg-soft); overflow:hidden; display:flex; align-items:center; justify-content:center; min-height:0; padding:0; }
+      .product-media img { width:100%; height:100%; object-fit:cover; object-position:center; }
+      .media-placeholder, .placeholder { width:100%; height:100%; display:grid; place-items:center; font:800 1.5rem/1 var(--font-sans); color:var(--shop-ink-muted); }
+      .product-body { padding:12px; display:flex; flex-direction:column; gap:4px; }
+      .product-body h3 { margin:0; font:700 14px/1.2 var(--font-sans); letter-spacing:-0.015em; color:var(--paper); display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+      .product-body p { margin:0; color:var(--paper-soft); font-size:11.5px; line-height:1.4; display:-webkit-box; -webkit-line-clamp:1; -webkit-box-orient:vertical; overflow:hidden; }
+      .product-foot { margin-top:auto; padding-top:10px; display:flex; align-items:center; justify-content:space-between; gap:8px; }
+      .price { display:grid; gap:3px; font:800 15px/1.05 var(--font-sans); letter-spacing:-0.02em; color:var(--paper); }
+      .price small { color:var(--shop-mint); font:650 9px/1 var(--font-mono); letter-spacing:.04em; text-transform:uppercase; }
+      .price del { display:block; color:var(--paper-soft); font-size:10px; font-weight:700; text-decoration:line-through; }
+      .badge, .product-badge { display:inline-flex; align-items:center; min-height:20px; padding:0 8px; border-radius:999px; background:var(--shop-bg-soft); color:var(--paper-soft); font:700 9.5px/1 var(--font-sans); }
+
+      /* ── Bottom Nav ─────────────────────────────────────────────── */
+      .bottom-nav { position:fixed; z-index:20; right:12px; bottom:calc(12px + env(safe-area-inset-bottom)); left:12px; pointer-events:none; }
+      .bottom-nav-inner {
+        display:flex; max-width:400px; margin:auto;
+        border:1px solid var(--line); border-radius:999px;
+        background:var(--nav); padding:6px;
+        backdrop-filter:blur(20px) saturate(1.3); box-shadow:0 4px 12px rgba(16,24,40,0.06), 0 16px 40px -12px rgba(16,24,40,0.22);
+        pointer-events:auto;
+      }
+      .nav-button {
+        flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px;
+        min-height:54px; border-radius:999px; color:var(--paper-soft); font:650 9.5px/1 var(--font-sans); text-transform:uppercase; letter-spacing:.04em; transition:all .2s;
+      }
+      .nav-button svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:2.2; stroke-linecap:round; stroke-linejoin:round; }
+      .nav-button.is-active { background:var(--paper); color:#fff; box-shadow:0 4px 12px rgba(11,15,26,0.28); }
+      .nav-button:active { transform:scale(.92); }
+      .cart-count { display:inline-flex; min-width:18px; height:18px; align-items:center; justify-content:center; border-radius:999px; background:var(--shop-mint); color:#fff; font:700 10px/1 var(--font-sans); margin-left:4px; }
+      .nav-button.is-active .cart-count { background:#fff; color:var(--paper); }
+
+      /* ── Checkout bar ───────────────────────────────────────────── */
+      .checkout-bar {
+        position:fixed; z-index:15; right:12px; left:12px;
+        bottom:calc(72px + env(safe-area-inset-bottom));
+        display:flex; align-items:center; justify-content:space-between; gap:12px;
+        padding:12px 14px;
+        border:1px solid var(--line); border-radius:1.15rem;
+        background:rgba(255,255,255,0.96);
+        backdrop-filter:blur(18px) saturate(1.15);
+        box-shadow:0 2px 6px rgba(16,24,40,0.05), 0 20px 48px -16px rgba(16,24,40,0.24);
+        animation:dockUp .35s var(--ease-spring) both;
+      }
+      @keyframes dockUp { from { transform:translateY(100%); } to { transform:none; } }
+      .checkout-bar[hidden] { display:none !important; }
+      .checkout-bar > div { min-width:0; display:grid; gap:3px; }
+      .checkout-bar small { display:block; color:var(--paper-soft); font:650 11px/1.2 var(--font-sans); }
+      .checkout-bar strong { font:800 19px/1.1 var(--font-sans); color:var(--paper); letter-spacing:-0.02em; }
+
+      /* ── Cart ───────────────────────────────────────────────────── */
+      .cart-list { display:grid; gap:12px; }
+      .cart-row { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:12px; align-items:center; border:1px solid var(--line); border-radius:1rem; background:var(--surface); padding:14px; box-shadow:0 1px 2px rgba(16,24,40,0.03); }
+      .cart-row strong { display:block; font:650 14px/1.25 var(--font-sans); color:var(--paper); margin-bottom:3px; }
+      .cart-row small { color:var(--paper-soft); font-size:12px; }
+      .cart-controls { display:inline-flex; align-items:center; gap:2px; background:var(--shop-bg-soft); border:1px solid var(--line); border-radius:999px; padding:3px; }
+      .cart-controls button { width:30px; height:30px; border-radius:50%; font-size:17px; display:grid; place-items:center; color:var(--paper); background:transparent; }
+      .cart-controls button:active { background:rgba(11,15,26,0.06); }
+      .cart-controls b { min-width:30px; text-align:center; font:650 13px/30px var(--font-mono); }
+      .cart-controls button[data-remove] { background:transparent; color:var(--shop-ink-muted); font:650 10px/1 var(--font-sans); text-transform:uppercase; min-width:auto; width:auto; padding:0 8px; border-radius:999px; }
+      .cart-total { display:flex; justify-content:space-between; margin-top:12px; border-top:1px solid var(--line); padding-top:13px; font-size:13px; font-weight:650; color:var(--paper-soft); }
+      .cart-total strong { font-size:20px; color:var(--paper); letter-spacing:-0.02em; }
+      .empty { display:grid; justify-items:center; gap:8px; padding:36px 16px; border:1px dashed var(--line-strong); border-radius:1rem; background:var(--shop-surface-alt); color:var(--paper-soft); text-align:center; font:600 13px/1.5 var(--font-sans); }
+
+      /* ── Modals (bottom sheets) ─────────────────────────────────── */
+      .modal-backdrop { position:fixed; z-index:30; inset:0; display:none; align-items:flex-end; background:rgba(11,15,26,.32); backdrop-filter:blur(6px); }
+      .modal-backdrop.is-open { display:flex; animation:fadeIn .2s both; }
+      @keyframes fadeIn { from{opacity:0} to{opacity:1} }
+      .modal {
+        width:100%; max-width:600px; max-height:94dvh; margin:0 auto;
+        display:flex; flex-direction:column; overflow:hidden;
+        border:1px solid var(--line); border-bottom:0; border-radius:24px 24px 0 0;
+        background:var(--shop-bg); padding:16px 16px 0;
+        box-shadow:0 -12px 48px rgba(11,15,26,0.22);
+        animation:sheetIn .35s var(--ease-spring) both;
+      }
+      @keyframes sheetIn { from { transform:translateY(100%); } to { transform:none; } }
+      .modal-grip { width:40px; height:5px; border-radius:999px; background:var(--line-strong); margin:0 auto 12px; flex:0 0 auto; }
+      .modal-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; flex:0 0 auto; }
+      .modal-head h2 { margin:0; font:800 clamp(1.15rem, 5vw, 1.4rem)/1.15 var(--font-sans); letter-spacing:-0.02em; color:var(--paper); }
+      .modal-close { width:36px; height:36px; border:1px solid var(--line); border-radius:50%; background:var(--surface); color:var(--paper-soft); font-size:20px; display:grid; place-items:center; }
+      .modal-close:active { transform:scale(.9); }
+      .modal-body { flex:1 1 auto; min-height:0; overflow-y:auto; padding:0 0 calc(16px + env(safe-area-inset-bottom)); -webkit-overflow-scrolling:touch; }
+      .modal-body:has(.product-sheet) { overflow:hidden; display:flex; flex-direction:column; padding-bottom:0; }
+      .modal-copy { color:var(--paper-soft); font:13.5px/1.55 var(--font-sans); margin:0 0 12px; }
+      .modal-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; }
+
+      /* ── Payment ────────────────────────────────────────────────── */
+      .method-list { display:grid; gap:8px; margin:16px 0; }
+      .method-choice {
+        display:grid; grid-template-columns:minmax(0,1fr) auto; gap:12px; align-items:center;
+        border:1px solid var(--line); border-radius:1rem; background:var(--surface); padding:14px;
+        text-align:left; transition:all .2s;
+      }
+      .method-choice:active { transform:scale(.98); }
+      .method-choice.is-selected { border-color:var(--paper); background:var(--shop-surface-alt); box-shadow:0 0 0 1px var(--paper); }
+      .method-choice-main { display:flex; min-width:0; align-items:center; gap:12px; }
+      .method-choice strong { display:block; overflow:hidden; font-size:14px; font-weight:700; color:var(--paper); text-overflow:ellipsis; white-space:nowrap; }
+      .method-choice small { display:block; margin-top:4px; color:var(--paper-soft); font-size:11px; }
+      .method-choice b { font:700 12px/1 var(--font-mono); color:var(--paper-soft); text-transform:uppercase; }
+      .network-mark { display:grid; flex:0 0 auto; width:36px; height:36px; place-items:center; border:1px solid var(--line); border-radius:50%; background:var(--shop-bg-soft); color:var(--paper); font-size:13px; font-weight:800; }
+      .network-mark svg { width:20px; height:20px; fill:currentColor; }
+      .network-mark[data-network="ETHEREUM"] { background:#eff6ff; color:#1d4ed8; border-color:#bfdbfe; }
+      .network-mark[data-network="BSC"] { background:#fefce8; color:#a16207; border-color:#fde047; }
+      .network-mark[data-network="SOLANA"] { background:#f3e8ff; color:#6b21a8; border-color:#d8b4fe; }
+      .network-mark[data-network="POLYGON"] { background:#faf5ff; color:#7e22ce; border-color:#e9d5ff; }
+      .network-mark[data-network="TRON"] { background:#fff1f2; color:#be123c; border-color:#fecdd3; }
+      .network-line { display:flex; align-items:center; gap:7px; margin-top:6px; color:var(--paper-soft); font-size:11px; }
+      .network-line .network-mark { width:20px; height:20px; border-width:1px; font-size:9px; }
+      .network-line .network-mark svg { width:12px; height:12px; }
+      .payment-box { display:grid; gap:16px; border:1px solid var(--line); border-radius:1.25rem; background:var(--shop-surface-alt); padding:18px; margin-top:16px; }
+      .payment-box h3 { color:var(--paper); font:700 18px/1.2 var(--font-sans); margin:0; }
+      .payment-box p { margin:0; color:var(--paper-soft); font-size:13px; line-height:1.5; }
+      .payment-amount { display:flex; align-items:end; justify-content:space-between; gap:10px; border-bottom:1px solid var(--line); padding-bottom:12px; }
+      .payment-amount span { color:var(--paper-soft); font:700 10px/1 var(--font-mono); text-transform:uppercase; letter-spacing:.08em; }
+      .payment-amount strong { color:var(--paper); font:800 28px/1 var(--font-sans); font-variant-numeric:tabular-nums; letter-spacing:-0.02em; }
+      .payment-qr { display:grid; justify-items:center; gap:12px; padding:16px; background:#ffffff; border:1px solid var(--line); border-radius:1rem; }
+      .payment-qr img { display:block; width:min(240px, 100%); aspect-ratio:1; object-fit:contain; }
+      .payment-qr small { color:var(--paper-soft); font-size:11px; font-weight:600; text-align:center; }
+      .payment-field { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; align-items:center; }
+      .payment-field span { min-width:0; overflow-wrap:anywhere; border:1px solid var(--line); border-radius:.6rem; background:var(--surface); padding:12px; color:var(--paper); font:600 12px/1.4 var(--font-mono); }
+      .payment-field-label { display:flex; align-items:center; justify-content:space-between; gap:8px; color:var(--paper); font:700 10px/1 var(--font-mono); text-transform:uppercase; letter-spacing:.05em; }
+      .payment-field-label small { color:var(--paper-soft); font-size:10px; text-transform:none; letter-spacing:0; }
+      .payment-proof { display:grid; gap:12px; border:1px solid var(--line); border-radius:1rem; background:var(--surface); padding:16px; margin-top:16px; }
+      .payment-proof label { display:grid; gap:8px; color:var(--paper); font:700 11px/1 var(--font-mono); text-transform:uppercase; letter-spacing:.05em; }
+      .payment-proof input { width:100%; min-height:46px; border:1px solid var(--line-strong); border-radius:.6rem; background:var(--shop-bg); color:var(--paper); padding:0 12px; font-size:14px; }
+      .payment-proof input:focus { border-color:var(--paper); outline:none; box-shadow:0 0 0 3px rgba(11,15,26,0.08); }
+      .payment-proof input[type="file"] { padding:10px; font-size:12px; }
+      .payment-proof small { color:var(--paper-soft); font-size:12px; line-height:1.5; }
+      .proof-list { display:grid; gap:8px; color:var(--paper-soft); font-size:12px; margin-top:12px; }
+      .proof-item { display:flex; align-items:center; justify-content:space-between; gap:8px; border-top:1px solid var(--line); padding-top:8px; }
+      .proof-item strong { color:var(--paper); font-weight:700; }
+      .payment-status { display:inline-flex; width:max-content; border:1px solid var(--line-strong); border-radius:999px; color:var(--paper-soft); padding:5px 10px; font:700 10px/1 var(--font-mono); letter-spacing:.06em; text-transform:uppercase; }
+      .payment-status.is-paid { border-color:transparent; background:var(--shop-mint); color:#fff; }
+
+      /* ── Orders ─────────────────────────────────────────────────── */
+      .orders-list { display:grid; gap:12px; }
+      .order-card { border:1px solid var(--line); border-radius:1.1rem; background:var(--surface); padding:16px; box-shadow:0 1px 2px rgba(16,24,40,0.03); }
+      .order-card header { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:10px; }
+      .order-card h3 { margin:0; font:700 15px/1.2 var(--font-sans); color:var(--paper); }
+      .order-card time { color:var(--shop-ink-muted); font:500 11.5px/1 var(--font-sans); }
+      .order-card p { margin:0; color:var(--paper-soft); font:13px/1.4 var(--font-sans); }
+      .order-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; }
+      .order-actions button { flex:1; min-height:42px; border:1px solid var(--line-strong); border-radius:.8rem; background:var(--surface); color:var(--paper); font:650 12px/1 var(--font-sans); transition:all .2s; padding:0 12px; }
+      .order-actions button:active { transform:scale(.98); }
+      .order-actions button.primary { background:var(--cta-primary); color:#fff; border-color:transparent; box-shadow:var(--cta-shadow); }
+
+      /* ── Toast ──────────────────────────────────────────────────── */
+      .toast {
+        position:fixed; z-index:40; right:12px; bottom:calc(90px + env(safe-area-inset-bottom)); left:12px;
+        display:none; max-width:400px; margin:auto;
+        border:1px solid var(--line); border-radius:1rem;
+        background:var(--surface); color:var(--paper);
+        padding:14px 16px; font:600 13px/1.4 var(--font-sans); text-align:center;
+        box-shadow:0 8px 32px rgba(11,15,26,0.18);
+      }
+      .toast.is-visible { display:block; animation:toastIn .3s var(--ease-spring) both; }
+      @keyframes toastIn { 0%{opacity:0;transform:translateY(24px) scale(.94)} 100%{opacity:1;transform:none} }
+
+      /* ── Unified CTA kit ────────────────────────────────────────── */
+      .button.primary, .btn-cta, .btn-cta--primary, .product-action,
+      .checkout-bar button, .order-actions button.primary,
+      .product-sheet__dock .btn-cta--primary {
+        appearance:none; -webkit-appearance:none;
+        display:inline-flex; align-items:center; justify-content:center; gap:8px;
+        min-height:44px; padding:0 16px;
+        border:0; border-radius:999px;
+        background:var(--cta-primary); color:var(--cta-primary-ink);
+        font:650 13px/1 var(--font-sans); letter-spacing:-0.01em;
+        box-shadow:var(--cta-shadow);
+        transition:transform .16s var(--ease), box-shadow .16s var(--ease), background .16s ease, opacity .16s;
+        cursor:pointer; text-decoration:none;
+      }
+      .button.primary:active, .btn-cta--primary:active, .product-action:active,
+      .checkout-bar button:active {
+        transform:scale(0.97); background:var(--cta-primary-press);
+        box-shadow:0 1px 4px rgba(11,15,26,0.18);
+      }
+      .button.primary:disabled, .btn-cta--primary:disabled, .product-action:disabled,
+      .checkout-bar button:disabled {
+        opacity:.42; cursor:not-allowed; transform:none; box-shadow:none;
+        background:var(--shop-bg-soft); color:var(--shop-ink-muted);
+      }
+      .product-action { min-height:42px; min-width:5.5rem; padding:0 12px; font:700 12px/1 var(--font-sans); white-space:nowrap; }
+      .button:not(.primary), .button.secondary, .btn-cta--secondary, .button.dark {
+        appearance:none; -webkit-appearance:none;
+        display:inline-flex; align-items:center; justify-content:center; gap:6px;
+        min-height:44px; padding:0 14px;
+        border:1px solid var(--cta-secondary-line); border-radius:999px;
+        background:var(--cta-secondary-bg); color:var(--cta-secondary-ink);
+        font:650 13px/1 var(--font-sans);
+        box-shadow:0 1px 2px rgba(16,24,40,0.04);
+        transition:transform .15s ease, background .15s ease, border-color .15s ease;
+        cursor:pointer; text-decoration:none;
+      }
+      .button:not(.primary):active, .button.secondary:active, .btn-cta--secondary:active {
+        transform:scale(0.97); background:var(--shop-surface-alt); border-color:#b9c2d0;
+      }
+      .button.dark { background:var(--cta-primary); border-color:transparent; color:#fff; box-shadow:var(--cta-shadow); }
+
+      /* ── Product sheet (PDP in modal) ───────────────────────────── */
+      .product-sheet { flex:1 1 auto; min-height:0; display:flex; flex-direction:column; gap:0; padding-bottom:0; }
+      .product-sheet__scroll {
+        flex:1 1 auto; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch;
+        display:grid; gap:14px; padding:2px 2px 16px;
+      }
+      .product-sheet__hero {
+        margin:0 -2px; border-radius:1rem; overflow:hidden;
+        aspect-ratio:1 / 1; min-height:min(52vw, 240px); max-height:min(72vw, 340px);
+        background:var(--shop-bg-soft); border:1px solid var(--line);
+      }
+      .product-sheet__hero img { width:100%; height:100%; object-fit:cover; object-position:center; display:block; }
+      .product-sheet__head { display:grid; gap:10px; }
+      .sheet-chips { display:flex; flex-wrap:wrap; gap:6px; }
+      .sheet-chip {
+        display:inline-flex; align-items:center; min-height:26px; padding:0 11px;
+        border-radius:999px; background:var(--shop-bg-soft); border:1px solid var(--line);
+        color:var(--paper-soft); font:650 11px/1 var(--font-sans);
+      }
+      .product-sheet__lead { margin:0; color:var(--paper); font:600 15px/1.45 var(--font-sans); }
+      .product-sheet__section { display:grid; gap:10px; }
+      .product-sheet__label { margin:0; color:var(--paper-soft); font:700 10.5px/1 var(--font-sans); letter-spacing:.05em; text-transform:uppercase; }
+      .product-sheet__body { color:var(--paper-soft); font:13.5px/1.55 var(--font-sans); max-height:8rem; overflow:auto; padding-right:4px; }
+      .product-sheet__trust { padding:12px 14px; border-radius:.9rem; border:1px solid var(--line); background:var(--shop-surface-alt); }
+      .product-sheet__trust p { margin:0 0 6px; color:var(--paper); font:600 12.5px/1.4 var(--font-sans); }
+      .product-sheet__hint { margin:0; color:var(--paper-soft); font:500 11.5px/1.4 var(--font-sans); }
+      .plan-list { display:grid; gap:8px; }
+      .plan-card {
+        display:grid; grid-template-columns:minmax(0,1fr) auto; gap:10px; align-items:center;
+        text-align:left; min-height:64px; padding:12px 14px;
+        border:1.5px solid var(--line); border-radius:1rem; background:var(--surface);
+        transition:border-color .15s, box-shadow .15s, transform .15s, background .15s;
+      }
+      .plan-card.is-selected {
+        border-color:var(--cta-primary); background:var(--shop-surface-alt);
+        box-shadow:0 0 0 1px var(--cta-primary), 0 8px 18px -8px rgba(11,15,26,0.2);
+      }
+      .plan-card:active:not(:disabled) { transform:scale(.985); }
+      .plan-card:disabled { opacity:.45; }
+      .plan-card__main { display:grid; gap:4px; min-width:0; }
+      .plan-card__main b { font:700 14px/1.2 var(--font-sans); color:var(--paper); }
+      .plan-card__main small { color:var(--paper-soft); font:500 12px/1.3 var(--font-sans); }
+      .plan-card__price { text-align:right; display:grid; gap:3px; }
+      .plan-card__price strong { font:800 16px/1 var(--font-sans); color:var(--paper); }
+      .plan-card__price del { color:var(--paper-soft); font:600 11px/1 var(--font-sans); }
+      .product-sheet__dock {
+        flex:0 0 auto; z-index:4; display:grid; gap:10px;
+        margin:0 -16px; padding:12px 16px calc(12px + env(safe-area-inset-bottom));
+        border-top:1px solid var(--line);
+        background:rgba(255,255,255,.97);
+        backdrop-filter:blur(14px);
+        box-shadow:0 -10px 28px rgba(11,15,26,0.1);
+      }
+      .product-sheet__dock-price { min-width:0; display:grid; gap:2px; }
+      .product-sheet__dock-price small { color:var(--paper-soft); font:650 11px/1.2 var(--font-sans); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+      .product-sheet__dock-price strong { font:800 1.2rem/1.1 var(--font-sans); color:var(--paper); letter-spacing:-.02em; }
+      .product-sheet__dock-actions { display:grid; grid-template-columns:1fr 1.35fr; gap:8px; }
+      .product-sheet__dock-actions .btn-cta--secondary { min-height:50px; }
+      .product-sheet__dock-actions .btn-cta--primary { min-height:50px; font-size:15px; letter-spacing:-.01em; }
+      .product-sheet__related { padding-bottom:4px; }
+      .related-rail {
+        display:grid; grid-auto-flow:column; grid-auto-columns:minmax(148px, 62%);
+        gap:10px; overflow-x:auto; padding:2px 2px 8px; scroll-snap-type:x mandatory;
+        -webkit-overflow-scrolling:touch; scrollbar-width:none;
+      }
+      .related-rail::-webkit-scrollbar { display:none; }
+      .related-card {
+        scroll-snap-align:start; display:grid; gap:8px; padding:0; border:1px solid var(--line);
+        border-radius:14px; background:var(--surface); overflow:hidden; text-align:left; cursor:pointer;
+        color:inherit; font:inherit; box-shadow:0 1px 2px rgba(16,24,40,0.03);
+        transition:transform .16s ease;
+      }
+      .related-card:active { transform:scale(.985); }
+      .related-card__media { aspect-ratio:4/3; background:var(--shop-bg-soft); overflow:hidden; }
+      .related-card__media img { width:100%; height:100%; object-fit:cover; display:block; }
+      .related-card__media .media-placeholder, .related-card__media .placeholder {
+        width:100%; height:100%; display:grid; place-items:center;
+        font:800 1.4rem/1 var(--font-sans); color:var(--shop-ink-muted);
+      }
+      .related-card__body { display:grid; gap:4px; padding:0 10px 10px; min-width:0; }
+      .related-card__body b {
+        font:700 13px/1.25 var(--font-sans); color:var(--paper);
+        display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
+      }
+      .related-card__body strong { font:800 14px/1 var(--font-sans); color:var(--paper); }
+
+      /* ── Skeletons ──────────────────────────────────────────────── */
+      .catalog-skeleton { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+      .catalog-skeleton__card {
+        min-height:210px; border-radius:1rem; border:1px solid var(--line);
+        background:linear-gradient(90deg, var(--shop-bg-soft) 25%, #fff 50%, var(--shop-bg-soft) 75%);
+        background-size:200% 100%; animation:shop-skel 1.1s ease infinite;
+      }
+      @keyframes shop-skel { 0%{background-position:100% 0} 100%{background-position:-100% 0} }
+
+      /* ── Media queries ──────────────────────────────────────────── */
+      @media (min-width:600px) {
+        .grid, .catalog { grid-template-columns:repeat(3,minmax(0,1fr)); }
+        .modal { padding:32px 32px calc(32px + env(safe-area-bottom)); border-radius:32px 32px 0 0; }
+        .bottom-nav { padding-bottom:24px; }
+        .bottom-nav-inner { padding:8px; gap:12px; max-width:480px; }
+      }
+      @media (max-width:420px) {
+        .checkout-bar { right:10px; left:10px; bottom:calc(70px + env(safe-area-inset-bottom)); padding:10px 12px; }
+        .checkout-bar button { min-width:6.5rem; }
+      }
+      @media (max-width:359px) { body { padding-right:9px; padding-left:9px; } .product-action { width:100%; } }
+      @media (prefers-reduced-motion:reduce) {
+        *,*:before,*:after { animation-duration:.01ms!important; transition-duration:.01ms!important; }
+      }
+    </style>  </head>
+  <body data-session="pending">
+    <div class="shell">
+      <header class="topbar"><a class="brand" href="/telegram/glb" aria-label="GLB Store home"><span class="brand-mark">G</span><span>GLB STORE</span></a><div class="identity"><span><strong id="hello">Telegram</strong><small id="identity-status">Verifying session</small></span><span class="avatar" id="avatar">G</span></div></header>
+      <aside class="session-error" id="session-error" hidden role="alert"><div><strong id="session-error-title">Telegram session unavailable</strong><p id="session-error-copy">Open this Mini App from the GLB Store bot in Telegram.</p></div><button type="button" id="session-retry">Retry</button></aside>
+      <section class="hero"><p class="kicker">GLB Store · USD · USDT / USDC</p><h1>Shop digital goods <em>globally</em></h1><div class="hero-foot"><button class="button primary" id="browse-button" type="button">Browse products</button><span class="signal" id="session-signal">Verifying Telegram</span></div></section>
+      <!-- Payment rails: USDT USDC Bybit Binance ERC20 BEP20 SOLANA POLYGON manual review -->
+
+      <main>
+        <section class="view is-active" data-view="home"><div class="toolbar"><div><p class="kicker">Catalog</p><h2>Featured products</h2><p id="catalog-count">Loading catalog…</p></div><label class="search"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="Search products" aria-label="Search products" /></label></div><div class="catalog" id="catalog"><div class="catalog-skeleton" aria-hidden="true"><div class="catalog-skeleton__card"></div><div class="catalog-skeleton__card"></div><div class="catalog-skeleton__card"></div><div class="catalog-skeleton__card"></div></div></div></section>
+        <section class="view" data-view="cart"><div class="toolbar"><div><p class="kicker">Your selection</p><h2>Cart</h2><p id="cart-count">0 items</p></div></div><div class="cart-list" id="cart-list"></div></section>
+        <section class="view" data-view="orders"><div class="toolbar"><div><p class="kicker">Verified history</p><h2>Orders</h2><p>Orders are tied to this Telegram account.</p></div><button class="button" id="refresh-orders" type="button">Refresh</button></div><div class="orders-list" id="orders-list"></div></section>
+      </main>
+    </div>
+    <div class="checkout-bar" id="checkout-bar" hidden><div><small id="checkout-count">0 items</small><strong id="checkout-total">$0.00</strong></div><button id="checkout-button" type="button">Checkout</button></div>
+    <nav class="bottom-nav" aria-label="GLB Store navigation"><div class="bottom-nav-inner"><button class="nav-button is-active" data-nav="home" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5"></path><path d="M5 9.5V21h14V9.5"></path><path d="M9 21v-7h6v7"></path></svg><span>Shop</span></button><button class="nav-button" data-nav="cart" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h2l2.2 10.2a2 2 0 0 0 2-1.6h7.9a2 2 0 0 0 2-1.6L21 8H6"></path><circle cx="10" cy="20" r="1"></circle><circle cx="18" cy="20" r="1"></circle></svg><span>Cart <span class="cart-count" id="cart-badge">0</span></span></button><button class="nav-button" data-nav="orders" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3 2-3 2V3Z"></path><path d="M9 8h6M9 12h6"></path></svg><span>Orders</span></button></div></nav>
+    <div class="modal-backdrop" id="modal-backdrop" aria-hidden="true"><section class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"><header class="modal-head"><h2 id="modal-title">Checkout</h2><button class="modal-close" id="modal-close" type="button" aria-label="Close">×</button></header><div class="modal-body" id="modal-body"></div></section></div>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+    <script is:inline define:vars={{ serializedCatalog, botConfigId }}>
+      const catalog = JSON.parse(serializedCatalog).map((product) => ({
+        ...product,
+        description: product.shortDescription || product.description || "",
+        imageUrl: product.coverUrl || product.media?.[0]?.url || "",
+      }));
+      const tg = window.Telegram?.WebApp;
+      const botHeader = botConfigId ? { "x-telegram-bot-config": botConfigId } : {};
+      const cartKey = "glb:store:cart:v1";
+      const $ = (selector) => document.querySelector(selector);
+      const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[char]));
+      const money = (minor) => new Intl.NumberFormat("en-US", { style:"currency", currency:"USD" }).format(Number(minor || 0) / 100);
+      const networkMeta = (network) => {
+        const key = String(network || "").trim().toUpperCase();
+        const aliases = { ERC20:"ETHEREUM", ETH:"ETHEREUM", ETHEREUM:"ETHEREUM", BEP20:"BSC", "BEP-20":"BSC", BSC:"BSC", BNB:"BSC", SOL:"SOLANA", SOLANA:"SOLANA", MATIC:"POLYGON", POLYGON:"POLYGON", TRC20:"TRON", TRON:"TRON" };
+        const canonical = aliases[key] || key || "NETWORK";
+        const map = {
+          ETHEREUM: { label:"Ethereum", rail:"ERC20", glyph:"◆", icon:"<svg viewBox='0 0 24 24' aria-hidden='true'><path d='m12 2 7 10-7 4-7-4 7-10Zm0 16 7-4-7 8-7-8 7 4Z'/></svg>" },
+          BSC: { label:"BNB Chain", rail:"BEP20", glyph:"◇", icon:"<svg viewBox='0 0 24 24' aria-hidden='true'><path d='m12 2 3 3-3 3-3-3 3-3Zm-6 6 3 3-3 3-3-3 3-3Zm12 0 3 3-3 3-3-3 3-3Zm-6 6 3 3-3 3-3-3 3-3Zm0-6 3 3-3 3-3-3 3-3Z'/></svg>" },
+          SOLANA: { label:"Solana", rail:"SOL", glyph:"S", icon:"<svg viewBox='0 0 24 24' aria-hidden='true'><path d='M5 5h14l-3 3H2l3-3Zm0 5h14l3 3H8l-3-3Zm0 6h14l-3 3H2l3-3Z'/></svg>" },
+          POLYGON: { label:"Polygon", rail:"Polygon", glyph:"P", icon:"<svg viewBox='0 0 24 24' aria-hidden='true'><path d='M7 5h4v4H7v6h4v4H7a4 4 0 0 1-4-4V9a4 4 0 0 1 4-4Zm6 0h4a4 4 0 0 1 4 4v6a4 4 0 0 1-4 4h-4v-4h4V9h-4V5Z'/></svg>" },
+          TRON: { label:"TRON", rail:"TRC20", glyph:"T", icon:"<svg viewBox='0 0 24 24' aria-hidden='true'><path d='m4 4 16 3-5 13-3-8-8-8Zm3.6 3.4 4.2 4.2 1.6 4.8 3-7.4-8.8-1.6Z'/></svg>" },
+        };
+        return { key:canonical, ...(map[canonical] || { label:canonical, rail:canonical, glyph:"•", icon:"<svg viewBox='0 0 24 24' aria-hidden='true'><circle cx='12' cy='12' r='7'/></svg>" }) };
+      };
+      const isInternalUid = (method) => String(method?.rail || "").toLowerCase() === "internal_uid" || String(method?.destinationType || "").toLowerCase() === "uid";
+      const transferMeta = (method) => isInternalUid(method)
+        ? { key:"UID", label:`${String(method?.provider || "Exchange").toLowerCase() === "binance" ? "Binance" : String(method?.provider || "").toLowerCase() === "bybit" ? "Bybit" : "Exchange"} UID`, rail:"Internal transfer", glyph:"U", icon:"<svg viewBox='0 0 24 24' aria-hidden='true'><circle cx='12' cy='12' r='8'/><path d='M9 9v4a3 3 0 0 0 6 0V9M9 17h6'/></svg>" }
+        : networkMeta(method?.network);
+      const networkMark = (network) => { const meta = networkMeta(network); return `<span class="network-mark" data-network="${esc(meta.key)}" title="${esc(meta.label)}"><span aria-hidden="true">${meta.icon}</span></span>`; };
+      const networkLabel = (network) => { const meta = networkMeta(network); return `${meta.label} · ${meta.rail}`; };
+      const transferMark = (method) => { const meta = transferMeta(method); return `<span class="network-mark" data-network="${esc(meta.key)}" title="${esc(meta.label)}"><span aria-hidden="true">${meta.icon}</span></span>`; };
+      const transferLabel = (method) => { const meta = transferMeta(method); return `${meta.label} · ${meta.rail}`; };
+      const safeStorage = (storage, key, fallback) => { try { return storage.getItem(key) || fallback; } catch { return fallback; } };
+      const readCart = () => { try { const value = JSON.parse(safeStorage(localStorage, cartKey, "[]")); return Array.isArray(value) ? value.filter((item) => item && typeof item.variantId === "string") : []; } catch { return []; } };
+      const state = { cart: readCart(), orders: [], methods: [], methodsError: "", sessionReady: false, view: "home", query: "", selectedMethodId: "", payment: null, pollTimer: null, pollStartedAt: 0, pollAttempts: 0, pollingEnabled: false, checkoutBusy: false, proofBusy: false };
+      const writeCart = () => { try { localStorage.setItem(cartKey, JSON.stringify(state.cart.slice(0, 30))); } catch {} renderCart(); };
+      const getInitData = () => tg?.initData || "";
+      const waitForInitData = async (timeoutMs = 2800) => { const started = Date.now(); let delay = 80; while (!getInitData() && Date.now() - started < timeoutMs) { await new Promise((resolve) => window.setTimeout(resolve, delay)); delay = Math.min(320, Math.round(delay * 1.45)); } return getInitData(); };
+      const showToast = (message) => { const node = $("#toast"); node.textContent = message; node.classList.add("is-visible"); window.clearTimeout(showToast.timer); showToast.timer = window.setTimeout(() => node.classList.remove("is-visible"), 2600); };
+      const api = async (path, options = {}) => {
+        const bootstrap = path === "session";
+        const send = async (includeInitData) => {
+          const headers = new Headers(options.headers || {});
+          if (includeInitData) headers.set("x-telegram-init-data", getInitData());
+          Object.entries(botHeader).forEach(([key, value]) => headers.set(key, value));
+          if (options.body && !(options.body instanceof FormData) && !headers.has("content-type")) headers.set("content-type", "application/json");
+          const response = await fetch(`/api/shop/glb-mini/${path}`, { ...options, credentials:"include", headers });
+          const payload = await response.json().catch(() => ({}));
+          return { response, payload };
+        };
+        let result = await send(bootstrap || !state.sessionReady);
+        // Recover an expired/revoked opaque session once without putting
+        // initData on every normal polling request.
+        if ((!result.response.ok || result.payload.ok === false)
+          && !bootstrap
+          && ["telegram_session_required", "telegram_auth_required"].includes(result.payload.code)
+          && getInitData()) {
+          state.sessionReady = false;
+          result = await send(true);
+          if (result.response.ok && result.payload.ok !== false) state.sessionReady = true;
+        }
+        if (!result.response.ok || result.payload.ok === false) { const error = new Error(result.payload.code || "request_failed"); error.code = result.payload.code; throw error; }
+        return result.payload;
+      };
+      const setSessionError = (error) => { document.body.dataset.session = "error"; $("#session-error").hidden = false; $("#session-error-title").textContent = error?.code === "telegram_auth_invalid" ? "Open from the GLB Store bot" : "Telegram session unavailable"; $("#session-error-copy").textContent = "Keep this Mini App open in Telegram, then retry the secure session."; $("#identity-status").textContent = "Session not verified"; $("#session-signal").textContent = "Open from Telegram"; };
+      async function bootstrapSession() { if (state.sessionReady) return; if (!getInitData()) { setSessionError({ code:"telegram_auth_required" }); return; } try { const result = await api("session"); state.sessionReady = true; document.body.dataset.session = "ready"; $("#session-error").hidden = true; $("#hello").textContent = result.user?.firstName || "Telegram"; $("#avatar").textContent = (result.user?.firstName || "G").slice(0, 1).toUpperCase(); $("#identity-status").textContent = "Secure session"; $("#session-signal").textContent = "Ready to checkout"; } catch (error) { setSessionError(error); } }
+      const variantById = (id) => catalog.flatMap((product) => product.variants.map((variant) => ({ ...variant, product }))).find((item) => item.id === id);
+      const add = (variantId) => {
+        const variant = variantById(variantId);
+        if (!variant || variant.availability === "out_of_stock") return false;
+        const current = state.cart.find((item) => item.variantId === variantId);
+        if (current) current.quantity = Math.min(variant.maxPerOrder || 10, current.quantity + 1);
+        else state.cart.push({ variantId, quantity: 1 });
+        writeCart();
+        showToast("Added to cart");
+        return true;
+      };
+      const buyNow = async (variantId) => {
+        const variant = variantById(variantId);
+        if (!variant || variant.availability === "out_of_stock") {
+          showToast("This plan is unavailable");
+          return;
+        }
+        state.cart = [{ variantId, quantity: 1 }];
+        writeCart();
+        await checkout();
+      };
+      const updateQuantity = (id, delta) => { const item = state.cart.find((row) => row.variantId === id); if (!item) return; const variant = variantById(id); item.quantity = Math.max(0, Math.min(variant?.maxPerOrder || 10, item.quantity + delta)); state.cart = state.cart.filter((row) => row.quantity > 0); writeCart(); };
+      
+      function deliveryText(product, variant) {
+        const mode = variant?.deliveryMode || product.deliveryMode || "manual";
+        if (mode === "automatic") return "Automatic key delivery after payment is verified";
+        return "Manual crypto review — upload proof, then we confirm and deliver keys";
+      }
+      function relatedProductsFor(product, limit = 4) {
+        const key = product.categorySlug || product.productType || product.category || "";
+        const pool = catalog.filter((item) => item.slug !== product.slug);
+        const same = pool.filter((item) => (item.categorySlug || item.productType || item.category || "") === key);
+        const rest = pool.filter((item) => !same.includes(item));
+        return [...same, ...rest].slice(0, limit);
+      }
+      function relatedRailMarkup(product) {
+        const related = relatedProductsFor(product, 4);
+        if (!related.length) return "";
+        const cards = related.map((item) => {
+          const plan = (item.variants || []).find((v) => v.availability !== "out_of_stock") || item.variants?.[0];
+          const src = item.coverUrl || item.imageUrl || item.media?.[0]?.url || "";
+          const price = plan ? money(plan.priceMinor) : "—";
+          return `<button type="button" class="related-card" data-open-product="${esc(item.slug)}">
+            <div class="related-card__media">${src ? `<img src="${esc(src)}" alt="" width="240" height="180" loading="lazy" decoding="async">` : `<div class="placeholder">${esc(item.title.slice(0,1))}</div>`}</div>
+            <span class="related-card__body"><b>${esc(item.title)}</b><strong>${price}</strong></span>
+          </button>`;
+        }).join("");
+        return `<div class="product-sheet__section product-sheet__related"><h3 class="product-sheet__label">Related products</h3><div class="related-rail">${cards}</div></div>`;
+      }
+      function productSheetMarkup(product, selectedId) {
+        const plans = product.variants || [];
+        const selected = plans.find((item) => item.id === selectedId) || plans.find((item) => item.availability !== "out_of_stock") || plans[0];
+        const src = product.coverUrl || product.imageUrl || product.media?.[0]?.url || "";
+        const lead = product.shortDescription || product.description || "Digital product for global buyers.";
+        const body = product.description && product.description !== lead ? product.description : "";
+        const canBuy = selected && selected.availability !== "out_of_stock";
+        const plansHtml = plans.map((variant) => {
+          const active = selected && variant.id === selected.id;
+          const disabled = variant.availability === "out_of_stock";
+          return `<button type="button" class="plan-card ${active ? "is-selected" : ""}" data-select-plan="${esc(variant.id)}" data-product-slug="${esc(product.slug)}" ${disabled ? "disabled" : ""}>
+            <span class="plan-card__main"><b>${esc(variant.title || variant.sku)}</b>
+            <small>${esc(variant.benefitLine || variant.availability)}</small></span>
+            <span class="plan-card__price"><strong>${money(variant.priceMinor)}</strong>
+            ${variant.compareAtMinor ? `<del>${money(variant.compareAtMinor)}</del>` : ""}</span>
+          </button>`;
+        }).join("");
+        const chips = [product.category || product.eyebrow, selected?.availability === "out_of_stock" ? "Out of stock" : "In stock"].filter(Boolean)
+          .map((label) => `<span class="sheet-chip">${esc(String(label))}</span>`).join("");
+        return `<div class="product-sheet" data-sheet-product="${esc(product.slug)}">
+          <div class="product-sheet__scroll">
+            <div class="product-sheet__hero">${src ? `<img src="${esc(src)}" alt="" width="640" height="480" decoding="async">` : `<div class="placeholder">${esc(product.title.slice(0,1))}</div>`}</div>
+            <div class="product-sheet__head"><div class="sheet-chips">${chips}</div>
+              <p class="product-sheet__lead">${esc(lead)}</p></div>
+            <div class="product-sheet__section"><h3 class="product-sheet__label">Choose a plan</h3>
+              <div class="plan-list">${plansHtml}</div></div>
+            ${body ? `<div class="product-sheet__section"><h3 class="product-sheet__label">What's included</h3><div class="product-sheet__body">${esc(body).replaceAll("\n","<br>")}</div></div>` : ""}
+            <div class="product-sheet__section product-sheet__trust"><h3 class="product-sheet__label">Delivery</h3>
+              <p>${esc(deliveryText(product, selected))}</p>
+              <p class="product-sheet__hint">Pay with USDT/USDC on Bybit or Binance. Keys unlock after manual approval.</p></div>
+            ${relatedRailMarkup(product)}
+          </div>
+          <div class="product-sheet__dock">
+            <div class="product-sheet__dock-price">
+              <small id="sheet-plan-label">${esc(selected?.title || "—")}</small>
+              <strong id="sheet-plan-price">${selected ? money(selected.priceMinor) : "—"}</strong>
+            </div>
+            <div class="product-sheet__dock-actions">
+              <button type="button" class="btn-cta--secondary" data-add="${esc(selected?.id || "")}" ${canBuy ? "" : "disabled"}>${canBuy ? "Add to cart" : "Out of stock"}</button>
+              <button type="button" class="btn-cta--primary button primary" data-buy-now="${esc(selected?.id || "")}" ${canBuy ? "" : "disabled"}>${canBuy ? "Buy now" : "Out of stock"}</button>
+            </div>
+          </div>
+        </div>`;
+      }
+      function openProduct(slug) {
+        const product = catalog.find((item) => item.slug === slug);
+        if (!product) return;
+        const first = (product.variants || []).find((item) => item.availability !== "out_of_stock") || product.variants?.[0];
+        openModal(product.title, productSheetMarkup(product, first?.id || ""));
+      }
+      function selectPlanInSheet(productSlug, variantId) {
+        const product = catalog.find((item) => item.slug === productSlug);
+        if (!product) return;
+        const body = $("#modal-body");
+        if (body) body.innerHTML = productSheetMarkup(product, variantId);
+      }
+      function renderCatalog() { const query = state.query.trim().toLowerCase(); const items = catalog.filter((product) => !query || `${product.title} ${product.description}`.toLowerCase().includes(query)); $("#catalog-count").textContent = `${items.length} product${items.length === 1 ? "" : "s"} · USD pricing`; $("#catalog").innerHTML = items.length ? items.map((product) => { const first = product.variants[0]; const unavailable = !first || first.availability === "out_of_stock"; const image = product.imageUrl ? `<img src="${esc(product.imageUrl)}" alt="" loading="lazy">` : `<div class="placeholder">${esc(product.title.slice(0, 1))}</div>`; return `<article class="product" data-product="${esc(product.slug)}"><div class="product-media">${image}</div><div class="product-body"><small>${esc(product.eyebrow || product.category || "Digital goods")}</small><h3><button class="title-button" type="button" data-open-product="${esc(product.slug)}">${esc(product.title)}</button></h3><p>${esc(product.shortDescription || product.description || "")}</p><div class="product-foot"><span class="price">${first ? money(first.priceMinor) : "—"}${first?.compareAtMinor ? `<del>${money(first.compareAtMinor)}</del>` : ""}</span><button class="product-action" data-open-product="${esc(product.slug)}" type="button" ${unavailable ? "disabled" : ""}>${unavailable ? "Out of stock" : product.variants.length > 1 ? "View plans" : "View"}</button></div></div></article>`; }).join("") : `<div class="empty">No products match your search.</div>`; }
+      function renderCart() { const count = state.cart.reduce((sum, item) => sum + item.quantity, 0); const total = state.cart.reduce((sum, item) => sum + (variantById(item.variantId)?.priceMinor || 0) * item.quantity, 0); $("#cart-count").textContent = `${count} item${count === 1 ? "" : "s"}`; $("#cart-badge").textContent = String(count); $("#checkout-count").textContent = `${count} item${count === 1 ? "" : "s"}`; $("#checkout-total").textContent = money(total); $("#checkout-bar").hidden = state.view !== "cart" || !count;
+        // Cart tools (bridge + suggest)
+        let tools = document.getElementById("cart-tools");
+        if (!tools) {
+          tools = document.createElement("div");
+          tools.id = "cart-tools";
+          tools.style.cssText = "display:grid;gap:8px;margin:12px 0;";
+          $("#cart-list")?.parentElement?.insertBefore(tools, $("#cart-list").nextSibling);
+        }
+        tools.hidden = state.view !== "cart";
+        tools.innerHTML = state.cart.length
+          ? `<button type="button" class="button secondary" data-share-bridge>Share cart link</button><button type="button" class="button secondary" data-suggest-products>Suggest packages</button>`
+          : "";
+ $("#cart-list").innerHTML = state.cart.length ? `${state.cart.map((item) => { const variant = variantById(item.variantId); return variant ? `<article class="cart-row"><div><strong>${esc(variant.product.title)}</strong><small>${esc(variant.title)} · ${money(variant.priceMinor)} each</small></div><div class="cart-controls"><button type="button" data-qty="${esc(item.variantId)}" data-delta="-1" aria-label="Decrease">−</button><b>${item.quantity}</b><button type="button" data-qty="${esc(item.variantId)}" data-delta="1" aria-label="Increase">+</button><button type="button" data-remove="${esc(item.variantId)}" aria-label="Remove">×</button></div></article>` : ""; }).join("")}<div class="cart-total"><span>Total</span><strong>${money(total)}</strong></div>` : `<div class="empty">Your cart is empty.<br /><button class="button primary" data-nav="home" type="button">Browse products</button></div>`; }
+      function showView(view) { state.view = view; document.querySelectorAll("[data-view]").forEach((node) => node.classList.toggle("is-active", node.dataset.view === view)); document.querySelectorAll("[data-nav]").forEach((node) => node.classList.toggle("is-active", node.dataset.nav === view)); renderCart(); if (view === "orders") void loadOrders(); haptic("light"); window.scrollTo({ top:0, behavior:"smooth" }); }
+      const openModal = (title, html) => { $("#modal-title").textContent = title; $("#modal-body").innerHTML = html; $("#modal-backdrop").classList.add("is-open"); $("#modal-backdrop").setAttribute("aria-hidden", "false"); document.body.classList.add("modal-open"); try { tg?.BackButton?.show(); } catch {} };
+      const closeModal = () => { if (state.pollTimer) { window.clearTimeout(state.pollTimer); state.pollTimer = null; } state.pollingEnabled = false; $("#modal-backdrop").classList.remove("is-open"); $("#modal-backdrop").setAttribute("aria-hidden", "true"); document.body.classList.remove("modal-open"); try { tg?.BackButton?.hide(); } catch {} };
+      const copyValue = async (value) => { try { await navigator.clipboard.writeText(value); showToast("Copied"); } catch { showToast("Copy failed — select the value manually"); } };
+      async function loadMethods() {
+        state.methodsError = "";
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          try {
+            if (!getInitData()) await waitForInitData();
+            const result = await api("methods");
+            state.methods = Array.isArray(result.methods) ? result.methods : [];
+            if (state.methods.length || attempt === 1) return state.methods;
+          } catch (error) {
+            state.methods = [];
+            state.methodsError = error?.code === "telegram_auth_required" || error?.code === "telegram_auth_invalid"
+              ? "Secure Telegram session expired. Close and reopen GLB Store from the bot."
+              : "Payment methods are temporarily unavailable. Please try again.";
+            if (attempt === 1) return state.methods;
+          }
+          await new Promise((resolve) => window.setTimeout(resolve, 350));
+        }
+        return state.methods;
+      }
+      function checkoutPanel() { const methods = state.methods; const total = state.cart.reduce((sum, item) => sum + (variantById(item.variantId)?.priceMinor || 0) * item.quantity, 0); const selected = state.selectedMethodId || methods[0]?.id || ""; state.selectedMethodId = selected; const emptyCopy = state.methodsError || "No crypto payment methods are active yet."; return `<p class="modal-copy">Pay the exact USD amount. Choose a receiving account on Bybit or Binance and a transfer type. Wallet methods use a blockchain network; Bybit UID uses an internal transfer with no network or QR. After you send the funds, upload your proof so our team can review it manually.</p><div class="payment-amount"><span>Order total</span><strong>${money(total)}</strong></div><div class="method-list">${methods.length ? methods.map((method) => `<button class="method-choice ${method.id === selected ? "is-selected" : ""}" type="button" data-method="${esc(method.id)}"><span class="method-choice-main">${transferMark(method)}<span><strong>${esc(method.displayName || `${method.provider} ${method.asset}`)}</strong><span class="network-line">${esc(method.provider)} · ${esc(method.asset)} · ${esc(transferLabel(method))}</span></span></span><b>${method.id === selected ? "Selected" : "Choose"}</b></button>`).join("") : `<div class="empty">${esc(emptyCopy)}</div>`}</div><div class="modal-actions"><button class="button primary" id="confirm-checkout" type="button" ${methods.length ? "" : "disabled"}>Show payment instructions</button><button class="button" data-close-modal type="button">Cancel</button></div>`; }
+      async function checkout() { if (state.checkoutBusy || !state.cart.length) return; if (!state.sessionReady) { await bootstrapSession(); if (!state.sessionReady) return; } await loadMethods(); openModal("Choose payment method", checkoutPanel()); }
+      async function createCheckout() { if (state.checkoutBusy || !state.selectedMethodId) return; state.checkoutBusy = true; const button = $("#confirm-checkout"); if (button) { button.disabled = true; button.textContent = "Preparing…"; } try { const key = crypto.randomUUID(); let externalReference = "";
+          try {
+            const attr = JSON.parse(localStorage.getItem("tung:shop:attribution:v1") || "null");
+            const parts = [];
+            if (attr?.ref) parts.push(`ref=${String(attr.ref).slice(0,40)}`);
+            if (attr?.discountCode) parts.push(`promo=${String(attr.discountCode).slice(0,40)}`);
+            parts.push("ch=telegram_glb");
+            parts.push(`n=${crypto.randomUUID().replace(/-/g,"").slice(0,12)}`);
+            externalReference = parts.join("|").slice(0,180);
+          } catch { externalReference = `ch=telegram_glb|n=${crypto.randomUUID().replace(/-/g,"").slice(0,12)}`; }
+          const result = await api("checkout", { method:"POST", body:JSON.stringify({ items: state.cart.map((item) => ({ variantId:item.variantId, quantity:item.quantity })), paymentMethodId: state.selectedMethodId, idempotencyKey:key, ...(externalReference ? { externalReference } : {}) }) }); state.cart = []; writeCart(); await renderPayment(result); } catch (error) {
+          const code = String(error.code || "");
+          const checkoutErrorText = (c) => ({
+            crypto_payment_method_not_configured:"No manual crypto receiving address is active yet.",
+            insufficient_inventory:"One or more items are out of stock. Please adjust your cart.",
+            variant_not_available:"One or more items are no longer available.",
+            variant_not_found:"Item not found. Please refresh the page.",
+            quantity_limit_exceeded:"Quantity limit exceeded. Please reduce the quantity.",
+            checkout_conflict:"Another user just purchased this item. Please try again.",
+            checkout_active_order_limit:"You have an unpaid order. Please complete it or wait for it to expire.",
+            checkout_rate_limited:"Too many attempts. Please wait a moment.",
+            cart_empty:"Your cart is empty.",
+            customer_blocked:"Your account is blocked. Please contact support.",
+            telegram_order_identity_mismatch:"Telegram identity mismatch. Please restart the app.",
+            telegram_auth_expired:"Telegram session expired. Please restart the app.",
+            telegram_mini_app_unavailable:"Service temporarily unavailable. Please try again.",
+          }[c] || "");
+          const msg = esc(checkoutErrorText(code) || "The order could not be created. Please try again.");
+          openModal("Checkout unavailable", `<div class="empty">${msg}</div>`);
+        } finally { state.checkoutBusy = false; } }
+      const paymentField = (label, value, hint = "") => `<div><div class="payment-field-label"><span>${label}</span>${hint ? `<small>${hint}</small>` : ""}</div><div class="payment-field"><span>${esc(value || "—")}</span>${value ? `<button type="button" data-copy="${esc(value)}">Copy</button>` : ""}</div></div>`;
+      const paymentStatusLabel = (status) => { const value = String(status || "awaiting_payment").toLowerCase(); return value === "paid" ? "Paid" : value === "expired" ? "Expired" : ["confirming", "detected", "needs_review"].includes(value) ? "Proof submitted · manual review" : "Awaiting payment"; };
+      const proofListHtml = (proofs = []) => proofs.length ? `<div class="proof-list" id="proof-list"><strong>Submitted proof</strong>${proofs.map((proof) => `<div class="proof-item"><span>${esc(proof.filename || "Payment proof")} · ${esc(proof.status || "submitted")}</span><strong>${esc(new Date(proof.createdAt).toLocaleDateString("en-US"))}</strong></div>`).join("")}</div>` : `<div class="proof-list" id="proof-list" hidden></div>`;
+      const amountDisplay = (payment) => payment.amountDisplay || (Number(payment.amountMinor || 0) / 100).toFixed(2);
+      function paymentMarkup() {
+        const { payment, number, proofs = [] } = state.payment || {};
+        if (!payment) return "";
+        const internalUid = isInternalUid(payment);
+        const meta = transferMeta(payment);
+        const expiry = payment.expiresAt ? ` · Expires ${esc(new Date(payment.expiresAt).toLocaleTimeString("en-US", { hour:"2-digit", minute:"2-digit" }))}` : "";
+        const destinationLabel = payment.destinationType === "uid" || payment.destinationType === "internal_uid" ? "Account ID" : "Wallet address";
+        const qrUrl = !internalUid && typeof payment.qrUrl === "string" && /^\/payment-qr\/[A-Za-z0-9._/-]+\.png$/.test(payment.qrUrl) ? payment.qrUrl : "";
+        const qr = qrUrl ? `<div class="payment-qr"><img src="${esc(qrUrl)}" alt="${esc(meta.label)} payment QR code" /><small>Scan to send on ${esc(meta.rail)}.</small></div>` : "";
+        const transferInstruction = internalUid
+          ? "Open Bybit, choose Internal Transfer, and send to the receiving UID below. No blockchain network or QR is used."
+          : "Send exactly this amount to the wallet address below on the selected network.";
+        const methodLine = `<div class="network-line">${transferMark(payment)}<span>${esc(meta.label)} · ${esc(meta.rail)}</span></div>`;
+        const destination = payment.destination ? paymentField(internalUid ? "Bybit UID" : destinationLabel, payment.destination, internalUid ? "Send via Bybit internal transfer" : "Tap Copy to avoid address mistakes") : "";
+        const network = !internalUid && payment.network ? paymentField("Network", networkLabel(payment.network)) : "";
+        return `<div class="payment-box"><span class="payment-status" id="payment-status">${paymentStatusLabel(payment.state || payment.status)}</span><h3>${esc(payment.asset)} · ${esc(payment.provider)}</h3><p>${transferInstruction} Reviews are handled manually by our team; keep your transfer receipt.</p>${qr}<div class="payment-amount"><span>Send exactly</span><strong>${esc(amountDisplay(payment))} ${esc(payment.asset)}</strong></div>${methodLine}${destination}${network}${payment.memoOrTag ? paymentField("Memo / tag", payment.memoOrTag, "Required when shown") : ""}${payment.transactionReference ? paymentField("Transaction reference", payment.transactionReference) : ""}<p id="payment-help">Order #${esc(number)}${expiry}</p><form class="payment-proof" id="payment-proof-form"><label for="payment-proof-file">Upload payment proof <input id="payment-proof-file" name="proof" type="file" accept="image/jpeg,image/png,image/webp,image/gif,application/pdf" /></label><small>JPG, PNG, WebP, GIF or PDF · max 8 MB. You may also enter a transaction hash/reference.</small><label for="payment-proof-reference">Transaction hash / reference <input id="payment-proof-reference" name="transactionReference" type="text" maxlength="180" placeholder="Optional transfer ID" autocomplete="off" /></label><button class="button primary" id="submit-payment-proof" type="submit">Confirm payment</button><small id="proof-help">After submission, status changes to manual review. Your order is fulfilled only after approval.</small>${proofListHtml(proofs)}</form></div><div class="modal-actions"><button class="button dark" id="refresh-payment" type="button">Refresh status</button><button class="button" data-close-modal type="button">Close</button></div>`;
+      }
+      const shouldPollPayment = (payment, proofs = []) => proofs.length > 0 || ["confirming", "detected", "needs_review"].includes(String(payment?.state || payment?.status || "").toLowerCase());
+      const beginPaymentPolling = () => { if (state.pollingEnabled) return; state.pollingEnabled = true; state.pollStartedAt = Date.now(); state.pollAttempts = 0; void pollPayment(); };
+      async function renderPayment(result) { const payment = result.payment; if (!payment) { openModal(`Order #${esc(result.order.number)}`, `<div class="empty">Order created. Payment instructions are not available yet; open Orders and refresh shortly.</div>`); return; } state.payment = { orderId: result.order.id, number: result.order.number, payment, proofs: Array.isArray(payment.paymentProofs) ? payment.paymentProofs : [] }; state.pollingEnabled = false; state.pollStartedAt = 0; state.pollAttempts = 0; openModal("Payment instructions", paymentMarkup()); if (shouldPollPayment(payment, state.payment.proofs)) beginPaymentPolling(); }
+      async function submitPaymentProof(event) { event?.preventDefault?.(); if (!state.payment || state.proofBusy) return; const file = $("#payment-proof-file")?.files?.[0]; const reference = $("#payment-proof-reference")?.value?.trim() || ""; if (!file && !reference) { showToast("Upload a proof or enter a transaction reference"); return; } if (file && file.size > 8 * 1024 * 1024) { showToast("Proof file must be 8 MB or smaller"); return; } const form = new FormData(); if (file) form.append("proof", file, file.name); if (reference) form.append("transactionReference", reference); const button = $("#submit-payment-proof"); state.proofBusy = true; if (button) { button.disabled = true; button.textContent = "Submitting…"; } try { const result = await api(`orders/${encodeURIComponent(state.payment.orderId)}/payment-proof`, { method:"POST", body:form }); if (result.proof) state.payment.proofs = [result.proof, ...(state.payment.proofs || [])]; const status = $("#payment-status"); if (status) { status.textContent = "Proof submitted · manual review"; status.classList.remove("is-paid"); } const list = $("#proof-list"); if (list) { list.hidden = false; list.outerHTML = proofListHtml(state.payment.proofs); } const help = $("#proof-help"); if (help) help.textContent = "Proof received. Our team will review it manually and update the order status."; showToast("Payment proof submitted"); beginPaymentPolling(); } catch (error) { const code = error?.code; showToast(code === "invalid_payment_proof" ? "Unsupported or invalid proof file" : code === "payment_proof_or_reference_required" ? "Upload a proof or enter a transaction reference" : "Unable to submit proof right now"); } finally { state.proofBusy = false; if (button) { button.disabled = false; button.textContent = "Confirm payment"; } } }
+      async function pollPayment(force = false) {
+        if (!state.payment || (!state.pollingEnabled && !force)) return;
+        if (state.pollTimer) { window.clearTimeout(state.pollTimer); state.pollTimer = null; }
+        if (force || !state.pollStartedAt) { state.pollStartedAt = Date.now(); state.pollAttempts = 0; }
+        state.pollAttempts += 1;
+        try {
+          // Poll the compact status contract; payment proofs and order lines
+          // stay on the full details request used when opening the modal.
+          const result = await api(`orders/${encodeURIComponent(state.payment.orderId)}/status`);
+          if (result.payment) {
+            state.payment.payment = { ...state.payment.payment, ...result.payment };
+          }
+          const status = String(result.payment?.state || result.payment?.status || result.order?.payment_status || "awaiting_payment").toLowerCase();
+          const node = $("#payment-status");
+          if (node) { node.textContent = paymentStatusLabel(status); node.classList.toggle("is-paid", status === "paid"); }
+          if (status === "paid") {
+            const readiness = String(result.delivery?.readiness || "ready").toLowerCase();
+            const help = $("#proof-help");
+            if (help) help.textContent = readiness === "delivered" ? "Payment approved. Your keys have been delivered." : "Payment approved. Your keys are ready to reveal.";
+            const form = $("#payment-proof-form");
+            if (form) form.innerHTML = `<div class="proof-list"><strong>${readiness === "delivered" ? "Keys delivered" : "Payment approved"}</strong><span>${readiness === "delivered" ? "Open Orders to view them again." : "Tap below to reveal your license keys."}</span></div><button class="button primary" type="button" data-keys="${esc(state.payment.orderId)}">${readiness === "delivered" ? "View keys" : "Get keys"}</button>`;
+            showToast("Payment approved");
+            await loadOrders();
+            state.pollingEnabled = false;
+            state.pollTimer = null;
+            return;
+          }
+        } catch (error) {
+          // Do not keep silently polling when the Mini App session has expired;
+          // the customer must reopen the app so Telegram can issue fresh initData.
+          const code = error?.code;
+          if (["telegram_session_required", "telegram_auth_required", "telegram_auth_invalid", "telegram_registry_unavailable"].includes(code)) {
+            state.sessionReady = false;
+            state.pollingEnabled = false;
+            if (state.pollTimer) { window.clearTimeout(state.pollTimer); state.pollTimer = null; }
+            setSessionError(error);
+            return;
+          }
+        }
+        // Stop background traffic after ten minutes. A manual Refresh status
+        // click can restart the bounded window when the admin is still
+        // reviewing the transfer.
+        if (state.pollingEnabled && Date.now() - state.pollStartedAt < 10 * 60 * 1_000) {
+          const delay = Math.min(15_000, 5_000 + Math.floor(state.pollAttempts / 6) * 1_000);
+          state.pollTimer = window.setTimeout(() => { void pollPayment(); }, delay);
+        } else {
+          const help = $("#proof-help");
+          state.pollingEnabled = false;
+          if (help) help.textContent = "Still awaiting manual review. Tap Refresh status to check again.";
+        }
+      }
+      async function loadOrders() { const list = $("#orders-list"); list.innerHTML = `<div class="empty">Loading orders…</div>`; try { const result = await api("me"); state.orders = Array.isArray(result.orders) ? result.orders : []; list.innerHTML = state.orders.length ? state.orders.map((order) => { const status = String(order.paymentStatus || order.status || "pending").toLowerCase(); const readiness = String(order.deliveryReadiness || "").toLowerCase(); const displayStatus = status === "paid" ? readiness === "delivered" ? "Delivered" : ["ready", "partial"].includes(readiness) ? "Paid · Keys ready" : "Paid" : ["confirming", "detected", "needs_review"].includes(status) ? "Manual review" : status === "expired" ? "Expired" : "Awaiting payment"; return `<article class="order-card"><header><div><h3>#${esc(order.number)}</h3><time>${esc(new Date(order.createdAt).toLocaleDateString("en-US"))}</time></div><span class="payment-status ${status === "paid" ? "is-paid" : ""}">${esc(displayStatus)}</span></header><p>${esc(order.itemCount || order.lineCount || 0)} item(s) · ${money(order.totalMinor)}</p><div class="order-actions"><button class="button" data-order="${esc(order.id)}" type="button">View details</button>${status === "paid" ? `<button class="button primary" data-keys="${esc(order.id)}" type="button">${readiness === "delivered" ? "View keys" : "Get keys"}</button>` : ""}</div></article>`; }).join("") : `<div class="empty">No orders yet.</div>`; } catch (error) { list.innerHTML = `<div class="empty">${esc(error.code === "telegram_auth_required" ? "Open this page from Telegram to load orders." : "Unable to load orders right now.")}</div>`; } }
+      async function showOrder(id) { try { const result = await api(`orders/${encodeURIComponent(id)}`); const payment = result.payment; const number = result.order.order_number || result.order.orderNumber; if (payment) { state.payment = { orderId: id, number, payment, proofs: Array.isArray(payment.paymentProofs) ? payment.paymentProofs : [] }; state.pollingEnabled = false; state.pollStartedAt = 0; state.pollAttempts = 0; openModal("Payment instructions", paymentMarkup()); if (shouldPollPayment(payment, state.payment.proofs)) beginPaymentPolling(); return; } openModal(`Order #${esc(number)}`, `<p class="modal-copy">This order has no active crypto payment attempt.</p><div class="modal-actions"><button class="button" data-close-modal type="button">Close</button></div>`); } catch { showToast("Unable to load this order"); } }
+      async function showKeys(id) { try { const result = await api(`orders/${encodeURIComponent(id)}/keys`, { method:"POST", body:"{}" }); const keys = result.delivery?.deliveries?.flatMap((item) => item.keys || []) || []; openModal("Your digital keys", keys.length ? `<div class="payment-box"><span class="payment-status is-paid">Delivered</span>${keys.map((key, index) => paymentField(`Key ${index + 1}`, key)).join("")}</div>` : `<div class="empty">The order is paid, but fulfillment is still processing.</div>`); await loadOrders(); } catch (error) { showToast(error.code === "order_not_paid" ? "Payment is not verified yet" : error.code === "order_delivery_in_progress" ? "Your payment is approved; key delivery is still processing. Try again shortly." : "Keys are not available yet"); } }
+      document.addEventListener("click", (event) => { const target = event.target.closest("button,[data-nav]"); if (!target) return; if (target.dataset.nav) { showView(target.dataset.nav); return; } if (target.id === "browse-button") { showView("home"); $("#catalog")?.scrollIntoView({ behavior:"smooth" }); return; } 
+        if (target.dataset.shareBridge !== undefined) {
+          // Share cart link handler
+          void (async () => {
+            if (!state.cart.length) { showToast("Cart is empty"); return; }
+            try {
+              const attr = JSON.parse(localStorage.getItem("tung:shop:attribution:v1") || "null");
+              const res = await fetch("/api/shop/bridge", {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({
+                  items: state.cart.map((item) => {
+                    const v = variantById(item.variantId);
+                    return {
+                      variantId: item.variantId, quantity: item.quantity,
+                      title: v?.product?.title, variantTitle: v?.title,
+                      priceMinor: v?.priceMinor, currency: "USD",
+                      imageUrl: v?.product?.imageUrl || v?.product?.coverUrl,
+                      slug: v?.product?.slug, productId: v?.product?.id,
+                      maxQuantity: v?.maxPerOrder || 10,
+                    };
+                  }),
+                  attribution: attr, channel: "telegram_glb",
+                }),
+              });
+              const data = await res.json();
+              if (!res.ok || !data.url) throw new Error(data.code || "failed");
+              if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(data.url);
+              showToast("Cart link copied");
+            } catch { showToast("Could not create cart link"); }
+          })();
+          return;
+        }
+        if (target.dataset.suggestProducts !== undefined) {
+          void (async () => {
+            try {
+              const q = state.query || "ai tools";
+              const res = await fetch(`/api/shop/recommend?locale=en&limit=4&q=${encodeURIComponent(q)}`);
+              const data = await res.json();
+              if (!data.ok) throw new Error("fail");
+              const rows = (data.results || []).map((r) => {
+                const p = r.product || {};
+                return `<button type="button" class="button secondary" data-open-product="${esc(p.slug || "")}" style="width:100%;text-align:left;margin:6px 0"><strong>${esc(p.title || "")}</strong><br><small>${esc((r.reasons||[]).join(" · "))}</small></button>`;
+              }).join("");
+              openModal("Suggested packages", `<p class="modal-copy">${esc(data.assistantMessage || "")}</p>${rows || "<div class=\"empty\">No suggestions.</div>"}`);
+            } catch { showToast("Could not load suggestions"); }
+          })();
+          return;
+        }
+if (target.id === "checkout-button") { void checkout(); return; } if (target.id === "confirm-checkout") { void createCheckout(); return; } if (target.id === "refresh-orders") { void loadOrders(); return; } if (target.id === "session-retry") { void bootstrapSession(); return; } if (target.id === "modal-close" || target.dataset.closeModal !== undefined) { closeModal(); return; } if (target.dataset.selectPlan) { selectPlanInSheet(target.dataset.productSlug, target.dataset.selectPlan); return; } if (target.dataset.openProduct) { openProduct(target.dataset.openProduct); return; } if (target.dataset.buyNow) { void buyNow(target.dataset.buyNow); return; } if (target.dataset.add) { if (add(target.dataset.add)) { haptic("light"); closeModal(); } return; } if (target.dataset.qty) { updateQuantity(target.dataset.qty, Number(target.dataset.delta)); return; } if (target.dataset.remove) { state.cart = state.cart.filter((item) => item.variantId !== target.dataset.remove); writeCart(); return; } if (target.dataset.method) { state.selectedMethodId = target.dataset.method; $("#modal-body").innerHTML = checkoutPanel(); return; } if (target.dataset.copy) { void copyValue(target.dataset.copy); return; } if (target.dataset.order) { void showOrder(target.dataset.order); return; } if (target.dataset.keys) { void showKeys(target.dataset.keys); return; } if (target.id === "refresh-payment") { void pollPayment(true); } });
+      document.addEventListener("submit", (event) => { if (event.target?.id === "payment-proof-form") void submitPaymentProof(event); });
+      $("#search").addEventListener("input", (event) => { state.query = event.currentTarget.value; renderCatalog(); });
+      document.addEventListener("change", (event) => { const target = event.target; if (!target.matches("[data-variant]")) return; const addButton = target.closest(".product-body")?.querySelector("[data-add]"); if (addButton) addButton.dataset.add = target.value; });
+      $("#modal-backdrop").addEventListener("click", (event) => { if (event.target.id === "modal-backdrop") closeModal(); });
+      const haptic = (kind) => { try { if (kind === "success" || kind === "error") tg?.HapticFeedback?.notificationOccurred?.(kind); else tg?.HapticFeedback?.impactOccurred?.(kind || "light"); } catch {} };
+      try { tg?.BackButton?.onClick?.(() => closeModal()); } catch {}
+      tg?.ready?.(); tg?.expand?.();
+      try { tg.setHeaderColor?.("#ffffff"); tg.setBackgroundColor?.("#ffffff"); } catch {}
+      document.documentElement.dataset.tgScheme = tg?.colorScheme || "light";
+      tg?.onEvent?.("themeChanged", () => { document.documentElement.dataset.tgScheme = tg.colorScheme || "light"; });
+      // F1/F8: capture affiliate + promo from deep link / start_param (AI path not used here)
+      try {
+        const ATTR_KEY = "tung:shop:attribution:v1";
+        const params = new URLSearchParams(location.search);
+        let start = "";
+        try { start = String(window.Telegram?.WebApp?.initDataUnsafe?.start_param || ""); } catch {}
+        if (start) {
+          start.split(/__|_/).forEach((part) => {
+            if (/^ref/i.test(part) && part.length > 3) params.set("ref", part.replace(/^ref[_-]?/i, ""));
+            else if (/^discount|promo|code/i.test(part)) params.set("discount", part.replace(/^(discount|promo|code)[_-]?/i, ""));
+            else if (/^[A-Z0-9_-]{3,}$/i.test(part) && !params.get("ref")) params.set("ref", part);
+          });
+        }
+        const existing = (() => { try { return JSON.parse(localStorage.getItem(ATTR_KEY) || "{}"); } catch { return {}; } })();
+        const clean = (v) => String(v || "").trim().toUpperCase().replace(/[^A-Z0-9_-]/g, "").slice(0, 40);
+        const next = {
+          ...existing,
+          channel: "telegram_glb",
+          ref: clean(params.get("ref") || params.get("affiliate") || existing.ref || "") || existing.ref || null,
+          discountCode: clean(params.get("discount") || params.get("promo") || params.get("code") || existing.discountCode || "") || existing.discountCode || null,
+          capturedAt: existing.capturedAt || new Date().toISOString(),
+          landingPath: "/telegram/glb",
+        };
+        localStorage.setItem(ATTR_KEY, JSON.stringify(next));
+      } catch {}
+      renderCatalog(); renderCart(); void (async () => { await waitForInitData(); await bootstrapSession(); })();
+    </script>
+  </body>
+</html>

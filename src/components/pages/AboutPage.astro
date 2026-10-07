@@ -1,0 +1,95 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import Icon from "../Icon.astro";
+import SkillMatrix from "../SkillMatrix.astro";
+import { getTranslation, localizePath, type Locale } from "../../i18n/dictionaries";
+import { getSkillGroups } from "../../content/portfolio-evidence";
+
+type Copy = ReturnType<typeof getTranslation>;
+interface Props { locale: Locale; aboutContent?: Copy["about"]; }
+
+const { locale, aboutContent } = Astro.props;
+const t = getTranslation(locale);
+const a = aboutContent ?? t.about;
+const portraitAlt: Record<Locale, string> = {
+  vi: "Chân dung Tung trong bộ suit đen, ngồi trên khối hộp tối giản",
+  en: "Portrait of Tung in a black suit, seated against a quiet studio backdrop",
+  ja: "静かなスタジオ背景で黒いスーツを着て座るTungのポートレート",
+  zh: "Tung身穿黑色西装坐在简洁影棚背景前的肖像",
+};
+const processIcons = ["compass", "flow", "layers", "shield", "arrow", "clock"] as const;
+const skillGroups = getSkillGroups(locale);
+const skillCopy = {
+  vi: { label: "Bộ kỹ năng", heading: "Một bộ năng lực xuyên suốt từ ý tưởng đến sản phẩm hoàn chỉnh.", body: "Mỗi nhóm đóng góp vào một trải nghiệm rõ ràng, ổn định và dễ tiếp tục phát triển." },
+  en: { label: "Skill set", heading: "A connected skill set from idea to finished product.", body: "Each group contributes to a clear, dependable experience that can continue to evolve." },
+  ja: { label: "スキルセット", heading: "アイデアから完成したプロダクトまでをつなぐ力。", body: "それぞれの領域が、明快で信頼でき、成長し続けられる体験を支えます。" },
+  zh: { label: "技能体系", heading: "从想法到完整产品的一套连贯能力。", body: "每个领域共同构成清晰、可靠且能够持续演进的体验。" },
+}[locale];
+const structuredData = {
+  "@context": "https://schema.org",
+  "@type": "ProfilePage",
+  mainEntity: { "@id": "https://tung.codes/#person", "@type": "Person", name: "TUNG" },
+};
+---
+
+<BaseLayout title={a.metaTitle} description={a.metaDescription} image="/og/default.png" imageAlt={`TUNG — ${a.label}`} locale={locale} structuredData={structuredData}>
+  <article class="content-page about-page">
+    <header class="about-hero shell">
+      <div class="about-hero__copy reveal">
+        <p class="section-label"><span class="status-dot"></span>{a.label}</p>
+        <h1 class="page-title">{a.heading}</h1>
+        <p class="about-hero__intro">{a.intro}</p>
+        <div class="hero-actions"><a class="button-link primary" href={localizePath("/contact", locale)}>{a.collaborationCta} <span aria-hidden="true">↗</span></a><a class="button-link" href={localizePath("/work", locale)}>{t.work.openProject} <span aria-hidden="true">↘</span></a></div>
+      </div>
+      <figure class="about-hero__portrait reveal" style="--reveal-delay: 130ms">
+        <div class="about-hero__portrait-frame"><img src="/images/tung-about-portrait.webp" alt={portraitAlt[locale]} width="900" height="1125" decoding="async" fetchpriority="high" /></div>
+        <figcaption><span class="mono-label">VI / EN / JA / ZH</span><span>{t.common.footer.location}</span></figcaption>
+      </figure>
+      <div class="about-hero__signal reveal" style="--reveal-delay: 220ms"><Icon name="compass" size={20} /><span>{a.operatingPerspectiveLabel}</span><strong>{a.operatingPerspectiveHeading}</strong></div>
+    </header>
+
+    <div class="shell about-narrative">
+      <section class="about-statement reveal"><div><p class="section-label">01 / {a.storyLabel}</p><h2>{a.storyHeading}</h2></div><p>{a.story}</p></section>
+
+      <section class="about-statement reveal"><div><p class="section-label">02 / {a.operatingPerspectiveLabel}</p><h2>{a.operatingPerspectiveHeading}</h2></div><p>{a.operatingPerspective}</p></section>
+
+      <section class="about-process reveal" aria-labelledby="about-process-heading">
+        <div class="section-heading-row"><div><p class="section-label">03 / {a.howIWorkLabel}</p><h2 id="about-process-heading">{a.howIWorkHeading}</h2></div><p>{a.processIntro}</p></div>
+        <ol class="process-list process-list--path" role="list">{a.process.map((item, index) => <li><span class="process-list__icon"><Icon name={processIcons[index] ?? "arrow"} size={22} /></span><span class="process-list__number">0{index + 1}</span><strong>{item}</strong></li>)}</ol>
+      </section>
+
+      <section class="about-skills reveal" aria-labelledby="about-skills-heading">
+        <div class="section-heading-row"><div><p class="section-label">04 / {skillCopy.label}</p><h2 id="about-skills-heading">{skillCopy.heading}</h2></div><p>{skillCopy.body}</p></div>
+        <SkillMatrix groups={skillGroups} />
+      </section>
+
+      <section class="about-modules about-modules--single reveal" aria-labelledby="about-principles-heading">
+        <div class="about-module"><p class="section-label">05 / {a.principlesLabel}</p><h2 id="about-principles-heading">{a.principlesHeading}</h2><ul class="icon-list" role="list">{a.principles.map((item, index) => <li><span><Icon name={index % 2 ? "shield" : "compass"} size={19} /></span><strong>{item}</strong></li>)}</ul></div>
+      </section>
+
+      <section class="about-focus reveal" aria-labelledby="about-focus-heading"><div><p class="section-label">06 / {a.currentFocusLabel}</p><h2 id="about-focus-heading">{a.currentFocusHeading}</h2></div><ul class="line-list line-list--indexed" role="list">{a.currentFocus.map((item, index) => <li><span>0{index + 1}</span><strong>{item}</strong></li>)}</ul></section>
+
+      <section class="about-modules reveal" aria-labelledby="about-collab-heading">
+        <div class="about-module">
+          <p class="section-label">07 / {a.collaborationLabel}</p>
+          <h2 id="about-collab-heading">{a.collaborationHeading}</h2>
+          <p>{a.collaborationIntro}</p>
+          <p class="mono-label" style="margin-top: 1rem;">{a.responseTime}</p>
+        </div>
+        <div class="about-module">
+          <p class="section-label">{a.collaborationFitLabel}</p>
+          <ul class="icon-list" role="list">{a.collaborationFit.map((item) => <li><span><Icon name="compass" size={19} /></span><strong>{item}</strong></li>)}</ul>
+          <p class="section-label" style="margin-top: 1.5rem;">{a.collaborationNotFitLabel}</p>
+          <ul class="icon-list" role="list">{a.collaborationNotFit.map((item) => <li><span><Icon name="shield" size={19} /></span><strong>{item}</strong></li>)}</ul>
+        </div>
+      </section>
+
+      <section class="about-process reveal" aria-labelledby="about-steps-heading">
+        <div class="section-heading-row"><div><p class="section-label">08 / {a.collaborationStepsLabel}</p><h2 id="about-steps-heading">{a.collaborationStepsLabel}</h2></div></div>
+        <ol class="process-list process-list--path" role="list">{a.collaborationSteps.map((item, index) => <li><span class="process-list__icon"><Icon name={processIcons[index] ?? "arrow"} size={22} /></span><span class="process-list__number">0{index + 1}</span><strong>{item}</strong></li>)}</ol>
+      </section>
+
+      <section class="about-note reveal"><p class="section-label">09 / {a.personalNoteLabel}</p><h2>{a.personalNote}</h2><a class="button-link primary" href={localizePath("/contact", locale)}>{a.collaborationCta} <span aria-hidden="true">↗</span></a></section>
+    </div>
+  </article>
+</BaseLayout>

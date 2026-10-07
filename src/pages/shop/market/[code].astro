@@ -1,0 +1,65 @@
+---
+import { env } from "cloudflare:workers";
+import NotFoundPage from "../../../components/pages/NotFoundPage.astro";
+import { localizePath } from "../../../i18n/dictionaries";
+import { LOCALE_COOKIE_MAX_AGE, LOCALE_COOKIE_NAME } from "../../../i18n/locale-preference";
+import {
+  DEFAULT_MARKETS,
+  findMarketByCode,
+  listMarkets,
+  MARKET_COOKIE_MAX_AGE,
+  MARKET_COOKIE_NAME,
+  type Market,
+} from "../../../lib/shop/market";
+
+/**
+ * Market landing route: /shop/market/<CODE>
+ *
+ * Sets the market cookie and sends the visitor to the catalogue in that market's
+ * language. This is the entry point an ad or a bio link would use, so the
+ * visitor lands already priced and already in the right language instead of
+ * being geo-guessed and then having to switch.
+ *
+ * It lives under /shop/ on purpose: that path is already in the deployment's
+ * run_worker_first allowlist. A top-level /ph would look nicer in an ad, but the
+ * static-assets layer would answer with the 404 page before the Worker ran.
+ */
+
+export const prerender = false;
+
+const requested = String(Astro.params.code ?? "").trim().toUpperCase();
+
+let pool: Market[] = [...DEFAULT_MARKETS];
+if (env.CONTENT_DB) {
+  try {
+    const stored = await listMarkets(env.CONTENT_DB);
+    if (stored.length) pool = stored;
+  } catch {
+    // Keep the built-in defaults so the landing route still works unmigrated.
+  }
+}
+const market = findMarketByCode(pool, requested);
+
+if (!market) {
+  Astro.response.status = 404;
+} else {
+  Astro.cookies.set(MARKET_COOKIE_NAME, market.code, {
+    path: "/",
+    maxAge: MARKET_COOKIE_MAX_AGE,
+    sameSite: "lax",
+  });
+  // A landing link is an explicit choice of market, so it also sets the language.
+  // An ad for the Philippines should not drop a visitor into Vietnamese copy and
+  // leave them to find the switcher.
+  Astro.cookies.set(LOCALE_COOKIE_NAME, market.locale, {
+    path: "/",
+    maxAge: LOCALE_COOKIE_MAX_AGE,
+    sameSite: "lax",
+  });
+  // No ?market= in the URL: the cookie now drives everything, and a clean URL is
+  // what gets pasted, shared and indexed.
+  return Astro.redirect(localizePath("/shop", market.locale), 302);
+}
+---
+
+{!market && <NotFoundPage locale="en" />}

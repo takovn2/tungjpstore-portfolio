@@ -1,0 +1,45 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { localizePath, type Locale } from "../../i18n/dictionaries";
+
+interface Props { locale: Locale; }
+
+const { locale } = Astro.props;
+const copy = {
+  vi: {
+    title: "Nội dung đang tạm gián đoạn — Tung",
+    heading: "Nội dung đang tạm gián đoạn.",
+    body: "Hệ thống nội dung chưa phản hồi, nên trang tạm dừng thay vì hiển thị một bản cũ. Vui lòng thử lại sau ít phút.",
+    home: "Về trang chủ",
+  },
+  en: {
+    title: "Content temporarily unavailable — Tung",
+    heading: "Content is temporarily unavailable.",
+    body: "The content service did not respond, so this page is paused instead of showing an outdated copy. Please try again in a few minutes.",
+    home: "Back to home",
+  },
+  ja: {
+    title: "コンテンツを一時表示できません — Tung",
+    heading: "コンテンツを一時表示できません。",
+    body: "コンテンツシステムから応答がないため、古い情報を表示せず一時停止しています。数分後にもう一度お試しください。",
+    home: "ホームへ戻る",
+  },
+  zh: {
+    title: "内容暂时不可用 — Tung",
+    heading: "内容暂时无法显示。",
+    body: "内容系统暂未响应，因此页面不会显示旧版本。请稍后几分钟再试。",
+    home: "返回首页",
+  },
+} satisfies Record<Locale, { title: string; heading: string; body: string; home: string }>;
+const message = copy[locale];
+---
+
+<BaseLayout title={message.title} description={message.body} locale={locale} noindex>
+  <article class="not-found shell">
+    <span class="not-found__code" aria-hidden="true">503</span>
+    <p class="section-label">TUNG / 503</p>
+    <h1 class="page-title">{message.heading}</h1>
+    <p class="lead">{message.body}</p>
+    <div class="hero-actions"><a class="button-link primary" href={localizePath("/", locale)}>{message.home}</a></div>
+  </article>
+</BaseLayout>

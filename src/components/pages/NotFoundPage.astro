@@ -1,0 +1,15 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { defaultLocale, getTranslation, localizePath, type Locale } from "../../i18n/dictionaries";
+interface Props { locale: Locale; }
+const { locale } = Astro.props; const t = getTranslation(locale); const n = t.notFound;
+---
+<BaseLayout title={n.metaTitle} description={n.body} locale={locale} noindex>
+  {locale === defaultLocale && <script is:inline>
+    const localeMatch = window.location.pathname.match(/^\/(en|ja|zh)(?:\/|$)/);
+    if (localeMatch && !/^\/(en|ja|zh)\/404\/?$/.test(window.location.pathname)) {
+      window.location.replace(`/${localeMatch[1]}/404${window.location.search}${window.location.hash}`);
+    }
+  </script>}
+  <article class="not-found shell"><span class="not-found__code">{n.code}</span><p class="section-label">{t.common.siteName}</p><h1 class="page-title">{n.heading}</h1><p class="lead">{n.body}</p><div class="hero-actions"><a class="button-link primary" href={localizePath("/", locale)}>{n.backHome}</a><a class="button-link" href={localizePath("/work", locale)}>{n.viewWork}</a></div></article>
+</BaseLayout>

@@ -1,0 +1,21 @@
+---
+import LabPage from "../components/pages/LabPage.astro";
+import UnavailablePage from "../components/pages/UnavailablePage.astro";
+import { type Locale } from "../i18n/dictionaries";
+import { resolveRequestLocale } from "../i18n/locale-preference";
+import { curateLabPosts } from "../lib/curated-lab-content";
+import { loadPublicSnapshot } from "../lib/public-runtime";
+import { canUseBundledFallback, publishedLabPosts, setPublicCache } from "../lib/public-content";
+
+export const prerender = false;
+const pageLocale: Locale = resolveRequestLocale(Astro.request);
+setPublicCache(Astro.response.headers);
+const snapshot = await loadPublicSnapshot(pageLocale);
+const unavailable = snapshot.status === "unavailable";
+const posts = canUseBundledFallback(snapshot, "post") ? undefined : curateLabPosts(publishedLabPosts(snapshot), pageLocale);
+if (unavailable) {
+  Astro.response.status = 503;
+  setPublicCache(Astro.response.headers, "unavailable");
+}
+---
+{unavailable ? <UnavailablePage locale={pageLocale} /> : <LabPage locale={pageLocale} posts={posts} />}

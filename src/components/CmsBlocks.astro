@@ -1,0 +1,41 @@
+---
+import type { BodyBlock } from "../lib/admin/types";
+import { localizePath, type Locale } from "../i18n/dictionaries";
+import { hasRepositoryReference, safeImageUrl, safePublicHref } from "../lib/public-content";
+
+interface Props {
+  blocks: BodyBlock[];
+  locale?: Locale;
+}
+
+const { blocks, locale } = Astro.props;
+const safeImageSrc = (value: string) => safeImageUrl(value);
+const safeCtaHref = (value: string) => safePublicHref(value);
+---
+
+<div class="cms-blocks">
+  {blocks.map((block) => {
+    if (block.type === "heading") return hasRepositoryReference(block.text) ? null : <h2>{block.text}</h2>;
+    if (block.type === "paragraph") return hasRepositoryReference(block.text) ? null : <p>{block.text}</p>;
+    if (block.type === "quote") return hasRepositoryReference(block.text) ? null : <blockquote><p>{block.text}</p></blockquote>;
+    if (block.type === "list") {
+      const items = block.items.filter((item) => !hasRepositoryReference(item));
+      return items.length ? <ul>{items.map((item) => <li>{item}</li>)}</ul> : null;
+    }
+    if (block.type === "image") {
+      if (hasRepositoryReference(block.alt)) return null;
+      const src = safeImageSrc(block.src);
+      return src ? <figure><img src={src} alt={block.alt} loading="lazy" decoding="async" /><figcaption>{block.alt}</figcaption></figure> : null;
+    }
+    if (block.type === "cta") {
+      if (hasRepositoryReference(block.label)) return null;
+      const safeHref = safeCtaHref(block.href);
+      if (!safeHref) return null;
+      const external = safeHref.startsWith("https://");
+      const href = locale && safeHref.startsWith("/") ? localizePath(safeHref, locale) : safeHref;
+      return <p class="cms-blocks__cta"><a class="button-link" href={href} target={external ? "_blank" : undefined} rel={external ? "noreferrer" : undefined}>{block.label} <span aria-hidden="true">↗</span></a></p>;
+    }
+    if (block.type === "metric") return hasRepositoryReference(block.label) || hasRepositoryReference(block.value) ? null : <dl class="cms-blocks__metric"><dt>{block.label}</dt><dd>{block.value}</dd></dl>;
+    return null;
+  })}
+</div>

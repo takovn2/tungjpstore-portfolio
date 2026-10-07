@@ -1,0 +1,31 @@
+---
+import { localizePath, type Locale } from "../../i18n/dictionaries";
+import { getFlywheelCtas } from "../../lib/shop/platform/flywheel";
+
+interface Props {
+  locale: Locale;
+  surface: "portfolio" | "shop" | "case" | "contact";
+}
+
+const { locale, surface } = Astro.props;
+const items = getFlywheelCtas(locale, (path, loc) => localizePath(path, loc as Locale))
+  .filter((item) => item.from === surface);
+---
+
+{items.length > 0 && (
+  <section class="section-rule" aria-label={locale === "vi" ? "Kết nối dịch vụ & shop" : "Services & shop"}>
+    <div class="shell" style="padding-block: clamp(2rem, 5vw, 3rem)">
+      <ul class="market-flywheel" role="list">
+        {items.map((item) => (
+          <li>
+            <a href={item.href}>
+              {item.badge ? <b>{item.badge}</b> : null}
+              <strong>{item.title}</strong>
+              <span>{item.body}</span>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </div>
+  </section>
+)}

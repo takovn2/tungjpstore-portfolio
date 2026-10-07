@@ -1,0 +1,559 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { localizePath, type Locale } from "../../i18n/dictionaries";
+import { formatMoney, formatShopDate, formatShopOrderStatus, formatShopPaymentStatus, getShopCopy } from "../../i18n/shop";
+import { resolveLoyaltyTier, type CustomerLoyaltyInfo } from "../../lib/shop/loyalty";
+
+interface OrderRow {
+  id: string;
+  number: string;
+  status: string;
+  paymentStatus: string;
+  totalMinor: number;
+  currency: string;
+  createdAt: string;
+}
+
+interface Props {
+  locale: Locale;
+  customer: {
+    displayName: string;
+    emailMasked: string | null;
+    providers: Array<{ provider: string; verified: boolean }>;
+  };
+  orders: OrderRow[];
+  loyalty?: CustomerLoyaltyInfo | null;
+}
+
+const { locale, customer, orders, loyalty: initialLoyalty } = Astro.props;
+const copy = getShopCopy(locale);
+const account = copy.account;
+const loginHref = localizePath("/shop/account/login", locale);
+
+const fallbackSpend = orders.reduce((sum, o) => (o.paymentStatus === "paid" && o.currency === "VND" ? sum + o.totalMinor : sum), 0);
+const loyalty = initialLoyalty ?? resolveLoyaltyTier(fallbackSpend);
+const totalSpend = loyalty.totalSpendVndMinor;
+const tierName = loyalty.tier.name[locale] || loyalty.tier.name.vi;
+const nextTierName = loyalty.nextTier ? (loyalty.nextTier.name[locale] || loyalty.nextTier.name.vi) : null;
+---
+
+<BaseLayout title={account.dashboard.metaTitle} description={account.dashboard.metaDescription} locale={locale} chrome="store" noindex={true} alternateLocales={[locale]} rss={false}>
+  <div class="account shell">
+    <header class="account__head">
+      <p class="account__label">{account.dashboard.label}</p>
+      <h1>{account.dashboard.hello.replace("{name}", customer.displayName || "—")}</h1>
+      <p class="account__intro">{customer.emailMasked ?? account.dashboard.noEmail}</p>
+    </header>
+
+    <div class="account__loyalty-card" data-loyalty-tier={loyalty.tier.level}>
+      <div class="loyalty-card__head">
+        <div>
+          <span class="loyalty-badge">{tierName}</span>
+          {loyalty.tier.discountPercent > 0 && <strong class="loyalty-discount-tag">-{loyalty.tier.discountPercent}% {locale === "vi" ? "tất cả đơn hàng" : "all orders"}</strong>}
+        </div>
+        <span class="loyalty-spend">{formatMoney(totalSpend, "VND", locale)}</span>
+      </div>
+      {nextTierName && (
+        <div class="loyalty-progress">
+          <div class="loyalty-progress__bar" style={`width: ${loyalty.progressPercent}%`}></div>
+        </div>
+      )}
+      {nextTierName ? (
+        <small class="loyalty-next">{locale === "vi" ? `Chi tiêu thêm để đạt hạng ${nextTierName} và nhận ưu đãi cao hơn` : `Spend more to unlock ${nextTierName}`}</small>
+      ) : (
+        <small class="loyalty-next">{locale === "vi" ? "Bạn đang ở cấp bậc cao nhất với ưu đãi độc quyền!" : "You are at the highest VIP tier!"}</small>
+      )}
+    </div>
+
+    <div class="account__wallet-card">
+      <div class="wallet-card__content">
+        <div>
+          <span class="wallet-label">{locale === "vi" ? "Ví số dư tài khoản" : locale === "ja" ? "アカウント残高" : locale === "zh" ? "账户余额" : "Account Wallet"}</span>
+          <strong class="wallet-amount" data-wallet-balance-display>{formatMoney(0, locale === "vi" ? "VND" : "USD", locale)}</strong>
+          <small class="wallet-hint">{locale === "vi" ? "Thanh toán siêu tốc 0.5s không cần quét mã QR" : "Instant 0.5s key delivery without QR scanning"}</small>
+        </div>
+        <button type="button" class="wallet-topup-btn" data-open-topup-modal>
+          <span>⚡ {locale === "vi" ? "Nạp tiền vào ví" : locale === "ja" ? "チャージ" : locale === "zh" ? "充值" : "Top Up"}</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Top-up Modal -->
+    <div class="topup-modal" data-topup-modal hidden>
+      <div class="topup-modal__backdrop" data-close-topup-modal></div>
+      <div class="topup-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="topup-title">
+        <header class="topup-modal__header">
+          <h3 id="topup-title">{locale === "vi" ? "Nạp tiền vào Ví TUNG Shop" : "Top Up Account Balance"}</h3>
+          <button type="button" class="topup-modal__close" data-close-topup-modal aria-label="Close">✕</button>
+        </header>
+        <div class="topup-modal__body">
+          <div class="topup-presets" data-topup-presets>
+            {locale === "vi" ? (
+              <>
+                <button type="button" class="preset-btn is-active" data-amount="100000">100.000₫</button>
+                <button type="button" class="preset-btn" data-amount="200000">200.000₫</button>
+                <button type="button" class="preset-btn" data-amount="500000">500.000₫</button>
+                <button type="button" class="preset-btn" data-amount="1000000">1.000.000₫</button>
+              </>
+            ) : (
+              <>
+                <button type="button" class="preset-btn is-active" data-amount="100000">100.000 ₫</button>
+                <button type="button" class="preset-btn" data-amount="250000">250.000 ₫</button>
+                <button type="button" class="preset-btn" data-amount="500000">500.000 ₫</button>
+                <button type="button" class="preset-btn" data-amount="1000000">1.000.000 ₫</button>
+              </>
+            )}
+          </div>
+          <div class="topup-custom-wrap">
+            <label for="custom-topup-input" class="topup-custom-label">{locale === "vi" ? "Hoặc nhập số tiền tùy chỉnh:" : "Or enter custom amount:"}</label>
+            <div class="topup-input-group">
+              <input
+                id="custom-topup-input"
+                type="number"
+                class="topup-custom-input"
+                data-custom-topup-input
+                placeholder="Ví dụ: 350000"
+                min="10000"
+                max="50000000"
+                step="10000"
+                value="100000"
+              />
+              <span class="topup-input-suffix">₫</span>
+            </div>
+          </div>
+          <button type="button" class="topup-submit-btn" data-submit-topup>
+            <span>{locale === "vi" ? "Tạo mã QR nạp tiền" : "Generate Deposit QR"}</span>
+          </button>
+          <div class="topup-result" data-topup-result hidden>
+            <img class="topup-qr" data-topup-qr src="" alt="Deposit QR Code" width="220" height="220" />
+            <div class="topup-details">
+              <p><strong>{locale === "vi" ? "Nội dung chuyển khoản:" : "Memo / Description:"}</strong> <code data-topup-desc></code></p>
+            <small>{locale === "vi" ? "Số dư được cộng sau khi hệ thống xác nhận giao dịch ngân hàng. Nếu chưa thấy cập nhật, vui lòng kiểm tra trạng thái nạp tiền hoặc liên hệ hỗ trợ." : "Your balance is credited after the bank payment is verified. Check the top-up status or contact support if it is not updated."}</small>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="account__actions">
+      <a class="account__primary" href={localizePath("/shop/account/orders", locale)}>{account.dashboard.viewOrders}</a>
+      <a class="account__ghost" href={localizePath("/shop", locale)}>{account.dashboard.shop}</a>
+      <button type="button" class="account__ghost" data-account-logout>{account.dashboard.logout}</button>
+    </div>
+
+    <section class="account__section">
+      <h2>{account.dashboard.recent}</h2>
+      {orders.length === 0 ? (
+        <p class="account__empty">{account.dashboard.empty}</p>
+      ) : (
+        <ul class="account__orders">
+          {orders.map((order) => (
+            <li>
+              <a href={localizePath(`/shop/account/orders/${order.id}`, locale)}>
+                <strong>{order.number}</strong>
+                <span>{formatMoney(order.totalMinor, order.currency, locale)}</span>
+                <small>{formatShopOrderStatus(order.status, locale)} · {formatShopPaymentStatus(order.paymentStatus, locale)} · {formatShopDate(order.createdAt, locale)}</small>
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  </div>
+</BaseLayout>
+
+<script is:inline define:vars={{ loginHref, locale }}>
+  document.querySelector("[data-account-logout]")?.addEventListener("click", async () => {
+    try {
+      await fetch("/api/shop/auth/logout", { method: "POST", credentials: "same-origin" });
+    } catch {}
+    location.href = loginHref;
+  });
+
+  // Fetch live wallet balance
+  const loadWallet = async () => {
+    try {
+      const res = await fetch("/api/shop/wallet/balance", { credentials: "same-origin" });
+      const data = await res.json();
+      if (data?.ok && data?.wallet) {
+        const balEl = document.querySelector("[data-wallet-balance-display]");
+        if (balEl) {
+          const isVn = locale === "vi";
+          const amount = isVn ? data.wallet.balanceVndMinor : data.wallet.balanceUsdMinor;
+          balEl.textContent = isVn ? new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(amount) : `$${(amount / 100).toFixed(2)}`;
+        }
+      }
+    } catch {}
+  };
+  loadWallet();
+
+  // Topup Modal Handling
+  const modal = document.querySelector("[data-topup-modal]");
+  const openBtn = document.querySelector("[data-open-topup-modal]");
+  const closeBtns = document.querySelectorAll("[data-close-topup-modal]");
+  const presetBtns = document.querySelectorAll("[data-topup-presets] button");
+  const submitBtn = document.querySelector("[data-submit-topup]");
+  const resultContainer = document.querySelector("[data-topup-result]");
+  const qrImg = document.querySelector("[data-topup-qr]");
+  const descEl = document.querySelector("[data-topup-desc]");
+
+  let selectedAmount = Number(document.querySelector(".preset-btn.is-active")?.getAttribute("data-amount")) || 100000;
+
+  const customInput = document.querySelector("[data-custom-topup-input]");
+
+  openBtn?.addEventListener("click", () => {
+    if (modal) modal.hidden = false;
+  });
+  closeBtns.forEach((btn) => btn.addEventListener("click", () => {
+    if (modal) modal.hidden = true;
+  }));
+
+  customInput?.addEventListener("input", () => {
+    presetBtns.forEach((b) => b.classList.remove("is-active"));
+    const val = parseFloat(customInput.value);
+    if (!isNaN(val) && val > 0) {
+      selectedAmount = Math.round(val);
+    }
+  });
+
+  presetBtns.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      presetBtns.forEach((b) => b.classList.remove("is-active"));
+      btn.classList.add("is-active");
+      const amount = Number(btn.getAttribute("data-amount")) || 100000;
+      selectedAmount = amount;
+      if (customInput) {
+        customInput.value = String(amount);
+      }
+    });
+  });
+
+  submitBtn?.addEventListener("click", async () => {
+    if (!submitBtn) return;
+    submitBtn.disabled = true;
+    try {
+      const res = await fetch("/api/shop/wallet/topup", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          amountMinor: selectedAmount,
+          currency: "VND",
+          paymentMethod: "vietqr",
+        }),
+      });
+      const data = await res.json();
+      if (!resultContainer || !qrImg || !descEl) return;
+      if (!data?.ok) {
+        // Surface the failure code instead of failing silently: a top-up that
+        // is not configured must be visible to the customer.
+        qrImg.hidden = true;
+        descEl.textContent = data?.code ? `(${data.code})` : "(topup_failed)";
+        resultContainer.hidden = false;
+        return;
+      }
+      if (data.qrUrl) {
+        qrImg.src = data.qrUrl;
+        qrImg.hidden = false;
+      } else {
+        qrImg.hidden = true;
+      }
+      const detail = data.destination
+        ? `${data.transferDescription || ""} — ${data.network ? data.network + " · " : ""}${data.destination}`
+        : "";
+      descEl.textContent = detail || data.transferDescription || data.instructions || "";
+      resultContainer.hidden = false;
+      if (data.topupId) {
+        const poll = async () => {
+          const state = await fetch(`/api/shop/wallet/topup/${encodeURIComponent(data.topupId)}`, { credentials: "same-origin" }).then((response) => response.ok ? response.json() : null).catch(() => null);
+          if (state?.topup?.status === "confirmed") {
+            descEl.textContent = locale === "vi" ? "Đã cộng tiền vào ví." : "Funds credited to your wallet.";
+            window.setTimeout(() => window.location.reload(), 600);
+          } else if (state?.topup?.status === "awaiting_payment" && Date.parse(state.topup.expiresAt) > Date.now()) {
+            window.setTimeout(poll, 5_000);
+          }
+        };
+        window.setTimeout(poll, 5_000);
+      }
+    } catch {
+      if (resultContainer && descEl) {
+        descEl.textContent = "(topup_failed)";
+        resultContainer.hidden = false;
+      }
+    }
+    submitBtn.disabled = false;
+  });
+</script>
+
+<style>
+  .account { max-width: 48rem; margin: 0 auto; padding: clamp(2rem, 5vw, 3.5rem) 0 4rem; }
+  .account__label { display:inline-flex; margin:0; padding:.35rem .7rem; border-radius:999px; background:var(--shop-accent-soft,rgba(42, 157, 143,.12)); color:var(--shop-accent-hover,var(--accent)); font:700 .74rem/1 var(--font-sans); }
+  .account__loyalty-card {
+    margin: 1rem 0 1.5rem;
+    padding: 1.25rem 1.4rem;
+    border: 1px solid var(--shop-line, var(--line));
+    border-radius: var(--shop-radius-lg, 1.25rem);
+    background: linear-gradient(135deg, rgba(42, 157, 143, 0.05) 0%, rgba(244, 162, 97, 0.05) 100%), var(--shop-surface, #fff);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.04);
+  }
+  .loyalty-card__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+  }
+  .loyalty-badge {
+    font: 750 0.95rem/1.2 var(--font-sans);
+    color: var(--shop-ink, var(--paper));
+    display: inline-block;
+  }
+  .loyalty-discount-tag {
+    display: inline-block;
+    margin-left: 0.4rem;
+    padding: 0.2rem 0.5rem;
+    border-radius: 9999px;
+    background: #e6f4ea;
+    color: #137333;
+    font: 700 0.72rem/1 var(--font-sans);
+  }
+  .loyalty-spend {
+    font: 750 1.05rem/1.2 var(--font-sans);
+    color: var(--shop-accent, var(--accent));
+  }
+  .loyalty-progress {
+    height: 0.45rem;
+    border-radius: 9999px;
+    background: rgba(0, 0, 0, 0.06);
+    overflow: hidden;
+    margin-bottom: 0.45rem;
+  }
+  .loyalty-progress__bar {
+    height: 100%;
+    border-radius: 9999px;
+    background: linear-gradient(90deg, #2a9d8f, #f4a261);
+    transition: width 0.4s ease;
+  }
+  .loyalty-next {
+    color: var(--shop-ink-muted, var(--paper-muted));
+    font-size: 0.76rem;
+  }
+
+  .account__wallet-card {
+    margin: 0 0 1.5rem;
+    padding: 1.25rem 1.4rem;
+    border: 1px solid var(--shop-line, var(--line));
+    border-radius: var(--shop-radius-lg, 1.25rem);
+    background: var(--shop-surface, #fff);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.03);
+  }
+  .wallet-card__content {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+  .wallet-label {
+    display: block;
+    font: 600 0.75rem/1.2 var(--font-sans);
+    color: var(--shop-ink-muted, var(--paper-muted));
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .wallet-amount {
+    display: block;
+    font: 800 clamp(1.4rem, 2.5vw, 1.8rem)/1.2 var(--font-sans);
+    color: var(--shop-accent, var(--accent));
+    margin: 0.2rem 0;
+  }
+  .wallet-hint {
+    display: block;
+    color: var(--shop-ink-soft, var(--paper-soft));
+    font-size: 0.76rem;
+  }
+  .wallet-topup-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.65rem 1.25rem;
+    border: 0;
+    border-radius: var(--shop-radius-btn, 0.75rem);
+    background: var(--shop-accent, var(--accent));
+    color: #fff;
+    font: 750 0.85rem/1 var(--font-sans);
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(42, 157, 143, 0.25);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+  .wallet-topup-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(42, 157, 143, 0.35);
+  }
+
+  /* Top-up Modal */
+  .topup-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: grid;
+    place-items: center;
+    padding: 1rem;
+  }
+  .topup-modal[hidden] { display: none !important; }
+  .topup-modal__backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(4px);
+  }
+  .topup-modal__dialog {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 28rem;
+    border-radius: var(--shop-radius-lg, 1.25rem);
+    background: var(--shop-surface, #fff);
+    border: 1px solid var(--shop-line, var(--line));
+    box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.25);
+    overflow: hidden;
+  }
+  .topup-modal__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid var(--shop-line, var(--line));
+  }
+  .topup-modal__header h3 {
+    margin: 0;
+    font: 750 1rem/1.2 var(--font-sans);
+    color: var(--shop-ink, var(--paper));
+  }
+  .topup-modal__close {
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    font-size: 1.1rem;
+    color: var(--shop-ink-muted, var(--paper-muted));
+    padding: 0.25rem;
+  }
+  .topup-modal__body {
+    padding: 1.25rem;
+    display: grid;
+    gap: 1rem;
+  }
+  .topup-presets {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+  }
+  .preset-btn {
+    padding: 0.65rem 0.5rem;
+    border: 1px solid var(--shop-line, var(--line));
+    border-radius: var(--shop-radius, 0.5rem);
+    background: var(--shop-surface, #fff);
+    color: var(--shop-ink, var(--paper));
+    font: 650 0.82rem/1 var(--font-sans);
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .preset-btn.is-active, .preset-btn:hover {
+    border-color: var(--shop-accent, var(--accent));
+    background: var(--shop-accent-soft, rgba(42, 157, 143, 0.08));
+    color: var(--shop-accent, var(--accent));
+  }
+  .topup-custom-wrap {
+    display: grid;
+    gap: 0.35rem;
+  }
+  .topup-custom-label {
+    font: 600 0.76rem/1.2 var(--font-sans);
+    color: var(--shop-ink-muted, var(--paper-muted));
+  }
+  .topup-input-group {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+  .topup-custom-input {
+    width: 100%;
+    padding: 0.65rem 3.5rem 0.65rem 0.85rem;
+    border: 1px solid var(--shop-line-strong, var(--line));
+    border-radius: var(--shop-radius, 0.5rem);
+    background: var(--shop-surface, #fff);
+    color: var(--shop-ink, var(--paper));
+    font: 700 0.92rem/1 var(--font-sans);
+  }
+  .topup-custom-input:focus {
+    border-color: var(--shop-accent, var(--accent));
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(42, 157, 143, 0.12);
+  }
+  .topup-input-suffix {
+    position: absolute;
+    right: 0.85rem;
+    font: 700 0.8rem/1 var(--font-sans);
+    color: var(--shop-ink-muted, var(--paper-muted));
+    pointer-events: none;
+  }
+  .topup-submit-btn {
+    width: 100%;
+    padding: 0.75rem;
+    border: 0;
+    border-radius: var(--shop-radius-btn, 0.75rem);
+    background: var(--shop-accent, var(--accent));
+    color: #fff;
+    font: 750 0.88rem/1 var(--font-sans);
+    cursor: pointer;
+  }
+  .topup-submit-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+  .topup-result {
+    display: grid;
+    place-items: center;
+    gap: 0.75rem;
+    padding: 1rem;
+    border: 1px dashed var(--shop-line-strong, var(--line));
+    border-radius: var(--shop-radius, 0.75rem);
+    background: var(--shop-surface-alt, #fafbfc);
+    text-align: center;
+  }
+  .topup-qr {
+    border-radius: 0.5rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  }
+  .topup-details code {
+    padding: 0.2rem 0.5rem;
+    border-radius: 0.25rem;
+    background: #e2e8f0;
+    color: #0f172a;
+    font-weight: 700;
+  }
+  .topup-details small {
+    display: block;
+    margin-top: 0.5rem;
+    color: var(--shop-ink-soft, var(--paper-soft));
+    font-size: 0.75rem;
+  }
+
+  .account__actions { display:flex; flex-wrap:wrap; gap:.65rem; margin:1.35rem 0 1.75rem; }
+  .account__primary, .account__ghost { display:inline-flex; min-height:2.8rem; align-items:center; padding:.55rem 1.05rem; border-radius:var(--shop-radius-btn,.85rem); font:750 .88rem/1 var(--font-sans); text-decoration:none; cursor:pointer; border:0; }
+  .account__primary { background:var(--shop-accent,var(--accent)); color:#fff; box-shadow:0 8px 18px rgba(42, 157, 143,.25); }
+  .account__ghost { border:1px solid var(--shop-line,var(--line)); background:var(--shop-surface,#fff); color:var(--shop-ink,var(--paper)); }
+  .account__section h2 { margin:0 0 1rem; font:750 1.05rem/1.2 var(--font-sans); color:var(--shop-ink,var(--paper)); }
+  .account__orders, .account__items { list-style:none; margin:0; padding:0; display:grid; gap:.75rem; }
+  .account__orders a, .account__items li, .account__section > ul > li {
+    display:grid; gap:.35rem; padding:1.1rem 1.15rem; border:1px solid var(--shop-line,var(--line));
+    border-radius:var(--shop-radius,1rem); background:var(--shop-surface,#fff); color:var(--shop-ink,var(--paper));
+    text-decoration:none; box-shadow:var(--shop-shadow-soft,none); transition:border-color .18s ease, box-shadow .18s ease;
+  }
+  .account__orders a:hover { border-color:rgba(42, 157, 143,.35); box-shadow:var(--shop-shadow,none); }
+  .account__orders strong, .account__items strong { font-size:.95rem; }
+  .account__orders span { color:var(--shop-accent,var(--accent)); font:750 .95rem/1 var(--font-sans); }
+  .account__orders small, .account__items small { color:var(--shop-ink-soft,var(--paper-soft)); font-size:.78rem; }
+  .account__back { color:var(--shop-ink-soft,var(--paper-soft)); text-decoration:none; font:650 .88rem/1 var(--font-sans); }
+  .account__back:hover { color:var(--shop-accent,var(--accent)); }
+  .account__empty { padding:2rem 1.25rem; border:1px dashed var(--shop-line-strong,var(--line)); border-radius:var(--shop-radius-lg,1.25rem); background:var(--shop-bg-soft,#eaf5f3); text-align:center; }
+</style>

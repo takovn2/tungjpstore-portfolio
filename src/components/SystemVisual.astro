@@ -1,0 +1,41 @@
+---
+import { defaultLocale, getTranslation, type Locale } from "../i18n/dictionaries";
+
+interface Props { locale?: Locale; }
+const { locale = defaultLocale } = Astro.props;
+const visual = getTranslation(locale).common.systemVisual;
+---
+
+<div class="system-visual" role="img" aria-label={visual.ariaLabel}>
+  <div class="visual-index mono-label">{visual.index}</div>
+  <div class="orbit orbit-a"></div>
+  <div class="orbit orbit-b"></div>
+  <div class="rail rail-a"></div>
+  <div class="rail rail-b"></div>
+  <div class="node node-a"><span>{visual.input}</span></div>
+  <div class="node node-b accent"><span>{visual.model}</span></div>
+  <div class="node node-c"><span>{visual.service}</span></div>
+  <div class="node node-d"><span>{visual.state}</span></div>
+  <div class="visual-caption mono-label">{visual.complexInside}<br />{visual.simpleOutside}</div>
+</div>
+
+<style>
+  .system-visual { position: relative; min-height: clamp(26rem, 48vw, 46rem); overflow: hidden; border-left: 1px solid var(--line); background: radial-gradient(circle at 60% 45%, rgba(201,244,61,.06), transparent 29%); }
+  .system-visual::before { content: ""; position: absolute; inset: 0; background-image: linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px); background-size: 12.5% 12.5%; opacity: .35; }
+  .visual-index { position: absolute; top: 1rem; left: 1rem; }
+  .visual-caption { position: absolute; right: 1rem; bottom: 1rem; color: var(--paper); text-align: right; }
+  .orbit { position: absolute; border: 1px solid var(--line-strong); border-radius: 50%; }
+  .orbit-a { width: 66%; aspect-ratio: 1; top: 13%; left: 23%; }
+  .orbit-b { width: 38%; aspect-ratio: 1; top: 28%; left: 37%; border-style: dashed; }
+  .rail { position: absolute; height: 1px; transform-origin: left; background: var(--line-strong); }
+  .rail::after { content: ""; position: absolute; right: -1px; top: -3px; width: 7px; height: 7px; border-top: 1px solid var(--paper-soft); border-right: 1px solid var(--paper-soft); transform: rotate(45deg); }
+  .rail-a { width: 58%; top: 51%; left: 9%; transform: rotate(-11deg); }
+  .rail-b { width: 44%; top: 39%; left: 43%; transform: rotate(43deg); }
+  .node { position: absolute; display: grid; width: clamp(4.1rem, 7vw, 6.4rem); aspect-ratio: 1; place-items: center; border: 1px solid var(--line-strong); background: var(--ink); font: 600 .6rem/1 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; }
+  .node-a { top: 46%; left: 4%; }
+  .node-b { top: 35%; left: 38%; }
+  .node-c { top: 22%; right: 8%; }
+  .node-d { right: 19%; bottom: 13%; }
+  .node.accent { border-color: var(--accent); background: var(--accent); color: var(--accent-ink); }
+  @media (max-width: 840px) { .system-visual { min-height: 29rem; border: 1px solid var(--line); } }
+</style>

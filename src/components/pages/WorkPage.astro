@@ -1,0 +1,103 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import ProjectVisual from "../ProjectVisual.astro";
+import { formatProjectCount, getTranslation, localizePath, type Locale } from "../../i18n/dictionaries";
+import { projectCover, projectCoverAlt, resolveProjectCover } from "../../content/project-media";
+import { getProjectEvidence } from "../../content/portfolio-evidence";
+import type { PublicProject } from "../../lib/public-content";
+
+type Copy = ReturnType<typeof getTranslation>;
+interface Props { locale: Locale; projectContent?: Copy["projects"]; projects?: PublicProject[]; }
+
+const { locale, projectContent, projects: projectOverrides } = Astro.props;
+const t = getTranslation(locale);
+const projectCopy = projectContent ?? t.projects;
+const withCover = (project: PublicProject): PublicProject => {
+  const image = resolveProjectCover(project.slug, project.image);
+  return { ...project, image, imageAlt: image === project.image && project.image ? project.imageAlt : projectCoverAlt(project.slug, locale) };
+};
+const curatedProject = (project: PublicProject): PublicProject => {
+  const key = project.slug === "payment-infrastructure" ? "paymentInfrastructure" : project.slug === "logivn" || project.slug === "fball" ? project.slug : null;
+  const copy = key ? projectCopy[key] : null;
+  return withCover(copy ? { ...project, name: copy.name, category: copy.category, status: copy.status, thesis: copy.thesis, summary: copy.summary, seoTitle: copy.name, seoDescription: copy.summary } : project);
+};
+const fallbackProjects: PublicProject[] = [
+  { slug: "logivn", name: projectCopy.logivn.name, category: projectCopy.logivn.category, status: projectCopy.logivn.status, thesis: projectCopy.logivn.thesis, summary: projectCopy.logivn.summary, seoTitle: projectCopy.logivn.name, seoDescription: projectCopy.logivn.summary, liveUrl: "https://logivn.com", image: projectCover("logivn"), imageAlt: projectCoverAlt("logivn", locale), variant: "logivn", research: false, body: null, publishedAt: null },
+  { slug: "fball", name: projectCopy.fball.name, category: projectCopy.fball.category, status: projectCopy.fball.status, thesis: projectCopy.fball.thesis, summary: projectCopy.fball.summary, seoTitle: projectCopy.fball.name, seoDescription: projectCopy.fball.summary, liveUrl: "https://fball.vn", image: projectCover("fball"), imageAlt: projectCoverAlt("fball", locale), variant: "fball", research: false, body: null, publishedAt: null },
+  { slug: "payment-infrastructure", name: projectCopy.paymentInfrastructure.name, category: projectCopy.paymentInfrastructure.category, status: projectCopy.paymentInfrastructure.status, thesis: projectCopy.paymentInfrastructure.thesis, summary: projectCopy.paymentInfrastructure.summary, seoTitle: projectCopy.paymentInfrastructure.name, seoDescription: projectCopy.paymentInfrastructure.summary, liveUrl: null, image: projectCover("payment-infrastructure"), imageAlt: projectCoverAlt("payment-infrastructure", locale), variant: "payment", research: true, body: null, publishedAt: null },
+];
+const projectEntries = (projectOverrides ?? fallbackProjects).map(curatedProject);
+const primaryProjects = projectEntries.filter((project) => !project.research);
+const featuredProject = primaryProjects[0] ?? null;
+const proofCopy = {
+  vi: { visual: "Màn hình sản phẩm", metrics: "Điểm nổi bật", stack: "Công nghệ chính", highlights: { logivn: ["Bề mặt kết nối", "Khu vực chính", "Luồng order"], fball: ["Route công khai", "Không gian đội", "Bước trong ngày thi đấu"] } },
+  en: { visual: "Product screens", metrics: "Highlights", stack: "Core technology", highlights: { logivn: ["Connected surfaces", "Core areas", "Order flow"], fball: ["Public routes", "Team workspace", "Match-day steps"] } },
+  ja: { visual: "プロダクト画面", metrics: "ハイライト", stack: "主な技術", highlights: { logivn: ["つながる画面", "主な領域", "注文フロー"], fball: ["公開ルート", "チームの作業場", "試合日の手順"] } },
+  zh: { visual: "产品界面", metrics: "产品亮点", stack: "核心技术", highlights: { logivn: ["连接界面", "核心区域", "点单流程"], fball: ["公开路线", "球队工作区", "比赛日步骤"] } },
+}[locale];
+const structuredData = {
+  "@context": "https://schema.org",
+  "@type": "CollectionPage",
+  mainEntity: {
+    "@type": "ItemList",
+    itemListElement: projectEntries.map((project, index) => ({
+      "@type": "ListItem",
+      position: index + 1,
+      item: {
+        "@type": "CreativeWork",
+        name: project.name,
+        description: project.summary,
+        url: new URL(localizePath(`/work/${project.slug}`, locale), Astro.site ?? "https://tung.codes").href,
+        image: project.image ? new URL(project.image, Astro.site ?? "https://tung.codes").href : undefined,
+        author: { "@id": "https://tung.codes/#person" },
+      },
+    })),
+  },
+};
+---
+
+<BaseLayout title={t.work.metaTitle} description={t.work.metaDescription} locale={locale} structuredData={structuredData}>
+  <article class="content-page work-index">
+    <header class="page-hero page-hero--work shell">
+      <p class="section-label">{t.work.label}</p>
+      <h1 class="page-title">{t.work.heading}</h1>
+      <div class="page-hero__meta">
+        <span class="mono-label">{formatProjectCount(locale, primaryProjects.length)}</span>
+        <div class="page-hero__pitch">
+          <p class="lead">{t.work.intro}</p>
+          <div class="hero-actions work-hero-actions">
+            {featuredProject && <a class="button-link primary" href={featuredProject.liveUrl || localizePath(`/work/${featuredProject.slug}`, locale)} target={featuredProject.liveUrl ? "_blank" : undefined} rel={featuredProject.liveUrl ? "noreferrer" : undefined}>{t.work.openProject} · {featuredProject.name} <span aria-hidden="true">↗</span></a>}
+            <a class="button-link" href={localizePath("/contact", locale)}>{t.home.contactCta.cta} <span aria-hidden="true">↗</span></a>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <section class="shell project-index-list project-index-list--cards" aria-labelledby="work-list-heading">
+      <h2 class="sr-only" id="work-list-heading">{t.work.allProjects}</h2>
+      {primaryProjects.map((project, index) => {
+        const evidence = getProjectEvidence(project.slug, locale);
+        return <article class="index-project reveal" data-project={project.slug} style={`--reveal-delay: ${index * 80}ms`}>
+          <a class="index-project__link" href={localizePath(`/work/${project.slug}`, locale)}>
+            <div class="index-project__visual"><ProjectVisual name={project.name} category={project.category} variant={project.variant} image={project.image} imageAlt={project.imageAlt} /><span class="index-project__capture-note"><i aria-hidden="true"></i>{proofCopy.visual}</span></div>
+            <div class="index-project__body">
+              <div class="index-project__heading"><span class="index-row__number">0{index + 1}</span><span class="mono-label">{project.category}</span></div>
+              <h2>{project.name}</h2>
+              <p class="index-project__thesis">{project.thesis}</p>
+              <p class="index-project__summary">{project.summary}</p>
+              {evidence && <div class="index-project__proof">
+                <p class="mono-label">{proofCopy.metrics}</p>
+                <dl>{evidence.metrics.map((metric, metricIndex) => <div><dt>{metric.value}</dt><dd>{proofCopy.highlights[project.slug as "logivn" | "fball"]?.[metricIndex] ?? metric.label}</dd></div>)}</dl>
+                <p class="mono-label index-project__stack-label">{proofCopy.stack}</p>
+                <div class="index-project__stack">{evidence.stack.slice(0, 2).map((item) => <span>{item.technology}</span>)}</div>
+              </div>}
+              <span class="index-project__case-link">{t.work.openProject} · {project.name} <span aria-hidden="true">↗</span></span>
+            </div>
+          </a>
+          {project.liveUrl && <div class="index-project__links"><a class="button-link project-proof-link" href={project.liveUrl} target="_blank" rel="noreferrer">{t.work.openProject} · {project.name} <span aria-hidden="true">↗</span></a></div>}
+        </article>;
+      })}
+    </section>
+
+  </article>
+</BaseLayout>

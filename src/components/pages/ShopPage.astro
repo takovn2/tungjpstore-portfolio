@@ -1,0 +1,1260 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import ProductCard from "../shop/ProductCard.astro";
+import ConciergePanel from "../shop/ConciergePanel.astro";
+import AuroraCanvas from "../shop/AuroraCanvas.astro";
+import MerchRail from "../shop/MerchRail.astro";
+import FlywheelBand from "../shop/FlywheelBand.astro";
+import { localizePath, type Locale } from "../../i18n/dictionaries";
+import { formatProductCount, getShopCopy, type ProductViewModel } from "../../i18n/shop";
+import { formatApproximateProductPrice, getExchangeRateNote } from "../../lib/shop/currency";
+import { SHOP_IMAGE_REVISION } from "../../lib/shop/media";
+import { getShopProductDisplayTitle } from "../../lib/shop/seo";
+import { buildMerchandisingRails } from "../../lib/shop/platform/merchandising";
+import { recommendRails } from "../../lib/shop/platform/checkout-mesh";
+
+interface Props { locale: Locale; products?: readonly ProductViewModel[]; }
+const { locale, products = [] } = Astro.props;
+const copy = getShopCopy(locale);
+const categoryFallback: Record<string, string> = {
+  digital_key: locale === "vi" ? "Mã kích hoạt" : locale === "ja" ? "キー" : locale === "zh" ? "激活码" : "Activation keys",
+  digital_download: locale === "vi" ? "Tải xuống" : locale === "ja" ? "ダウンロード" : locale === "zh" ? "下载" : "Downloads",
+  service: locale === "vi" ? "Dịch vụ số" : locale === "ja" ? "サービス" : locale === "zh" ? "数字服务" : "Digital services",
+};
+const categoryIconMap: Record<string, string> = {
+  "ai-tools": "/images/shop/chrome/icon-ai.webp",
+  "creative-tools": "/images/shop/chrome/icon-creative.webp",
+  entertainment: "/images/shop/chrome/icon-entertainment.webp",
+  productivity: "/images/shop/chrome/icon-trust.webp",
+  digital_key: "/images/shop/chrome/icon-delivery.webp",
+  digital_download: "/images/shop/chrome/icon-creative.webp",
+  service: "/images/shop/chrome/icon-delivery.webp",
+  accounts: "/images/shop/chrome/icon-trust.webp",
+  vpn: "/images/shop/chrome/icon-trust.webp",
+  streaming: "/images/shop/chrome/icon-entertainment.webp",
+};
+const categoryIconFor = (slug: string) => {
+  const key = String(slug || "").toLowerCase().trim();
+  if (categoryIconMap[key]) return categoryIconMap[key];
+  if (key.includes("ai") || key.includes("gpt") || key.includes("llm") || key.includes("claude") || key.includes("gemini")) return categoryIconMap["ai-tools"];
+  if (key.includes("creative") || key.includes("design") || key.includes("video") || key.includes("audio") || key.includes("canva")) return categoryIconMap["creative-tools"];
+  if (key.includes("entertain") || key.includes("stream") || key.includes("game") || key.includes("music") || key.includes("netflix") || key.includes("spotify")) return categoryIconMap.entertainment;
+  if (key.includes("product") || key.includes("work") || key.includes("office") || key.includes("code") || key.includes("cursor")) return categoryIconMap.productivity;
+  if (key.includes("service") || key.includes("support") || key.includes("login") || key.includes("account")) return categoryIconMap.service;
+  if (key.includes("vpn") || key.includes("proxy") || key.includes("security")) return categoryIconMap.vpn;
+  return categoryIconMap.digital_key;
+};
+const categoryEntries = Array.from(new Map(products.map((product) => {
+  const slug = product.categorySlug || product.productType;
+  return [slug, { slug, label: product.category || categoryFallback[product.productType] || product.productType, icon: categoryIconFor(slug) }];
+})).values());
+const cartPath = localizePath("/shop/cart", locale);
+const checkoutPath = localizePath("/shop/cart?step=checkout", locale);
+const shopPath = localizePath("/shop", locale);
+const hasApproximatePrices = products.some((product) => Boolean(formatApproximateProductPrice(product, locale)));
+const exchangeRateNote = getExchangeRateNote(locale);
+const siteUrl = Astro.site ?? new URL("https://tung.codes");
+const seoLanding = {
+  vi: {
+    metaTitle: "Shop tài khoản AI giá rẻ, phần mềm giá tốt | TUNG",
+    metaDescription: "Mua tài khoản AI và phần mềm giá rẻ tại TUNG Shop. Xem giá, thời hạn, phiên bản, tồn kho, cách giao sản phẩm số và thanh toán VietQR trước khi mua.",
+    heading: "Mua tài khoản AI & phần mềm giá rẻ",
+    intro: "Tìm gói AI, thiết kế, lập trình và giải trí theo đúng giá, thời hạn, phiên bản và tình trạng kho đang có. Thanh toán VietQR, theo dõi đơn và nhận sản phẩm số sau khi giao dịch được xác minh.",
+    popularLabel: "Tìm nhanh theo nhu cầu",
+    guideHeading: "Shop tài khoản AI giá rẻ với giá và thời hạn công khai",
+    guideIntro: "Mỗi sản phẩm có trang riêng cho tên gói, giá hiện tại, phiên bản, thời hạn, tồn kho và cách bàn giao. Bạn có thể so sánh đúng biến thể trước khi thanh toán thay vì chọn từ một danh sách quảng cáo chung.",
+    benefits: [
+      { title: "Tài khoản AI giá tốt", body: "So sánh ChatGPT, Claude, Gemini, Grok, Cursor và các gói AI theo đúng phiên bản, quota hoặc thời hạn đang bán." },
+      { title: "Công cụ sáng tạo tiết kiệm", body: "Tìm Canva Pro, CapCut Pro, Adobe, Suno và công cụ làm nội dung với giá và lựa chọn hiển thị rõ ràng." },
+      { title: "Giao sản phẩm số có trạng thái", body: "Đơn chỉ chuyển bước sau khi backend xác minh thanh toán; hình thức giao key, tài khoản hoặc xử lý thủ công được ghi trên sản phẩm." },
+    ],
+    faqHeading: "Câu hỏi thường gặp khi mua tài khoản và sản phẩm số",
+    faqs: [
+      { question: "Làm sao chọn gói giá rẻ nhưng đúng nhu cầu?", answer: "Hãy kiểm tra thời hạn, phiên bản, quota, số thiết bị, hình thức bàn giao và tình trạng kho. Giá thấp chỉ có ý nghĩa khi quyền lợi của biến thể phù hợp với cách bạn sử dụng." },
+      { question: "Sau khi thanh toán bao lâu thì nhận được sản phẩm?", answer: "Thời gian phụ thuộc hình thức bàn giao của từng biến thể. Sản phẩm tự động được xử lý sau khi thanh toán được backend xác minh; sản phẩm thủ công cần thêm thời gian kiểm tra trước khi gửi." },
+      { question: "Có thể tìm ChatGPT Plus, Canva Pro hoặc CapCut Pro giá tốt ở đâu?", answer: "Dùng ô tìm kiếm hoặc các liên kết sản phẩm phổ biến trên trang này. Mỗi trang sản phẩm hiển thị giá hiện tại, phiên bản, tồn kho và thông tin nhận hàng trước khi đặt." },
+    ],
+  },
+  en: {
+    metaTitle: "Affordable AI tools & digital products — TUNG Shop",
+    metaDescription: "Compare pricing, plans, availability, and delivery for AI accounts, creative tools, and digital products before you buy.",
+    heading: "Affordable AI tools & digital products",
+    intro: "Compare pricing, duration, plan details, and stock before choosing. Pay by QR and follow verified order and delivery states.",
+    popularLabel: "Popular searches",
+    guideHeading: "Choose by value, not by marketing claims",
+    guideIntro: "Review the exact plan, duration, delivery method, and current availability before payment.",
+    benefits: [
+      { title: "AI tools at clear prices", body: "Compare assistants, coding tools, and token packages by the plan currently offered." },
+      { title: "Creative tools for less", body: "Find design, video, audio, and content tools with visible pricing and options." },
+      { title: "Traceable digital delivery", body: "Payment and delivery states are shown from backend-verified order data." },
+    ],
+    faqHeading: "Digital product buying FAQ",
+    faqs: [
+      { question: "How do I choose an affordable plan?", answer: "Compare duration, limits, devices, delivery method, and availability rather than price alone." },
+      { question: "When will my digital product arrive?", answer: "Automatic items are processed after verified payment. Manual items require an additional review before delivery." },
+      { question: "Where can I find popular AI and creative tools?", answer: "Use the catalog search or the popular product links on this page to open current pricing and plan details." },
+    ],
+  },
+  ja: {
+    metaTitle: "手頃なAIツール・デジタル商品 — TUNG Shop",
+    metaDescription: "AIアカウント、制作ツール、デジタル商品の価格、期間、在庫、受取方法を購入前に比較できます。",
+    heading: "手頃なAIツール・デジタル商品",
+    intro: "価格、期間、プラン、在庫、受取方法を確認してから選べます。",
+    popularLabel: "人気の商品",
+    guideHeading: "宣伝文句ではなく、条件で選ぶ",
+    guideIntro: "支払い前にプラン、期間、受取方法、在庫を確認できます。",
+    benefits: [
+      { title: "明確な価格のAIツール", body: "AIアシスタントや開発ツールを現在のプラン条件で比較できます。" },
+      { title: "手頃な制作ツール", body: "デザイン、動画、音声、コンテンツ制作ツールの価格と選択肢を確認できます。" },
+      { title: "追跡できるデジタル受取", body: "支払い確認から受取までの注文状態を確認できます。" },
+    ],
+    faqHeading: "デジタル商品購入のよくある質問",
+    faqs: [
+      { question: "手頃なプランはどう選びますか？", answer: "価格だけでなく、期間、上限、端末数、受取方法、在庫を比較してください。" },
+      { question: "商品はいつ届きますか？", answer: "自動商品は支払い確認後に処理され、手動商品は送付前に追加確認があります。" },
+      { question: "人気のAI・制作ツールはどこで探せますか？", answer: "検索欄またはこのページの商品リンクから価格とプランを確認できます。" },
+    ],
+  },
+  zh: {
+    metaTitle: "高性价比 AI 工具与数字商品 — TUNG Shop",
+    metaDescription: "购买前比较 AI 账号、创作工具与数字商品的价格、期限、库存和交付方式。",
+    heading: "高性价比 AI 工具与数字商品",
+    intro: "选择前可比较价格、期限、套餐、库存和交付方式。",
+    popularLabel: "热门商品",
+    guideHeading: "按实际条件选择，而不是按广告选择",
+    guideIntro: "付款前查看套餐、期限、交付方式和当前库存。",
+    benefits: [
+      { title: "价格清晰的 AI 工具", body: "按当前套餐比较 AI 助手、编程工具和 Token 产品。" },
+      { title: "实惠的创作工具", body: "查看设计、视频、音频和内容工具的价格与选项。" },
+      { title: "可追踪的数字交付", body: "从付款确认到交付均显示后端验证的订单状态。" },
+    ],
+    faqHeading: "购买数字商品常见问题",
+    faqs: [
+      { question: "如何选择高性价比套餐？", answer: "除价格外，还应比较期限、额度、设备数、交付方式和库存。" },
+      { question: "付款后多久收到商品？", answer: "自动商品在付款验证后处理，手动商品在交付前需要额外检查。" },
+      { question: "在哪里查找热门 AI 和创作工具？", answer: "可使用目录搜索或本页热门商品链接查看当前价格和套餐。" },
+    ],
+  },
+} as const;
+const baseLanding = seoLanding[locale];
+const catalogExamples = products.slice(0, 4).map((product) => getShopProductDisplayTitle(product, locale));
+const landing = locale === "vi" && catalogExamples.length > 0 ? {
+  ...baseLanding,
+  metaDescription: `Mua tài khoản AI và phần mềm giá rẻ tại TUNG Shop: ${catalogExamples.join(", ")}. Xem giá, thời hạn, tồn kho và cách giao trước khi mua.`,
+  intro: `${baseLanding.intro} Sản phẩm nổi bật hiện có: ${catalogExamples.join(", ")}.`,
+} : baseLanding;
+const popularProductLabels: Record<string, Record<Locale, string>> = {
+  "chatgpt-plus": { vi: "Mua ChatGPT Plus 1 tháng giá rẻ", en: "ChatGPT Plus plans", ja: "ChatGPT Plus", zh: "ChatGPT Plus 套餐" },
+  canva: { vi: "Mua Canva Pro 1 tháng giá rẻ", en: "Affordable Canva Pro", ja: "Canva Pro", zh: "Canva Pro" },
+  "capcut-pro": { vi: "Mua CapCut Pro giá rẻ", en: "Affordable CapCut Pro", ja: "CapCut Pro", zh: "CapCut Pro" },
+  "gemini-pro": { vi: "Mua Gemini Pro 1 tháng giá rẻ", en: "Gemini Pro plans", ja: "Gemini Pro", zh: "Gemini Pro" },
+  "cursor-pro": { vi: "Mua Cursor Pro giá tốt", en: "Cursor Pro for coding", ja: "Cursor Pro", zh: "Cursor Pro" },
+  "claude-api": { vi: "Mua Claude API token giá tốt", en: "Claude API token packs", ja: "Claude API", zh: "Claude API Token" },
+};
+const preferredPopularProducts = Object.entries(popularProductLabels).flatMap(([slug, labels]) => {
+  const product = products.find((item) => item.slug === slug);
+  return product ? [{ ...product, seoLabel: labels[locale] }] : [];
+});
+const popularProducts = [
+  ...preferredPopularProducts,
+  ...products
+    .filter((product) => !preferredPopularProducts.some((item) => item.slug === product.slug))
+    .map((product) => ({
+      ...product,
+      seoLabel: locale === "vi"
+        ? `Mua ${getShopProductDisplayTitle(product, locale)} giá tốt`
+        : locale === "ja"
+          ? `${product.title}を購入`
+          : locale === "zh"
+            ? `购买 ${product.title}`
+            : `Buy ${product.title}`,
+    })),
+].slice(0, 6);
+const schemaPrice = (amountMinor: number, currency: string) => {
+  const fractionDigits = new Intl.NumberFormat("en", { style: "currency", currency }).resolvedOptions().maximumFractionDigits ?? 2;
+  return amountMinor / (10 ** fractionDigits);
+};
+const collectionSchema = {
+  "@context": "https://schema.org",
+  "@type": "CollectionPage",
+  name: landing.metaTitle,
+  description: landing.metaDescription,
+  url: new URL(shopPath, siteUrl).href,
+  mainEntity: {
+    "@type": "ItemList",
+    numberOfItems: products.length,
+    itemListElement: products.map((product, index) => ({
+      "@type": "ListItem",
+      position: index + 1,
+      url: new URL(localizePath(`/shop/${product.slug}`, locale), siteUrl).href,
+      item: {
+        "@type": "Product",
+        name: getShopProductDisplayTitle(product, locale),
+        description: product.shortDescription,
+        category: product.category || product.productType,
+        image: product.media.find((item) => item.type === "image")?.url
+          ? new URL(product.media.find((item) => item.type === "image")!.url, siteUrl).href
+          : undefined,
+        offers: product.variants.length > 0 ? {
+          "@type": "AggregateOffer",
+          priceCurrency: product.currency,
+          lowPrice: schemaPrice(product.minPriceMinor, product.currency),
+          highPrice: schemaPrice(product.maxPriceMinor, product.currency),
+          offerCount: product.variants.length,
+        } : undefined,
+      },
+    })),
+  },
+};
+const breadcrumbSchema = {
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  itemListElement: [
+    { "@type": "ListItem", position: 1, name: "TUNG", item: new URL(localizePath("/", locale), siteUrl).href },
+    { "@type": "ListItem", position: 2, name: landing.heading, item: new URL(shopPath, siteUrl).href },
+  ],
+};
+const faqSchema = {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  mainEntity: landing.faqs.map((faq) => ({
+    "@type": "Question",
+    name: faq.question,
+    acceptedAnswer: { "@type": "Answer", text: faq.answer },
+  })),
+};
+const structuredData = [collectionSchema, breadcrumbSchema, faqSchema];
+const localeLabels = {
+  vi: {
+    title: "Cửa hàng",
+    search: "Tìm sản phẩm",
+    all: "Tất cả",
+    cartEmpty: "Giỏ hàng trống",
+    cartTitle: "Giỏ hàng",
+    continue: "Tiếp tục mua",
+    checkout: "Thanh toán",
+    units: "sản phẩm",
+  },
+  en: {
+    title: "Shop",
+    search: "Search",
+    all: "All",
+    cartEmpty: "Cart is empty",
+    cartTitle: "Cart",
+    continue: "Continue",
+    checkout: "Checkout",
+    units: "items",
+  },
+  ja: {
+    title: "ショップ",
+    search: "検索",
+    all: "すべて",
+    cartEmpty: "カートは空です",
+    cartTitle: "カート",
+    continue: "続ける",
+    checkout: "会計",
+    units: "点",
+  },
+  zh: {
+    title: "商店",
+    search: "搜索",
+    all: "全部",
+    cartEmpty: "购物车为空",
+    cartTitle: "购物车",
+    continue: "继续",
+    checkout: "结算",
+    units: "件",
+  },
+} as const;
+const labels = localeLabels[locale];
+const productBySlug = new Map(products.map((product) => [product.slug, product]));
+const merchRails = buildMerchandisingRails(
+  products.map((product) => ({
+    id: product.id,
+    slug: product.slug,
+    title: product.title,
+    categorySlug: product.categorySlug,
+    category: product.category,
+    featured: product.featured,
+    availability: product.availability,
+    minPriceMinor: product.minPriceMinor,
+    maxPriceMinor: product.maxPriceMinor,
+    currency: product.currency,
+    badges: product.badges,
+    compareAtHint: product.variants.find((v) => v.compareAtMinor && v.compareAtMinor > v.priceMinor)?.compareAtMinor ?? null,
+  })),
+  locale,
+).map((rail) => ({
+  ...rail,
+  products: rail.productSlugs.map((slug) => productBySlug.get(slug)).filter(Boolean) as ProductViewModel[],
+})).filter((rail) => rail.products.length > 0);
+const paymentRails = recommendRails({ locale, currency: locale === "vi" ? "VND" : "USD", channel: "web" });
+---
+
+<BaseLayout title={landing.metaTitle} description={landing.metaDescription} locale={locale} structuredData={structuredData} chrome="store" storeCartDrawer={true}>
+  <div class="storefront-page">
+
+    {/* ── 0. Hero — Porcelain White + ambient canvas ───────────── */}
+    <section class="storefront-hero" aria-labelledby="storefront-hero-title">
+      <AuroraCanvas dotgrid />
+      <div class="storefront-hero__inner shell">
+        <nav class="storefront-breadcrumb" aria-label="Breadcrumb">
+          <a href={localizePath("/", locale)}>Trang chủ</a>
+          <span aria-hidden="true">/</span>
+          <span aria-current="page">Cửa hàng</span>
+        </nav>
+        <span class="storefront-hero__kicker">
+          <i aria-hidden="true"></i>
+          {locale === "vi" ? "Cửa hàng sản phẩm số chính hãng" : locale === "ja" ? "正規デジタルショップ" : locale === "zh" ? "正版数字商品商店" : "Licensed digital products store"}
+        </span>
+        <h1 class="storefront-hero__title" id="storefront-hero-title">
+          {locale === "vi" ? "Tài khoản AI & Bản quyền phần mềm" : landing.heading}
+        </h1>
+        <p class="storefront-hero__desc">
+          {locale === "vi"
+            ? "Cung cấp tài khoản ChatGPT Plus, Claude Pro, Cursor, Canva Pro chính hãng. Tự động kích hoạt, bảo hành 1 đổi 1 trong suốt thời gian sử dụng."
+            : landing.intro}
+        </p>
+        <div class="storefront-hero__stats">
+          <div class="storefront-hero__stat">
+            <strong>{formatProductCount(locale, products.length)}</strong>
+            <span>{locale === "vi" ? "sản phẩm đang bán" : locale === "ja" ? "販売中の商品" : locale === "zh" ? "在售商品" : "products live"}</span>
+          </div>
+          <div class="storefront-hero__stat">
+            <strong>~10s</strong>
+            <span>{locale === "vi" ? "tự động giao key" : locale === "ja" ? "自動配信" : locale === "zh" ? "自动交付" : "auto delivery"}</span>
+          </div>
+          <div class="storefront-hero__stat">
+            <strong>1:1</strong>
+            <span>{locale === "vi" ? "bảo hành đổi mới" : locale === "ja" ? "保証交換" : locale === "zh" ? "保修换新" : "warranty swap"}</span>
+          </div>
+        </div>
+        <a class="storefront-hero__cta" href="#catalog">
+          <span>{locale === "vi" ? "Khám phá catalog" : locale === "ja" ? "カタログを見る" : locale === "zh" ? "浏览商品" : "Browse catalog"}</span>
+          <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+        </a>
+      </div>
+      <div class="storefront-hero__fade" aria-hidden="true"></div>
+    </section>
+
+
+    {/* ── 1. Control toolbar: Search + Category Pills ──────────── */}
+    <header class="storefront-controls-bar shell">
+      <div class="storefront-controls">
+        <label class="storefront-search">
+          <svg class="storefront-search__icon" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <span class="sr-only">{labels.search}</span>
+          <input type="search" placeholder={locale === "vi" ? "Tìm nhanh ChatGPT, Cursor, Canva, Claude..." : labels.search} data-shop-search />
+        </label>
+
+        <nav class="storefront-pills" aria-label={labels.title} data-shop-categories>
+          <button type="button" class="storefront-pill is-active" data-shop-category="all">
+            <span>{labels.all}</span>
+            <small data-shop-result-count>{products.length}</small>
+          </button>
+          {categoryEntries.map((category) => (
+            <button type="button" class="storefront-pill" data-shop-category={category.slug}>
+              <span>{category.label}</span>
+            </button>
+          ))}
+        </nav>
+      </div>
+    </header>
+
+    {/* ── 2. Product Catalog Grid ──────────────────────────────── */}
+    <main class="storefront-main shell" id="catalog">
+      {products.length === 0 ? (
+        <div class="storefront-empty">
+          <img src={`/images/shop/chrome/empty-cart.webp?v=${SHOP_IMAGE_REVISION}`} alt="" width="120" height="120" loading="lazy" decoding="async" />
+          <h2>{copy.emptyTitle}</h2>
+          <a class="storefront-btn" href={localizePath("/contact", locale)}>{copy.emptyCta}</a>
+        </div>
+      ) : (
+        <div class="storefront-grid" data-shop-grid>
+          {products.map((product, index) => (
+            <ProductCard product={product} locale={locale} index={index} priority={index < 4} />
+          ))}
+        </div>
+      )}
+
+      {hasApproximatePrices && <p class="storefront-rate-note">{exchangeRateNote}</p>}
+      <p class="storefront-no-results" data-shop-no-results hidden>
+        {locale === "vi" ? "Không tìm thấy sản phẩm phù hợp." : "No products found."}
+      </p>
+    </main>
+
+    {/* ── 3. Guarantees & Buyer Protection ─────────────────────── */}
+    <section class="storefront-trust shell" aria-label="Cam kết dịch vụ">
+      <div class="storefront-trust__grid">
+        <div class="storefront-trust__item">
+          <div class="storefront-trust__icon">
+            <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+          </div>
+          <div>
+            <strong>{locale === "vi" ? "Kích hoạt tức thì" : "Instant Delivery"}</strong>
+            <p>{locale === "vi" ? "Tự động cấp tài khoản / key qua email và trang đơn hàng sau 10 giây." : "Accounts and keys delivered instantly upon payment."}</p>
+          </div>
+        </div>
+
+        <div class="storefront-trust__item">
+          <div class="storefront-trust__icon">
+            <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>
+          </div>
+          <div>
+            <strong>{locale === "vi" ? "Bảo hành 1 đổi 1" : "Full Warranty"}</strong>
+            <p>{locale === "vi" ? "Cam kết hỗ trợ kỹ thuật hoặc đổi mới ngay nếu phát sinh sự cố trong suốt thời hạn." : "100% replacement guarantee throughout the entire subscription."}</p>
+          </div>
+        </div>
+
+        <div class="storefront-trust__item">
+          <div class="storefront-trust__icon">
+            <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><path d="M2 10h20"/></svg>
+          </div>
+          <div>
+            <strong>{locale === "vi" ? "VietQR 0đ phí" : "Seamless Pay"}</strong>
+            <p>{locale === "vi" ? "Quét mã QR chuyển khoản ngân hàng không mất phí, xác thực tức thì." : "Zero fee bank QR, card, and crypto payment support."}</p>
+          </div>
+        </div>
+
+        <div class="storefront-trust__item">
+          <div class="storefront-trust__icon">
+            <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22z"/></svg>
+          </div>
+          <div>
+            <strong>{locale === "vi" ? "Hỗ trợ 24/7" : "24/7 Support"}</strong>
+            <p>{locale === "vi" ? "Đội ngũ kỹ thuật hỗ trợ trực tiếp và giải đáp tận tình qua Telegram / Zalo." : "Dedicated technical support via Telegram and live chat."}</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    {/* ── 4. SEO FAQ & Popular Queries ─────────────────────────── */}
+    <section class="storefront-seo shell" aria-labelledby="shop-faq-heading">
+      <div class="storefront-seo__head">
+        <h2 id="shop-faq-heading">{landing.faqHeading}</h2>
+        <p>{landing.guideIntro}</p>
+      </div>
+
+      <div class="storefront-seo__faq-grid">
+        {landing.faqs.map((faq) => (
+          <article class="storefront-seo__faq-card">
+            <h3>{faq.question}</h3>
+            <p>{faq.answer}</p>
+          </article>
+        ))}
+      </div>
+
+      {popularProducts.length > 0 && (
+        <nav class="storefront-seo__links" aria-label={landing.popularLabel}>
+          <span>{landing.popularLabel}:</span>
+          {popularProducts.map((product) => (
+            <a href={localizePath(`/shop/${product.slug}`, locale)}>{product.seoLabel}</a>
+          ))}
+        </nav>
+      )}
+    </section>
+  </div>
+
+  <ConciergePanel locale={locale} />
+
+  <button type="button" class="shop-cart-overlay" data-shop-cart-overlay data-shop-cart-close aria-label={locale === "vi" ? "Đóng giỏ hàng" : locale === "ja" ? "カートを閉じる" : locale === "zh" ? "关闭购物车" : "Close cart"} hidden></button>
+  <aside class="shop-cart-drawer" id="shop-cart-drawer" data-shop-cart-drawer role="dialog" aria-modal="true" aria-labelledby="shop-cart-title" aria-hidden="true" tabindex="-1" hidden>
+    <div class="shop-cart-drawer__head">
+      <div>
+        <p class="shop-cart-drawer__kicker">TUNG Shop</p>
+        <h2 id="shop-cart-title">{labels.cartTitle}</h2>
+      </div>
+      <button type="button" data-shop-cart-close aria-label={locale === "vi" ? "Đóng giỏ hàng" : locale === "ja" ? "カートを閉じる" : locale === "zh" ? "关闭购物车" : "Close cart"}>×</button>
+    </div>
+    <div class="shop-cart-drawer__items" data-shop-cart-items><p class="shop-cart-drawer__empty">{labels.cartEmpty}</p></div>
+    <div class="shop-cart-drawer__foot">
+      <div><span>{labels.units}</span><strong data-shop-cart-total>0</strong></div>
+      <a class="storefront__button" href={checkoutPath} data-shop-cart-checkout>{labels.checkout}</a>
+      <a class="shop-cart-drawer__continue" href="#catalog" data-shop-cart-close>{labels.continue}</a>
+    </div>
+  </aside>
+
+  <Fragment slot="page-scripts">
+    <script is:inline define:vars={{ cartPath, shopImageRevision: SHOP_IMAGE_REVISION, labels: { cartEmpty: labels.cartEmpty, checkout: labels.checkout, units: labels.units, increase: locale === "vi" ? "Tăng số lượng" : locale === "ja" ? "数量を増やす" : locale === "zh" ? "增加数量" : "Increase quantity", decrease: locale === "vi" ? "Giảm số lượng" : locale === "ja" ? "数量を減らす" : locale === "zh" ? "减少数量" : "Decrease quantity", remove: locale === "vi" ? "Xóa sản phẩm" : locale === "ja" ? "商品を削除" : locale === "zh" ? "删除商品" : "Remove item" }, locale }}>
+      const cartStorageKey = "tung:shop:cart:v1";
+      const cartDrawer = document.querySelector("[data-shop-cart-drawer]");
+      const cartOverlay = document.querySelector("[data-shop-cart-overlay]");
+      const cartItemsElement = document.querySelector("[data-shop-cart-items]");
+      const cartTotalElement = document.querySelector("[data-shop-cart-total]");
+      const countElements = Array.from(document.querySelectorAll("[data-shop-cart-count]"));
+      const money = (minor, currency) => new Intl.NumberFormat(locale === "vi" ? "vi-VN" : locale === "ja" ? "ja-JP" : locale === "zh" ? "zh-CN" : "en-US", { style: "currency", currency, maximumFractionDigits: currency === "VND" ? 0 : 2 }).format(Number(minor || 0) / (currency === "VND" ? 1 : 100));
+      const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
+      const versionImageUrl = (value) => { const url = String(value || ""); return url.startsWith("/images/shop/") && !/[?&]v=/.test(url) ? `${url}${url.includes("?") ? "&" : "?"}v=${shopImageRevision}` : url; };
+      const readCart = () => { try { const value = JSON.parse(localStorage.getItem(cartStorageKey) || "[]"); return Array.isArray(value) ? value.filter((item) => item && typeof item.variantId === "string" && item.variantId.length > 0) : []; } catch { return []; } };
+      const writeCart = (items) => { localStorage.setItem(cartStorageKey, JSON.stringify(items.slice(0, 30))); window.dispatchEvent(new CustomEvent("tung:shop-cart")); };
+      const renderCart = () => {
+        const items = readCart();
+        const count = items.reduce((sum, item) => sum + Math.max(0, Number(item.quantity) || 0), 0);
+        countElements.forEach((element) => { element.textContent = String(count); });
+        if (cartTotalElement) cartTotalElement.textContent = money(items.reduce((sum, item) => sum + (Number(item.priceMinor) || 0) * (Number(item.quantity) || 0), 0), items[0]?.currency || "VND");
+        if (!cartItemsElement) return;
+        if (!items.length) { cartItemsElement.innerHTML = `<p class="shop-cart-drawer__empty">${labels.cartEmpty}</p>`; return; }
+        cartItemsElement.innerHTML = items.map((item) => { const id = escapeHtml(item.variantId); const title = escapeHtml(item.title); const variantTitle = escapeHtml(item.variantTitle || ""); const imageUrl = escapeHtml(versionImageUrl(item.imageUrl)); const quantity = Math.max(1, Number(item.quantity) || 1); return `<article class="shop-cart-item"><div class="shop-cart-item__thumb">${imageUrl ? `<img src="${imageUrl}" alt="" loading="lazy">` : ""}</div><div class="shop-cart-item__copy"><strong>${title}</strong><small>${variantTitle}</small><span>${money(Number(item.priceMinor) * quantity, item.currency || "VND")}</span><div class="shop-cart-item__controls"><button type="button" data-cart-dec="${id}" aria-label="${labels.decrease}">−</button><b aria-label="${labels.units}">${quantity}</b><button type="button" data-cart-inc="${id}" aria-label="${labels.increase}">+</button><button type="button" data-cart-remove="${id}" aria-label="${labels.remove}">${labels.remove}</button></div></div></article>`; }).join("");
+      };
+      let lastFocusedElement = null;
+      let closeTimer = 0;
+      const getFocusable = () => cartDrawer ? Array.from(cartDrawer.querySelectorAll("a[href], button:not([disabled]), input, select, textarea, [tabindex]:not([tabindex=\"-1\"])")).filter((element) => !element.hidden) : [];
+      const setCartOpen = (open) => {
+        if (!cartDrawer || !cartOverlay) return;
+        window.clearTimeout(closeTimer);
+        if (open) {
+          if (cartDrawer.hidden) lastFocusedElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+          cartDrawer.hidden = false;
+          cartOverlay.hidden = false;
+          requestAnimationFrame(() => {
+            cartDrawer.classList.add("is-open");
+            cartOverlay.classList.add("is-open");
+          });
+          cartDrawer.setAttribute("aria-hidden", "false");
+          document.querySelectorAll("[data-shop-cart-toggle]").forEach((button) => button.setAttribute("aria-expanded", "true"));
+          document.body.classList.add("shop-cart-open");
+          renderCart();
+          (getFocusable()[0] || cartDrawer).focus();
+          return;
+        }
+        cartDrawer.classList.remove("is-open");
+        cartOverlay.classList.remove("is-open");
+        cartDrawer.setAttribute("aria-hidden", "true");
+        document.querySelectorAll("[data-shop-cart-toggle]").forEach((button) => button.setAttribute("aria-expanded", "false"));
+        document.body.classList.remove("shop-cart-open");
+        closeTimer = window.setTimeout(() => {
+          cartDrawer.hidden = true;
+          cartOverlay.hidden = true;
+          if (lastFocusedElement?.isConnected) { lastFocusedElement.focus(); lastFocusedElement = null; }
+        }, 280);
+      };
+      document.addEventListener("click", (event) => {
+        const target = event.target instanceof Element ? event.target : null;
+        const toggle = target?.closest("[data-shop-cart-toggle]");
+        if (toggle && cartDrawer) { event.preventDefault(); setCartOpen(true); return; }
+        const closeTarget = target?.closest("[data-shop-cart-close]");
+        if (closeTarget) { if (!(closeTarget instanceof HTMLAnchorElement)) event.preventDefault(); setCartOpen(false); return; }
+        const add = target?.closest("[data-cart-add]");
+        if (add) {
+          const product = JSON.parse(add.getAttribute("data-cart-product") || "{}");
+          if (!product.variantId) return;
+          const items = readCart();
+          const currency = product.currency || "VND";
+          if (items.length && items.some((item) => (item.currency || "VND") !== currency)) {
+            window.alert(locale === "vi" ? "Giỏ hàng chỉ hỗ trợ một loại tiền tệ. Hãy thanh toán giỏ hiện tại hoặc xóa bớt sản phẩm." : locale === "ja" ? "カートは1つの通貨のみ対応しています。" : locale === "zh" ? "购物车仅支持一种货币。" : "Cart supports one currency only. Checkout or clear existing items first.");
+            return;
+          }
+          const found = items.find((item) => item.variantId === product.variantId);
+          if (found) found.quantity = Math.min(Number(found.maxQuantity) || 10, Number(found.quantity) + 1);
+          else items.push({ ...product, quantity: 1 });
+          writeCart(items);
+          renderCart();
+          setCartOpen(true);
+          return;
+        }
+        const inc = target?.closest("[data-cart-inc]");
+        const dec = target?.closest("[data-cart-dec]");
+        const remove = target?.closest("[data-cart-remove]");
+        if (inc || dec || remove) { const id = (inc || dec || remove).getAttribute(inc ? "data-cart-inc" : dec ? "data-cart-dec" : "data-cart-remove"); const items = readCart(); const item = items.find((entry) => entry.variantId === id); if (remove) writeCart(items.filter((entry) => entry.variantId !== id)); else if (item) item.quantity = inc ? Math.min(Number(item.maxQuantity) || 10, Number(item.quantity) + 1) : Number(item.quantity) - 1, writeCart(item.quantity > 0 ? items : items.filter((entry) => entry.variantId !== id)); renderCart(); }
+      });
+      const searchInput = document.querySelector("[data-shop-search]");
+      const resultCountNodes = document.querySelectorAll("[data-shop-result-count], [data-shop-result-count-label]");
+      let currentCategory = "all";
+      const formatVisibleCount = (count) => locale === "vi" ? `${count} sản phẩm` : locale === "ja" ? `${count}件の商品` : locale === "zh" ? `${count}件商品` : `${count} ${count === 1 ? "product" : "products"}`;
+      const skeleton = document.querySelector("[data-shop-skeleton]");
+      const grid = document.querySelector("[data-shop-grid]");
+      let filterTimer = 0;
+      const applyCatalogFilters = (opts = {}) => {
+        const showSkeleton = Boolean(opts.skeleton);
+        if (showSkeleton && skeleton && grid) {
+          skeleton.hidden = false;
+          grid.hidden = true;
+          window.clearTimeout(filterTimer);
+          filterTimer = window.setTimeout(() => {
+            applyCatalogFilters({ skeleton: false });
+          }, 140);
+          return;
+        }
+        const query = String(searchInput?.value || "").trim().toLocaleLowerCase(locale);
+        let visible = 0;
+        document.querySelectorAll("[data-shop-grid] .shop-product-card").forEach((card) => {
+          const matchesCategory = currentCategory === "all" || card.getAttribute("data-category") === currentCategory;
+          const matchesQuery = !query || String(card.textContent || "").toLocaleLowerCase(locale).includes(query);
+          const matches = matchesCategory && matchesQuery;
+          card.hidden = !matches;
+          if (matches) visible += 1;
+        });
+        const empty = document.querySelector("[data-shop-no-results]");
+        if (empty) empty.hidden = visible > 0;
+        const label = formatVisibleCount(visible);
+        resultCountNodes.forEach((node) => { node.textContent = label; });
+        if (skeleton && grid) {
+          skeleton.hidden = true;
+          grid.hidden = false;
+        }
+      };
+      let searchTimer = 0;
+      searchInput?.addEventListener("input", () => {
+        window.clearTimeout(searchTimer);
+        searchTimer = window.setTimeout(() => applyCatalogFilters({ skeleton: true }), 140);
+      });
+      document.querySelectorAll("[data-shop-category]").forEach((button) => button.addEventListener("click", () => {
+        currentCategory = button.getAttribute("data-shop-category") || "all";
+        document.querySelectorAll("[data-shop-category]").forEach((item) => item.classList.toggle("is-active", item === button));
+        applyCatalogFilters({ skeleton: true });
+      }));
+      document.addEventListener("keydown", (event) => { if (!cartDrawer || cartDrawer.hidden) return; if (event.key === "Escape") { event.preventDefault(); setCartOpen(false); return; } if (event.key === "Tab") { const focusable = getFocusable(); if (!focusable.length) { event.preventDefault(); cartDrawer.focus(); return; } const first = focusable[0]; const last = focusable[focusable.length - 1]; if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); } else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); } } });
+      window.addEventListener("storage", renderCart); window.addEventListener("tung:shop-cart", renderCart); renderCart();
+    </script>
+    <script is:inline>
+      (() => {
+        if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+        const cards = document.querySelectorAll(".storefront-grid .shop-product-card");
+        if (!cards.length || !("IntersectionObserver" in window)) return;
+        cards.forEach((card) => {
+          card.style.opacity = "0";
+          card.style.transform = "translateY(16px)";
+          card.style.transition = "opacity 0.55s var(--shop-ease, ease), transform 0.55s var(--shop-ease, ease)";
+          card.style.transitionDelay = `calc(var(--shop-card-delay, 0ms) * 0.55)`;
+        });
+        const observer = new IntersectionObserver((entries) => {
+          for (const entry of entries) {
+            if (!entry.isIntersecting) continue;
+            const card = entry.target;
+            card.style.opacity = "1";
+            card.style.transform = "none";
+            observer.unobserve(card);
+          }
+        }, { rootMargin: "0px 0px -8% 0px", threshold: 0.05 });
+        cards.forEach((card) => observer.observe(card));
+      })();
+    </script>
+  </Fragment>
+</BaseLayout>
+
+<style>
+  .storefront-page {
+    min-height: 100vh;
+    background: transparent;
+    font-family: var(--font-sans);
+  }
+  .visually-hidden, .sr-only {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+  }
+
+  /* ── 0. Hero — Porcelain White with ambient canvas ─────────── */
+  .storefront-hero {
+    position: relative;
+    overflow: hidden;
+    padding-top: clamp(0.9rem, 2.5vw, 2rem);
+    padding-bottom: clamp(1.5rem, 3.5vw, 2.75rem);
+  }
+  .storefront-hero__inner {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    gap: 0.9rem;
+    justify-items: start;
+    max-width: 46rem;
+    padding-bottom: clamp(0.75rem, 2vw, 1.5rem);
+  }
+  .storefront-breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    color: var(--shop-ink-muted, #9aa3b2);
+    font: 500 0.76rem/1 var(--font-sans);
+  }
+  .storefront-breadcrumb a {
+    color: var(--shop-ink-muted, #9aa3b2);
+    text-decoration: none;
+  }
+  .storefront-breadcrumb a:hover {
+    color: var(--shop-ink, #0b0f1a);
+  }
+  .storefront-breadcrumb span[aria-current] {
+    color: var(--shop-ink, #0b0f1a);
+    font-weight: 600;
+  }
+  .storefront-hero__kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.32rem 0.8rem 0.32rem 0.62rem;
+    border: 1px solid var(--shop-line, #e9ecf1);
+    border-radius: var(--shop-radius-pill, 999px);
+    background: rgba(255, 255, 255, 0.82);
+    backdrop-filter: blur(8px);
+    color: var(--shop-ink-soft, #4b5565);
+    font: 620 0.72rem/1 var(--font-sans);
+    box-shadow: var(--shop-shadow-soft);
+  }
+  .storefront-hero__kicker i {
+    width: 0.45rem;
+    height: 0.45rem;
+    border-radius: 50%;
+    background: var(--shop-mint, #0da678);
+    box-shadow: 0 0 0 3px rgba(13, 166, 120, 0.18);
+  }
+  .storefront-hero__title {
+    margin: 0;
+    font: 780 clamp(1.85rem, 4.6vw, 3.3rem)/1.08 var(--font-sans);
+    letter-spacing: -0.035em;
+    color: var(--shop-ink, #0b0f1a);
+    text-wrap: balance;
+  }
+  .storefront-hero__desc {
+    margin: 0;
+    max-width: 38rem;
+    color: var(--shop-ink-soft, #4b5565);
+    font: 450 clamp(0.92rem, 1.3vw, 1.02rem)/1.6 var(--font-sans);
+  }
+  .storefront-hero__stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: clamp(0.9rem, 2.5vw, 2rem);
+    margin-top: 0.4rem;
+  }
+  .storefront-hero__stat {
+    display: grid;
+    gap: 0.12rem;
+    padding-left: clamp(0.9rem, 2.5vw, 2rem);
+    border-left: 1px solid var(--shop-line, #e9ecf1);
+  }
+  .storefront-hero__stat:first-child {
+    padding-left: 0;
+    border-left: 0;
+  }
+  .storefront-hero__stat strong {
+    font: 760 clamp(1.15rem, 2vw, 1.5rem)/1 var(--font-sans);
+    letter-spacing: -0.02em;
+    color: var(--shop-ink, #0b0f1a);
+  }
+  .storefront-hero__stat span {
+    color: var(--shop-ink-muted, #9aa3b2);
+    font: 520 0.74rem/1 var(--font-sans);
+  }
+  .storefront-hero__cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.55rem;
+    min-height: 2.7rem;
+    padding: 0.6rem 1.3rem;
+    border-radius: var(--shop-radius-pill, 999px);
+    background: var(--shop-ink, #0b0f1a);
+    color: #ffffff;
+    font: 650 0.88rem/1 var(--font-sans);
+    text-decoration: none;
+    box-shadow: 0 1px 2px rgba(11, 15, 26, 0.22), 0 12px 28px -10px rgba(11, 15, 26, 0.4),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    transition: transform 0.2s var(--shop-ease), box-shadow 0.2s var(--shop-ease), background 0.2s var(--shop-ease);
+  }
+  .storefront-hero__cta:hover {
+    background: var(--shop-accent-hover, #252e42);
+    transform: translateY(-2px);
+    box-shadow: 0 2px 4px rgba(11, 15, 26, 0.24), 0 18px 36px -12px rgba(11, 15, 26, 0.45),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  }
+  .storefront-hero__cta:focus-visible { outline: 2px solid var(--shop-ink); outline-offset: 3px; }
+  .storefront-hero__fade {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    height: 4.5rem;
+    background: linear-gradient(180deg, transparent, var(--shop-bg, #ffffff) 82%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ── 1. Control toolbar ────────────────────────────────────── */
+  .storefront-controls-bar {
+    position: relative;
+    z-index: 2;
+    margin-bottom: 1.4rem;
+  }
+  .storefront-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.85rem 1.25rem;
+    padding: 0.8rem 1rem;
+    border: 1px solid var(--shop-line, #e9ecf1);
+    border-radius: var(--shop-radius-lg, 1.25rem);
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(14px);
+    box-shadow: var(--shop-shadow-soft);
+  }
+  .storefront-search {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex: 1 1 16rem;
+    min-width: 14rem;
+    min-height: 2.5rem;
+    padding: 0 0.95rem;
+    border: 1px solid var(--shop-line-strong, #d4dae3);
+    border-radius: 999px;
+    background: #ffffff;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease;
+  }
+  .storefront-search:focus-within {
+    border-color: var(--shop-ink, #0b0f1a);
+    box-shadow: var(--shop-ring, 0 0 0 4px rgba(11, 15, 26, 0.07));
+  }
+  .storefront-search__icon {
+    flex: 0 0 auto;
+    color: var(--shop-ink-muted, #9aa3b2);
+  }
+  .storefront-search input {
+    width: 100%;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--shop-ink, #0b0f1a);
+    font: 500 0.85rem/1 var(--font-sans);
+  }
+  .storefront-search input::placeholder {
+    color: var(--shop-ink-muted, #9aa3b2);
+  }
+
+  .storefront-pills {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .storefront-pills::-webkit-scrollbar { display: none; }
+  .storefront-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-height: 2.2rem;
+    padding: 0.35rem 0.8rem;
+    border: 1px solid var(--shop-line, #e9ecf1);
+    border-radius: 999px;
+    background: #ffffff;
+    color: var(--shop-ink-soft, #4b5565);
+    font: 550 0.78rem/1 var(--font-sans);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.15s ease;
+  }
+  .storefront-pill small {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.15rem;
+    height: 1.15rem;
+    padding: 0 0.2rem;
+    border-radius: 999px;
+    background: var(--shop-surface-alt, #f6f7f9);
+    color: var(--shop-ink-muted, #4b5565);
+    font-size: 0.65rem;
+    font-weight: 600;
+  }
+  .storefront-pill:hover {
+    border-color: var(--shop-line-strong, #d4dae3);
+    background: var(--shop-surface-alt, #fafbfc);
+  }
+  .storefront-pill.is-active {
+    border-color: var(--shop-ink, #0b0f1a);
+    background: var(--shop-ink, #0b0f1a);
+    color: #ffffff;
+  }
+  .storefront-pill.is-active small {
+    background: rgba(255, 255, 255, 0.2);
+    color: #ffffff;
+  }
+
+  /* ── 2. Main Grid ───────────────────────────────────────────── */
+  .storefront-main {
+    padding-top: 1.75rem;
+    padding-bottom: clamp(2.5rem, 5vw, 4rem);
+  }
+  .storefront-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1.25rem;
+  }
+  .storefront-rate-note {
+    margin: 1.25rem 0 0 auto;
+    text-align: right;
+    color: var(--shop-ink-muted, #9aa3b2);
+    font-size: 0.75rem;
+  }
+  .storefront-no-results {
+    padding: 3rem 1rem;
+    text-align: center;
+    color: var(--shop-ink-soft, #4b5565);
+    font-size: 0.95rem;
+  }
+  .storefront-empty {
+    display: grid;
+    place-content: center;
+    justify-items: center;
+    gap: 0.75rem;
+    padding: 3rem 1rem;
+    text-align: center;
+  }
+
+  /* ── 3. Trust Strip ─────────────────────────────────────────── */
+  .storefront-trust {
+    padding-block: clamp(2rem, 4vw, 3.25rem);
+    border-top: 1px solid var(--shop-line, #e9ecf1);
+    background:
+      radial-gradient(50% 60% at 12% 10%, rgba(59, 130, 246, 0.028), transparent 70%),
+      radial-gradient(46% 56% at 88% 90%, rgba(13, 166, 120, 0.03), transparent 70%),
+      var(--shop-surface-alt, #fafbfc);
+  }
+  .storefront-trust__grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1.1rem;
+  }
+  .storefront-trust__item {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.8rem;
+    padding: 1.05rem 1.1rem;
+    border: 1px solid var(--shop-line, #e9ecf1);
+    border-radius: var(--shop-radius, 0.875rem);
+    background: var(--shop-surface, #ffffff);
+    box-shadow: var(--shop-shadow-soft);
+    transition: transform 0.22s var(--shop-ease), box-shadow 0.22s var(--shop-ease), border-color 0.22s var(--shop-ease);
+  }
+  .storefront-trust__item:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shop-shadow);
+    border-color: #dce1ea;
+  }
+  .storefront-trust__icon {
+    display: grid;
+    width: 2.5rem;
+    height: 2.5rem;
+    flex-shrink: 0;
+    place-items: center;
+    border-radius: var(--shop-radius-sm, 0.625rem);
+    background: var(--shop-accent-soft, #f0f2f6);
+    color: var(--shop-ink, #0b0f1a);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  }
+  .storefront-trust__item strong {
+    display: block;
+    font: 660 0.88rem/1.2 var(--font-sans);
+    letter-spacing: -0.01em;
+    color: var(--shop-ink, #0b0f1a);
+    margin-bottom: 0.25rem;
+  }
+  .storefront-trust__item p {
+    margin: 0;
+    color: var(--shop-ink-soft, #4b5565);
+    font: 450 0.8rem/1.5 var(--font-sans);
+  }
+
+  /* ── 4. SEO Section ─────────────────────────────────────────── */
+  .storefront-seo {
+    padding-block: clamp(2.5rem, 5vw, 4rem);
+    border-top: 1px solid var(--shop-line, #e9ecf1);
+  }
+  .storefront-seo__head {
+    margin-bottom: 1.5rem;
+  }
+  .storefront-seo__head h2 {
+    margin: 0 0 0.35rem;
+    font: 740 clamp(1.25rem, 2.5vw, 1.65rem)/1.2 var(--font-sans);
+    letter-spacing: -0.025em;
+    color: var(--shop-ink, #0b0f1a);
+  }
+  .storefront-seo__head p {
+    margin: 0;
+    color: var(--shop-ink-soft, #4b5565);
+    font-size: 0.86rem;
+  }
+  .storefront-seo__faq-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1.1rem;
+  }
+  .storefront-seo__faq-card {
+    padding: 1.25rem 1.3rem;
+    border: 1px solid var(--shop-line, #e9ecf1);
+    border-radius: var(--shop-radius, 0.875rem);
+    background: #ffffff;
+    box-shadow: var(--shop-shadow-soft);
+    transition: transform 0.22s var(--shop-ease), box-shadow 0.22s var(--shop-ease);
+  }
+  .storefront-seo__faq-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shop-shadow);
+  }
+  .storefront-seo__faq-card h3 {
+    margin: 0 0 0.5rem;
+    font: 660 0.9rem/1.3 var(--font-sans);
+    letter-spacing: -0.012em;
+    color: var(--shop-ink, #0b0f1a);
+  }
+  .storefront-seo__faq-card p {
+    margin: 0;
+    color: var(--shop-ink-soft, #4b5565);
+    font: 450 0.82rem/1.55 var(--font-sans);
+  }
+
+  .storefront-seo__links {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.45rem;
+    margin-top: 2rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--shop-line, #e9ecf1);
+  }
+  .storefront-seo__links span {
+    font: 600 0.74rem/1 var(--font-sans);
+    color: var(--shop-ink-muted, #9aa3b2);
+  }
+  .storefront-seo__links a {
+    padding: 0.3rem 0.68rem;
+    border-radius: 999px;
+    border: 1px solid var(--shop-line, #e9ecf1);
+    background: #ffffff;
+    color: var(--shop-ink-soft, #4b5565);
+    font: 500 0.72rem/1 var(--font-sans);
+    text-decoration: none;
+    transition: border-color 0.16s ease, color 0.16s ease, transform 0.16s ease;
+  }
+  .storefront-seo__links a:hover {
+    border-color: var(--shop-ink, #0b0f1a);
+    color: var(--shop-ink, #0b0f1a);
+    transform: translateY(-1px);
+  }
+
+  /* Cart Drawer and Overlay */
+  .shop-cart-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 70;
+    display: block;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    background: rgba(15, 23, 42, 0.4);
+    backdrop-filter: blur(4px);
+    opacity: 0;
+    transition: opacity 0.25s ease;
+  }
+  .shop-cart-overlay.is-open { opacity: 1; }
+  .shop-cart-overlay[hidden], .shop-cart-drawer[hidden] { display: none !important; }
+  .shop-cart-drawer {
+    position: fixed;
+    inset: 0 0 0 auto;
+    z-index: 71;
+    display: grid;
+    width: min(26rem, 100%);
+    grid-template-rows: auto 1fr auto;
+    border-left: 1px solid var(--shop-line, #e9ecf1);
+    background: #ffffff;
+    box-shadow: -10px 0 30px rgba(0, 0, 0, 0.08);
+    transform: translateX(104%);
+    transition: transform 0.25s ease;
+  }
+  .shop-cart-drawer.is-open { transform: translateX(0); }
+  .shop-cart-drawer__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1.1rem 1.25rem;
+    border-bottom: 1px solid var(--shop-line, #e9ecf1);
+  }
+  .shop-cart-drawer__kicker {
+    margin: 0 0 0.15rem;
+    color: var(--shop-ink-muted, #9aa3b2);
+    font: 600 0.68rem/1 var(--font-sans);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .shop-cart-drawer__head h2 {
+    margin: 0;
+    font: 700 1.15rem/1.2 var(--font-sans);
+    color: var(--shop-ink, #0b0f1a);
+  }
+  .shop-cart-drawer__head button {
+    width: 2rem;
+    height: 2rem;
+    cursor: pointer;
+    border: 1px solid var(--shop-line, #e9ecf1);
+    border-radius: 0.375rem;
+    background: transparent;
+    color: var(--shop-ink-soft, #4b5565);
+    font-size: 1.25rem;
+    line-height: 1;
+  }
+  .shop-cart-drawer__items { overflow-y: auto; padding: 0.75rem 1.25rem; }
+  .shop-cart-drawer__empty {
+    margin: 0;
+    color: var(--shop-ink-muted, #9aa3b2);
+    padding: 2.5rem 1rem;
+    text-align: center;
+    font-size: 0.88rem;
+  }
+  .shop-cart-drawer__foot {
+    display: grid;
+    gap: 0.65rem;
+    padding: 1.1rem 1.25rem;
+    border-top: 1px solid var(--shop-line, #e9ecf1);
+    background: var(--shop-surface-alt, #fafbfc);
+  }
+  .shop-cart-drawer__foot > div {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: var(--shop-ink-soft, #4b5565);
+    font-size: 0.85rem;
+  }
+  .shop-cart-drawer__foot > div strong {
+    color: var(--shop-ink, #0b0f1a);
+    font-size: 1.15rem;
+  }
+  .shop-cart-drawer__continue {
+    color: var(--shop-ink-soft, #4b5565);
+    font-size: 0.8rem;
+    text-align: center;
+    text-decoration: none;
+  }
+  .shop-cart-drawer__continue:hover { color: var(--shop-ink, #0b0f1a); }
+
+  :global(.shop-cart-item) {
+    display: grid;
+    grid-template-columns: 3.8rem minmax(0, 1fr);
+    gap: 0.75rem;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--shop-line, #e9ecf1);
+  }
+  :global(.shop-cart-item__thumb) {
+    width: 3.8rem;
+    aspect-ratio: 1;
+    overflow: hidden;
+    border-radius: 0.375rem;
+    border: 1px solid var(--shop-line, #e9ecf1);
+    background: var(--shop-surface-alt, #fafbfc);
+  }
+  :global(.shop-cart-item__thumb img) { width: 100%; height: 100%; object-fit: cover; }
+  :global(.shop-cart-item__copy) { display: grid; gap: 0.15rem; min-width: 0; }
+  :global(.shop-cart-item__copy strong) { font-size: 0.86rem; color: var(--shop-ink, #0b0f1a); overflow-wrap: anywhere; }
+  :global(.shop-cart-item__copy small) { color: var(--shop-ink-soft, #4b5565); font-size: 0.72rem; }
+  :global(.shop-cart-item__copy > span) { color: var(--shop-ink, #0b0f1a); font: 700 0.82rem/1 var(--font-sans); }
+  :global(.shop-cart-item__controls) { display: flex; align-items: center; gap: 0.3rem; margin-top: 0.25rem; }
+  :global(.shop-cart-item__controls button) {
+    width: 1.65rem; height: 1.65rem;
+    cursor: pointer;
+    border: 1px solid var(--shop-line-strong, #d4dae3);
+    border-radius: 0.25rem;
+    background: #ffffff;
+    color: var(--shop-ink, #0b0f1a);
+    font: 600 0.75rem/1 var(--font-sans);
+  }
+  :global(.shop-cart-item__controls button:last-child) {
+    margin-left: auto;
+    border: 0;
+    background: transparent;
+    color: var(--shop-ink-muted, #9aa3b2);
+  }
+
+  /* Responsive Breakpoints */
+  @media (max-width: 1180px) {
+    .storefront-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .storefront-seo__faq-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .storefront-trust__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  @media (max-width: 768px) {
+    .storefront-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; }
+    .storefront-seo__faq-grid { grid-template-columns: 1fr; }
+    .storefront-trust__grid { grid-template-columns: 1fr; }
+  }
+
+  @media (max-width: 640px) {
+    .storefront-hero {
+      padding-top: 0.55rem;
+      padding-bottom: 1.1rem;
+    }
+    .storefront-hero__inner {
+      gap: 0.55rem;
+    }
+    .storefront-hero__title {
+      font-size: 1.5rem;
+    }
+    .storefront-hero__desc {
+      font-size: 0.85rem;
+    }
+    .storefront-hero__stats {
+      gap: 0.65rem;
+    }
+    .storefront-hero__stat {
+      padding-left: 0.65rem;
+    }
+    .storefront-hero__stat strong { font-size: 1rem; }
+    .storefront-hero__stat span { font-size: 0.68rem; }
+    .storefront-hero__cta {
+      min-height: 2.4rem;
+      padding: 0.55rem 1.05rem;
+      font-size: 0.82rem;
+    }
+    .storefront-controls-bar { margin-bottom: 0.85rem; }
+    .storefront-controls {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 0.45rem;
+      padding: 0.6rem 0.7rem;
+      border-radius: var(--shop-radius, 0.875rem);
+    }
+    .storefront-search {
+      flex: 1 1 auto;
+      min-width: 0;
+      width: 100%;
+      min-height: 2.3rem;
+      height: 2.3rem;
+      padding: 0 0.8rem;
+      border-radius: 999px;
+    }
+    .storefront-search input {
+      font-size: 0.8rem;
+    }
+    .storefront-pills {
+      gap: 0.3rem;
+      padding-bottom: 0.15rem;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior-inline: contain;
+    }
+    .storefront-pill {
+      min-height: 1.85rem;
+      padding: 0.25rem 0.65rem;
+      font-size: 0.72rem;
+    }
+    .storefront-pill small {
+      min-width: 1rem;
+      height: 1rem;
+      font-size: 0.6rem;
+    }
+    .storefront-main {
+      padding-top: 0.75rem;
+      padding-bottom: 2rem;
+    }
+    .storefront-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.6rem;
+    }
+    .storefront-trust {
+      padding-block: 1.75rem;
+    }
+    .storefront-trust__item {
+      padding: 0.85rem 0.9rem;
+    }
+    .storefront-seo {
+      padding-block: 2rem;
+    }
+  }
+</style>

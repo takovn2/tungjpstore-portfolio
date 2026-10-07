@@ -1,0 +1,138 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { localizePath, type Locale } from "../../i18n/dictionaries";
+import { formatMoney, formatShopDateTime, formatShopFulfillmentStatus, formatShopOrderStatus, formatShopPaymentStatus, getShopCopy } from "../../i18n/shop";
+
+interface Props {
+  locale: Locale;
+  order: {
+    id: string;
+    number: string;
+    reference: string;
+    status: string;
+    paymentStatus: string;
+    fulfillmentStatus: string;
+    currency: string;
+    totalMinor: number;
+    createdAt: string;
+    paidAt: string | null;
+    items: Array<{
+      id: string;
+      productTitle: string;
+      variantTitle: string;
+      quantity: number;
+      totalMinor: number;
+      fulfillmentType: string;
+      fulfillmentStatus: string;
+    }>;
+  };
+}
+
+const { locale, order } = Astro.props;
+const copy = getShopCopy(locale);
+const account = copy.account;
+const canReveal = order.paymentStatus === "paid";
+---
+
+<BaseLayout title={`${account.detail.metaTitlePrefix} ${order.number}`} description={account.detail.metaDescription} locale={locale} chrome="store" noindex={true} alternateLocales={[locale]} rss={false}>
+  <div class="account shell" data-order-id={order.id}>
+    <header class="account__head">
+      <p class="account__label">{account.detail.label}</p>
+      <h1>{order.number}</h1>
+      <p class="account__intro">{formatShopOrderStatus(order.status, locale)} · {formatShopPaymentStatus(order.paymentStatus, locale)} · {formatShopFulfillmentStatus(order.fulfillmentStatus, locale)} · {formatMoney(order.totalMinor, order.currency, locale)} · {formatShopDateTime(order.createdAt, locale)}</p>
+      <a class="account__back" href={localizePath("/shop/account/orders", locale)}>{account.detail.back}</a>
+    </header>
+
+    <section class="account__section">
+      <h2>{account.detail.items}</h2>
+      <ul class="account__items">
+        {order.items.map((item) => (
+          <li>
+            <strong>{item.productTitle}</strong>
+            <span>{item.variantTitle} × {item.quantity}</span>
+            <small>{formatMoney(item.totalMinor, order.currency, locale)} · {formatShopFulfillmentStatus(item.fulfillmentStatus, locale)}</small>
+          </li>
+        ))}
+      </ul>
+    </section>
+
+    {canReveal ? (
+      <section class="account__section">
+        <h2>{account.detail.keys}</h2>
+        <p class="account__intro">{account.detail.keysIntro}</p>
+        <button type="button" class="account__primary" data-reveal-keys>{account.detail.reveal}</button>
+        <p class="account__status" data-reveal-status aria-live="polite"></p>
+        <div data-reveal-host></div>
+      </section>
+    ) : null}
+  </div>
+</BaseLayout>
+
+<script is:inline define:vars={{ labels: account.detail }}>
+  const button = document.querySelector("[data-reveal-keys]");
+  const status = document.querySelector("[data-reveal-status]");
+  const host = document.querySelector("[data-reveal-host]");
+  const orderId = document.querySelector("[data-order-id]")?.getAttribute("data-order-id");
+  button?.addEventListener("click", async () => {
+    if (!orderId) return;
+    button.disabled = true;
+    if (status) status.textContent = labels.revealing;
+    try {
+      const response = await fetch(`/api/shop/me/orders/${encodeURIComponent(orderId)}/keys`, {
+        method: "POST",
+        credentials: "same-origin",
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.ok) {
+        if (status) status.textContent = labels.revealError;
+        button.disabled = false;
+        return;
+      }
+      if (status) status.textContent = labels.revealReady;
+      if (host) {
+        host.innerHTML = "";
+        for (const delivery of data.deliveries || []) {
+          const card = document.createElement("article");
+          card.className = "account__keycard";
+          const title = document.createElement("h3");
+          title.textContent = delivery.title || delivery.sku || "";
+          card.appendChild(title);
+          for (const key of delivery.keys || []) {
+            const code = document.createElement("code");
+            code.textContent = key;
+            card.appendChild(code);
+          }
+          host.appendChild(card);
+        }
+      }
+    } catch {
+      if (status) status.textContent = labels.revealError;
+      button.disabled = false;
+    }
+  });
+</script>
+
+<style>
+  .account { max-width: 48rem; margin: 0 auto; padding: clamp(2rem, 5vw, 3.5rem) 0 4rem; }
+  .account__label { display:inline-flex; margin:0; padding:.35rem .7rem; border-radius:999px; background:var(--shop-accent-soft,rgba(42, 157, 143,.12)); color:var(--shop-accent-hover,var(--accent)); font:700 .74rem/1 var(--font-sans); }
+  .account__head h1 { margin:.85rem 0 .5rem; font:800 clamp(1.5rem,3.5vw,2rem)/1.12 var(--font-sans); letter-spacing:-.03em; color:var(--shop-ink,var(--paper)); }
+  .account__intro, .account__empty { color:var(--shop-ink-soft,var(--paper-soft)); line-height:1.6; }
+  .account__actions { display:flex; flex-wrap:wrap; gap:.65rem; margin:1.35rem 0 1.75rem; }
+  .account__primary, .account__ghost { display:inline-flex; min-height:2.8rem; align-items:center; padding:.55rem 1.05rem; border-radius:var(--shop-radius-btn,.85rem); font:750 .88rem/1 var(--font-sans); text-decoration:none; cursor:pointer; border:0; }
+  .account__primary { background:var(--shop-accent,var(--accent)); color:#fff; box-shadow:0 8px 18px rgba(42, 157, 143,.25); }
+  .account__ghost { border:1px solid var(--shop-line,var(--line)); background:var(--shop-surface,#fff); color:var(--shop-ink,var(--paper)); }
+  .account__section h2 { margin:0 0 1rem; font:750 1.05rem/1.2 var(--font-sans); color:var(--shop-ink,var(--paper)); }
+  .account__orders, .account__items { list-style:none; margin:0; padding:0; display:grid; gap:.75rem; }
+  .account__orders a, .account__items li, .account__section > ul > li {
+    display:grid; gap:.35rem; padding:1.1rem 1.15rem; border:1px solid var(--shop-line,var(--line));
+    border-radius:var(--shop-radius,1rem); background:var(--shop-surface,#fff); color:var(--shop-ink,var(--paper));
+    text-decoration:none; box-shadow:var(--shop-shadow-soft,none); transition:border-color .18s ease, box-shadow .18s ease;
+  }
+  .account__orders a:hover { border-color:rgba(42, 157, 143,.35); box-shadow:var(--shop-shadow,none); }
+  .account__orders strong, .account__items strong { font-size:.95rem; }
+  .account__orders span { color:var(--shop-accent,var(--accent)); font:750 .95rem/1 var(--font-sans); }
+  .account__orders small, .account__items small { color:var(--shop-ink-soft,var(--paper-soft)); font-size:.78rem; }
+  .account__back { color:var(--shop-ink-soft,var(--paper-soft)); text-decoration:none; font:650 .88rem/1 var(--font-sans); }
+  .account__back:hover { color:var(--shop-accent,var(--accent)); }
+  .account__empty { padding:2rem 1.25rem; border:1px dashed var(--shop-line-strong,var(--line)); border-radius:var(--shop-radius-lg,1.25rem); background:var(--shop-bg-soft,#eaf5f3); text-align:center; }
+</style>

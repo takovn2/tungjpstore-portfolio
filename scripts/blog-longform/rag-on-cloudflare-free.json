@@ -1,0 +1,759 @@
+{
+  "slug": "rag-on-cloudflare-free",
+  "cover": "cloudflare-rag-edge",
+  "coverAlt": "Giá server và cáp mạng trong trung tâm dữ liệu cho hạ tầng tri thức edge",
+  "sortOrder": 310,
+  "meta": {
+    "series": "digital-systems",
+    "surface": "blog",
+    "status": "live",
+    "featured": true
+  },
+  "localizations": {
+    "vi": {
+      "title": "Xây RAG ở edge: bắt đầu bằng ranh giới chi phí và dữ liệu",
+      "eyebrow": "Kiến trúc hệ thống",
+      "excerpt": "RAG chạy ở edge không phải một hộp đen thần kỳ. Nếu không xác định trước ranh giới dữ liệu, chi phí, chất lượng bằng chứng và vòng đời tài liệu, hệ thống sẽ trả lời nhanh nhưng sai, rẻ lúc đầu nhưng đắt khi vận hành.",
+      "seoTitle": "Xây RAG ở edge: chi phí và dữ liệu — Tung",
+      "seoDescription": "Cách thiết kế RAG trên Cloudflare Workers từ ranh giới dữ liệu, giới hạn chi phí, chất lượng bằng chứng đến vòng đời tài liệu.",
+      "body": [
+        {
+          "type": "heading",
+          "text": "Bài toán thật sự không phải là “đưa AI ra edge”"
+        },
+        {
+          "type": "paragraph",
+          "text": "Khi nói đến RAG trên Cloudflare Workers, phần lớn thảo luận thường bắt đầu từ độ trễ thấp, vùng phủ toàn cầu và cảm giác hấp dẫn của việc đặt suy luận hoặc truy hồi gần người dùng hơn. Nhưng nếu nhìn từ góc độ vận hành sản phẩm, đó không phải câu hỏi đầu tiên. Câu hỏi đầu tiên là: hệ thống này được phép biết gì, được phép tiêu bao nhiêu, được phép nói tới mức nào khi bằng chứng yếu, và ai chịu trách nhiệm khi tài liệu gốc thay đổi nhưng câu trả lời cũ vẫn còn tồn tại trong bộ nhớ truy hồi. RAG ở edge chỉ có ý nghĩa khi các ranh giới đó được định nghĩa trước, không phải vá sau."
+        },
+        {
+          "type": "paragraph",
+          "text": "Cloudflare Workers là một môi trường phù hợp cho lớp điều phối: nhận truy vấn, xác thực người dùng, áp chính sách truy cập, chuẩn hóa câu hỏi, truy hồi ngữ cảnh, và gọi mô hình theo một đường đi đã được kiểm soát. Nhưng nếu xem nó như nơi “ném toàn bộ pipeline AI lên để chạy”, ta sẽ nhanh chóng gặp các giới hạn thực tế: thời gian thực thi, ngân sách token, kích thước ngữ cảnh, chỉ mục phân mảnh, quyền riêng tư của dữ liệu và chi phí tăng dần theo số lần truy vấn chứ không chỉ theo số tài liệu. Edge tốt cho kỷ luật kiến trúc; nó không tự động cứu một thiết kế mơ hồ."
+        },
+        {
+          "type": "heading",
+          "text": "Trước khi chọn công nghệ, hãy vẽ ranh giới dữ liệu"
+        },
+        {
+          "type": "paragraph",
+          "text": "Một hệ RAG là sự ghép nối giữa tài liệu, chỉ mục, luật truy cập và mô hình sinh. Nếu không có ranh giới dữ liệu rõ ràng, việc truy hồi sẽ sớm đi lệch khỏi trách nhiệm ban đầu. Ví dụ đơn giản: cùng là tập tài liệu nội bộ, nhưng chính sách nhân sự, tài liệu vận hành, email tổng hợp, hợp đồng và bảng giá không nên nằm trong cùng một mặt phẳng truy vấn. Không phải vì kỹ thuật truy hồi không làm được, mà vì câu hỏi “hãy giải thích sự khác nhau giữa chính sách nghỉ phép và mức chiết khấu khách hàng” vô tình mở đường cho việc đồng hiện diện các ngữ cảnh không nên đi cùng nhau."
+        },
+        {
+          "type": "paragraph",
+          "text": "Thiết kế đúng thường bắt đầu từ phân vùng. Mỗi vùng dữ liệu cần có chủ sở hữu, loại người dùng được phép truy cập, quy tắc cập nhật, mức độ tin cậy, và thời hạn hiệu lực. Trên Cloudflare Workers, điều này nên được phản ánh ngay ở lớp gateway trước khi truy hồi bắt đầu. Người dùng không chỉ hỏi “cái gì”, họ còn đang hỏi “tôi có quyền biết cái gì”. Nếu phần nhận diện quyền truy cập bị trì hoãn đến sau bước lấy vector tương tự, bạn đã để lộ dấu vết dữ liệu không cần thiết dù cuối cùng câu trả lời có bị chặn."
+        },
+        {
+          "type": "list",
+          "items": [
+            "Phân tài liệu theo miền nghiệp vụ trước khi phân theo định dạng: chính sách, hỗ trợ, sản phẩm, pháp lý, vận hành.",
+            "Gắn nhãn bắt buộc cho mỗi tài liệu: chủ sở hữu, mức nhạy cảm, thời điểm phát hành, thời điểm hết hiệu lực, nhóm người dùng được phép xem.",
+            "Tách chỉ mục truy hồi theo ranh giới truy cập thay vì gom tất cả vào một kho vector duy nhất.",
+            "Xem truy hồi là thao tác có chính sách, không phải phép tìm kiếm trung tính."
+          ]
+        },
+        {
+          "type": "heading",
+          "text": "Ranh giới chi phí phải được đặt trước mọi kỳ vọng về chất lượng"
+        },
+        {
+          "type": "paragraph",
+          "text": "Nhiều nhóm bắt đầu bằng một bản mẫu nhỏ: vài trăm tài liệu, một bộ embedding, một chỉ mục vector, một prompt tổng hợp và cảm giác rằng hệ thống hoạt động khá ổn. Sai lầm xuất hiện khi bản mẫu được đối xử như thiết kế nền tảng. Trong môi trường edge, chi phí không chỉ đến từ mô hình ngôn ngữ. Nó đến từ số lần tiền xử lý, số lượt truy hồi lặp lại cho các truy vấn tương tự, số token ngữ cảnh bị lãng phí bởi chunking kém, số lần gọi lại do câu trả lời thiếu bằng chứng, và cả việc phải tái lập chỉ mục mỗi khi tài liệu thay đổi định dạng."
+        },
+        {
+          "type": "paragraph",
+          "text": "Đặt trần chi phí nghĩa là chấp nhận từ đầu rằng không phải truy vấn nào cũng xứng đáng được phục vụ bằng pipeline đắt nhất. Một câu hỏi định nghĩa ngắn từ bộ FAQ đã được chuẩn hóa không cần đi qua cùng con đường như một câu hỏi tổng hợp từ nhiều tài liệu vận hành. Trong Workers, nên có bộ phân luồng truy vấn: loại có thể trả lời từ cache có ngữ nghĩa kiểm soát được, loại cần truy hồi nhẹ, loại cần truy hồi sâu nhiều chặng, và loại phải từ chối vì thiếu ngữ cảnh đáng tin cậy. Khi chi phí được quyết định bằng chính sách thay vì cảm hứng, hệ thống mới có thể tăng trưởng mà không bí mật tự đốt ngân sách."
+        },
+        {
+          "type": "quote",
+          "text": "RAG không thất bại vì truy hồi kém trước tiên; nó thường thất bại vì không ai định nghĩa mức chi phí tối đa cho mỗi loại câu hỏi."
+        },
+        {
+          "type": "heading",
+          "text": "Chỉ mục không phải kho vô hạn: hãy xác định biên của index"
+        },
+        {
+          "type": "paragraph",
+          "text": "Ở tầng kỹ thuật, điểm dễ bị ngộ nhận nhất là xem vector index như một nơi có thể ném mọi thứ vào rồi mong phép tương tự ngữ nghĩa sẽ tự phân loại hộ con người. Điều này hiếm khi đúng trong môi trường sản xuất. Chỉ mục có biên về chất lượng. Khi tập dữ liệu quá dị tạp, embedding sẽ đưa các tài liệu gần nhau vì bề mặt ngôn ngữ giống nhau, trong khi ý nghĩa nghiệp vụ lại rất khác. Các mẫu câu pháp lý, cảnh báo miễn trừ, định nghĩa dùng đi dùng lại giữa nhiều tài liệu sẽ tạo ra cụm nhiễu, đẩy các đoạn thật sự có ích xuống thấp hơn trong xếp hạng."
+        },
+        {
+          "type": "paragraph",
+          "text": "Biên của index nên được quyết định bởi mục đích truy vấn, không phải bởi sự thuận tiện lưu trữ. Nếu người dùng hỏi về chính sách hoàn tiền, ta cần một chỉ mục được tối ưu cho tài liệu chính sách, lịch sử phiên bản và ngoại lệ đã phê duyệt, thay vì một kho chung chứa thêm cả bài blog, trao đổi nội bộ và nội dung marketing. Càng ít dị loại trong cùng một mặt phẳng truy hồi, điểm tương đồng càng có ý nghĩa vận hành. Đây là lý do nhiều hệ tốt dùng nhiều chỉ mục nhỏ, có phân vai rõ, rồi điều phối ở tầng edge, thay vì một chỉ mục lớn cố gắng làm tất cả."
+        },
+        {
+          "type": "image",
+          "src": "/images/blog/cloudflare-rag-edge-detail.webp",
+          "alt": "Chi tiết hạ tầng edge và lớp truy hồi dữ liệu trong tông tối kỹ thuật"
+        },
+        {
+          "type": "heading",
+          "text": "Chunking là quyết định biên tập, không chỉ là thao tác kỹ thuật"
+        },
+        {
+          "type": "paragraph",
+          "text": "Rất nhiều lỗi chất lượng trong RAG không đến từ mô hình sinh mà đến từ cách cắt tài liệu. Nếu chunk quá ngắn, ngữ cảnh bị bẻ gãy; đoạn truy hồi được có thể đúng từ khóa nhưng sai ý. Nếu chunk quá dài, điểm tương đồng bị pha loãng; hệ thống kéo về một khối văn bản lớn chứa chi tiết liên quan lẫn không liên quan, khiến mô hình tổng hợp nhầm ưu tiên. Trong tài liệu pháp lý hay chính sách nội bộ, một mệnh đề điều kiện ở đầu trang có thể thay đổi toàn bộ diễn giải của ba đoạn sau. Cắt mà làm mất cấu trúc đó là tự phá hỏng nguồn bằng chứng trước khi LLM nhìn thấy."
+        },
+        {
+          "type": "paragraph",
+          "text": "Vì vậy chunking nên xuất phát từ đơn vị nghĩa của tài liệu: mục, điều khoản, tiểu mục, bảng, chú thích, ngoại lệ, hoặc cặp hỏi đáp hoàn chỉnh. Với tài liệu hướng dẫn thao tác, có thể chunk theo bước và điều kiện tiên quyết. Với hợp đồng hay chính sách, nên giữ liên kết giữa định nghĩa và các điều khoản sử dụng định nghĩa đó. Với tài liệu sản phẩm thay đổi nhanh, cần lưu cả phiên bản và ngày hiệu lực ngay trong metadata của từng chunk. Đây là công việc biên tập dữ liệu, không thể giao hoàn toàn cho bộ cắt ngẫu nhiên theo số ký tự."
+        },
+        {
+          "type": "heading",
+          "text": "Từ chối khi bằng chứng yếu là tính năng cốt lõi"
+        },
+        {
+          "type": "paragraph",
+          "text": "Một hệ RAG tử tế không cố trả lời mọi câu hỏi. Nó phải biết khi nào nên dừng. Trong môi trường edge, nơi người dùng kỳ vọng phản hồi nhanh, cám dỗ lớn nhất là đẩy mô hình nói điều gì đó “có vẻ đúng” dù truy hồi mỏng. Cách làm này phá hủy niềm tin nhanh hơn bất kỳ lỗi độ trễ nào. Khi câu trả lời được trình bày như một kết luận nhưng phần ngữ cảnh đi kèm không chứa bằng chứng trực tiếp, hệ thống đang chuyển rủi ro từ lớp truy hồi sang người dùng."
+        },
+        {
+          "type": "paragraph",
+          "text": "Từ chối không có nghĩa là vô dụng. Một phản hồi tốt có thể nói rõ: tôi không tìm thấy tài liệu còn hiệu lực cho câu hỏi này; các tài liệu gần nhất chỉ đề cập một phần; cần chỉ định bộ phận hoặc mốc thời gian; hoặc đây là thông tin ngoài phạm vi chỉ mục hiện tại. Sự thẳng thắn đó quan trọng hơn một câu trả lời trơn tru nhưng không kiểm chứng được. Về mặt thiết kế, nên có ngưỡng tối thiểu cho số lượng và chất lượng bằng chứng: số chunk độc lập, mức nhất quán giữa các nguồn, độ mới của tài liệu, và sự phù hợp với quyền truy cập của người hỏi."
+        },
+        {
+          "type": "quote",
+          "text": "Nếu hệ thống không có cơ chế nói ‘tôi chưa có đủ bằng chứng’, thì thực chất nó đang được tối ưu để bịa một cách lịch sự."
+        },
+        {
+          "type": "list",
+          "items": [
+            "Từ chối khi chỉ có một nguồn mơ hồ cho câu hỏi đòi hỏi quyết định nghiệp vụ hoặc pháp lý.",
+            "Từ chối khi các tài liệu truy hồi được mâu thuẫn về ngày hiệu lực hoặc chủ sở hữu nội dung.",
+            "Từ chối khi người dùng không có quyền truy cập vào miền dữ liệu cần thiết để trả lời đầy đủ.",
+            "Từ chối khi câu hỏi yêu cầu suy diễn vượt quá nội dung tài liệu, dù ngôn ngữ bề mặt có vẻ gần đúng."
+          ]
+        },
+        {
+          "type": "heading",
+          "text": "Cloudflare Workers phù hợp nhất như lớp điều phối có kỷ luật"
+        },
+        {
+          "type": "paragraph",
+          "text": "Với Workers, cách dùng thực tế và bền vững nhất là xem nó như một biên thực thi chính sách gần người dùng. Tại đây, hệ thống có thể xác thực phiên truy cập, kiểm tra tenant, chuẩn hóa truy vấn, chọn chỉ mục phù hợp, áp mức chi phí theo loại truy vấn, quyết định có cần truy hồi sâu hay không, và gắn metadata bằng chứng vào prompt trước khi gọi mô hình. Mọi bước này cần được log ở mức sự kiện vận hành: truy vấn thuộc loại nào, đi vào chỉ mục nào, đã bị cắt giảm ngữ cảnh ở đâu, lý do từ chối là gì. Không cần phô diễn độ phức tạp; điều cần là khả năng giải trình."
+        },
+        {
+          "type": "paragraph",
+          "text": "Khi nhìn theo hướng đó, edge không phải nơi chứa mọi trạng thái của hệ thống, mà là nơi áp luật chơi một cách nhất quán. Một truy vấn đến từ Tokyo và một truy vấn đến từ Frankfurt có thể đi qua vùng hạ tầng khác nhau, nhưng phải nhận cùng một quyết định về quyền truy cập, cùng tiêu chuẩn bằng chứng và cùng rào chi phí. Lợi ích của Workers nằm ở khả năng đặt lớp quyết định này rất gần đường vào của yêu cầu, giảm độ lệch giữa ý định thiết kế và hành vi thực tế khi lưu lượng tăng."
+        },
+        {
+          "type": "heading",
+          "text": "Vòng đời tài liệu là phần bị bỏ quên nhiều nhất"
+        },
+        {
+          "type": "paragraph",
+          "text": "Một tài liệu đi vào hệ RAG không sống mãi trong một trạng thái. Nó được phát hành, sửa đổi, thay thế, hết hiệu lực, đôi khi bị thu hồi hoàn toàn. Nếu pipeline chỉ quan tâm đến bước ingest đầu tiên mà không có vòng đời, hệ thống sẽ trả lời bằng những sự thật đã chết. Trong doanh nghiệp, đây là dạng lỗi nguy hiểm nhất vì nó thường trông có vẻ chính xác: câu chữ đúng, nguồn có thật, nhưng chính sách đã đổi từ hai tháng trước."
+        },
+        {
+          "type": "paragraph",
+          "text": "Vì thế, mỗi tài liệu cần có lifecycle rõ ràng: tạo mới, chờ duyệt, phát hành, sửa đổi, ngừng hiệu lực, lưu trữ, xóa hoặc ẩn khỏi truy hồi. Chỉ mục phải phản ánh lifecycle đó gần thời gian thực ở mức đủ dùng. Nếu bản thay thế xuất hiện nhưng bản cũ vẫn đang đứng đầu kết quả do embedding ổn định hơn, hệ thống sẽ tiếp tục lan truyền tri thức lỗi thời. Giải pháp không chỉ là tái lập chỉ mục, mà là thiết kế cơ chế ưu tiên phiên bản, loại trừ tài liệu hết hiệu lực và ghi lại quan hệ giữa bản cũ với bản mới để phục vụ tra soát."
+        },
+        {
+          "type": "heading",
+          "text": "Quan sát hệ thống bằng nhật ký bằng chứng, không chỉ bằng lỗi ứng dụng"
+        },
+        {
+          "type": "paragraph",
+          "text": "Trong một ứng dụng web thông thường, log lỗi, thời gian phản hồi và tỷ lệ thành công có thể đã đủ cho chẩn đoán ban đầu. Với RAG, chừng đó là quá ít. Bạn cần biết câu trả lời được xây từ những đoạn nào, lý do tại sao các đoạn đó được chọn, có đoạn nào bị loại do chính sách truy cập, có sự mâu thuẫn nào giữa các nguồn, prompt cuối cùng dài đến mức nào, và mô hình đã từ chối hay vẫn trả lời khi chỉ có bằng chứng yếu. Không có nhật ký bằng chứng, mọi tranh luận hậu sự cố sẽ rơi vào cảm tính."
+        },
+        {
+          "type": "paragraph",
+          "text": "Một thực hành tốt là xem mỗi phản hồi như một quyết định có thể kiểm toán. Không nhất thiết phải lưu toàn bộ dữ liệu nhạy cảm, nhưng cần lưu dấu vết đủ để tái hiện đường đi: truy vấn đã chuẩn hóa, danh tính hoặc vai trò của người hỏi, danh sách nguồn được phép xét, nguồn thực tế được dùng, cờ hiệu lực tài liệu, và chính sách từ chối nếu có. Khi hệ thống trả lời sai, bạn không nên chỉ hỏi “mô hình đã suy luận thế nào”, mà phải hỏi “lớp nào đã cho phép một bằng chứng kém đi qua”."
+        },
+        {
+          "type": "heading",
+          "text": "Một lộ trình triển khai thực tế cho đội nhỏ"
+        },
+        {
+          "type": "paragraph",
+          "text": "Đội nhỏ thường bị áp lực phải ra kết quả nhanh, nên dễ đi theo đường ngắn: nhập mọi tài liệu, tạo embedding hàng loạt, gắn một prompt tổng hợp và chờ người dùng thử. Cách này có thể tạo bản demo, nhưng hiếm khi tạo được nền tảng sống lâu. Lộ trình an toàn hơn là bắt đầu bằng một miền hẹp, nơi tài liệu có chủ sở hữu rõ và vòng đời dễ kiểm soát. Ví dụ, chọn bộ chính sách hỗ trợ khách hàng hoặc cẩm nang vận hành một quy trình cụ thể. Sau đó dựng pipeline tối thiểu nhưng hoàn chỉnh: phân quyền, metadata, chunking theo cấu trúc, từ chối khi bằng chứng yếu và nhật ký bằng chứng."
+        },
+        {
+          "type": "paragraph",
+          "text": "Chỉ khi miền đầu tiên đứng vững, hãy mở rộng sang miền thứ hai. Mỗi lần mở rộng, câu hỏi chính không phải là chỉ mục có nhận thêm dữ liệu được không, mà là chính sách truy cập có còn rõ, vòng đời tài liệu có còn theo kịp, và các định nghĩa ngôn ngữ có bắt đầu chồng lấn gây nhiễu hay chưa. Mở rộng chậm nhưng có kỷ luật sẽ tạo hệ RAG biết giới hạn của mình. Mở rộng nhanh bằng niềm tin vào embedding sẽ tạo một cỗ máy trả lời tự tin trong khi nền móng ngày càng mờ."
+        },
+        {
+          "type": "heading",
+          "text": "Những tuyên bố nên tránh khi nói về Edge RAG"
+        },
+        {
+          "type": "paragraph",
+          "text": "Có vài kiểu khẳng định nghe ấn tượng nhưng không nên xuất hiện trong một bài toán nghiêm túc. Thứ nhất là tuyên bố rằng đặt RAG ở edge đương nhiên làm chất lượng tốt hơn. Chất lượng đến từ ranh giới dữ liệu, cấu trúc chỉ mục và kỷ luật bằng chứng; edge chủ yếu giúp điều phối và giảm quãng đường mạng. Thứ hai là tuyên bố rằng một chỉ mục chung có thể trở thành “nguồn tri thức duy nhất” cho mọi phòng ban. Trong thực tế, càng nhiều miền nghiệp vụ cùng đổ vào, nhu cầu tách chính sách và giải thích sai khác càng tăng. Thứ ba là niềm tin rằng mô hình mới hơn sẽ tự sửa lỗi tài liệu cũ, chunk tệ hoặc quyền truy cập lỏng lẻo. Nó sẽ không."
+        },
+        {
+          "type": "paragraph",
+          "text": "Một tuyên bố khác cũng cần tránh là “hệ thống hiểu tài liệu của chúng tôi”. Hệ thống không hiểu theo nghĩa tổ chức con người hiểu. Nó lập bản đồ bề mặt ngữ nghĩa, áp truy hồi theo tín hiệu tương tự, rồi tổng hợp bằng một mô hình xác suất dưới các ràng buộc mà bạn đặt ra. Càng nói chính xác về giới hạn này, bạn càng dễ thiết kế được hàng rào đúng. Càng mơ hồ hóa nó thành trí tuệ toàn năng, bạn càng khó xác định ai chịu trách nhiệm khi câu trả lời chệch khỏi văn bản gốc."
+        },
+        {
+          "type": "heading",
+          "text": "Kết luận: thiết kế RAG như một hệ thống có trách nhiệm"
+        },
+        {
+          "type": "paragraph",
+          "text": "Xây RAG trên Cloudflare Workers có thể là một quyết định hợp lý nếu mục tiêu của bạn là đặt lớp điều phối, truy cập và kiểm soát bằng chứng ở gần người dùng, với độ trễ tốt và hành vi nhất quán. Nhưng giá trị đó chỉ xuất hiện khi ta bắt đầu từ ranh giới: dữ liệu nào được phép cùng tồn tại trong truy hồi, chi phí tối đa cho mỗi loại câu hỏi là bao nhiêu, thế nào là đủ bằng chứng để trả lời, và tài liệu sẽ được sinh ra, sửa đổi, hết hiệu lực ra sao trong vòng đời thực tế."
+        },
+        {
+          "type": "paragraph",
+          "text": "Nói ngắn gọn, edge RAG không phải một chiếc hộp thần kỳ. Nó là một hệ thống biên tập dữ liệu, áp chính sách và từ chối có nguyên tắc. Nếu làm đúng, nó giúp tổ chức khai thác tri thức theo cách nhanh hơn nhưng vẫn giải trình được. Nếu làm sai, nó chỉ tăng tốc độ lan truyền những câu trả lời nghe thuyết phục mà không có nền tảng. Và trong hầu hết môi trường chuyên nghiệp, tốc độ của một câu trả lời sai chưa bao giờ là lợi thế."
+        },
+        {
+          "type": "cta",
+          "label": "Trao đổi với TUNG về kiến trúc AI và dữ liệu",
+          "href": "/contact"
+        }
+      ]
+    },
+    "en": {
+      "title": "Build edge RAG with clear data and cost boundaries",
+      "eyebrow": "Engineering",
+      "excerpt": "Edge RAG on Cloudflare Workers is useful when its boundaries are explicit: what may be indexed, what may be answered, and what must be refused. The practical work is not making a chatbot sound confident; it is designing document lifecycle, evidence thresholds, and spend caps that survive production.",
+      "seoTitle": "Build edge RAG with clear data and cost boundaries — Tung",
+      "seoDescription": "A proof-first guide to edge RAG on Cloudflare Workers: index boundaries, cost caps, document lifecycle, and refusal rules for weak evidence.",
+      "body": [
+        {
+          "type": "heading",
+          "text": "RAG at the edge is not a shortcut"
+        },
+        {
+          "type": "paragraph",
+          "text": "Retrieval-augmented generation has become a convenient label for several different systems: document search with summarization, answer generation with citations, internal knowledge lookup, and sometimes a thin wrapper around an LLM with almost no retrieval discipline at all. On Cloudflare Workers, the temptation is to call the whole thing “edge AI” and imply speed and elegance by default. That is the wrong starting point. A Worker gives you a convenient execution boundary close to users, good request handling, and a clean place to orchestrate retrieval and generation. It does not magically solve document quality, indexing policy, access control, stale data, or runaway token spend. If anything, the edge makes these constraints more visible because the runtime budget is tighter and the architecture must be simpler."
+        },
+        {
+          "type": "paragraph",
+          "text": "A production RAG system on Workers should therefore be described in plain operational terms. What documents are allowed into the index. How they are chunked and versioned. Which index is queried for which tenant, product area, or locale. What evidence threshold is required before the model may answer. When the system must refuse, ask for clarification, or fall back to search results only. How much retrieval and generation budget is available per request, per day, and per account. If these rules are not written down, the system is not a product. It is a demo with an invoice attached."
+        },
+        {
+          "type": "heading",
+          "text": "Start with boundaries, not model selection"
+        },
+        {
+          "type": "paragraph",
+          "text": "Teams often begin by comparing embedding models, vector stores, or context window sizes. Those decisions matter, but they are second-order compared with data boundaries. A useful first document for edge RAG is not a benchmark spreadsheet. It is a policy page that lists approved document classes, prohibited document classes, retention rules, and deletion guarantees. Product manuals, public policy pages, internal runbooks, and support articles may belong in different lanes. A legal clause library should not be indexed in the same way as a changelog. Draft material that has not cleared review should rarely be answerable as if it were official."
+        },
+        {
+          "type": "paragraph",
+          "text": "On Workers, those boundaries usually become explicit through routing and storage separation. One Worker endpoint may serve public documentation queries. Another may require authentication and resolve against tenant-scoped records. The retrieval layer should not guess whether a user is entitled to a document after the nearest chunks have already been fetched. Index topology is part of authorization design. If a request can physically reach chunks that should never be considered, the application is already relying too heavily on prompt instructions to do security work."
+        },
+        {
+          "type": "list",
+          "items": [
+            "Define document classes before ingestion: public docs, internal SOPs, tenant files, drafts, regulated records, and banned sources.",
+            "Separate indexes or namespaces by access policy first, by retrieval convenience second.",
+            "Treat deletion, expiration, and supersession as first-class events, not later cleanup work.",
+            "Write refusal rules early: no evidence, conflicting evidence, outdated evidence, or missing authorization."
+          ]
+        },
+        {
+          "type": "heading",
+          "text": "Cloudflare Workers are good at orchestration, not pretending all state is equal"
+        },
+        {
+          "type": "paragraph",
+          "text": "The practical advantage of Workers is that they sit in a strong place for orchestration. They can accept user requests, normalize prompts, perform auth checks, resolve tenant or locale, query an index, trim context, call an LLM, and stream a response. That is already enough to build a disciplined RAG pipeline. The mistake is trying to collapse all persistence and all indexing concerns into the same mental model. Retrieval quality depends on careful document preparation, while request performance depends on lean runtime decisions. These are related but not identical jobs."
+        },
+        {
+          "type": "paragraph",
+          "text": "A clean design usually separates ingestion from answering. Ingestion may happen on schedule, via queue, or from document update events. It extracts text, normalizes metadata, splits into chunks, computes embeddings, and writes searchable records. Answering should do much less: authenticate, resolve scope, retrieve, verify evidence sufficiency, and only then call generation. This split sounds obvious, but many weak systems still try to parse arbitrary files or repair malformed content at request time. That makes latency unpredictable and turns user questions into indexing incidents."
+        },
+        {
+          "type": "heading",
+          "text": "Index boundaries are product boundaries"
+        },
+        {
+          "type": "paragraph",
+          "text": "The central design question for edge RAG is not simply how many documents can be searched. It is how many meanings can safely coexist in the same index. A support center for one product line may use terms differently from a policy library or an engineering runbook. If all content is merged into a single retrieval pool, the system may return chunks that are semantically close but operationally wrong. “Account suspension,” for example, may refer to fraud enforcement, billing delinquency, or moderation action. The answer generator cannot repair ambiguity if retrieval has already mixed domains with different rules."
+        },
+        {
+          "type": "paragraph",
+          "text": "This is why index boundaries should map to product reality: brand, product surface, locale, tenant, confidentiality class, and sometimes time period. Historical documents can be useful for search but dangerous for direct answer generation if current policy has changed. In practice, many teams need at least two retrieval lanes: one lane for answerable current guidance and another lane for archival or research material that may be shown as references but not summarized as present truth. The boundary is not academic. It is the difference between “here is the current procedure” and “here are several documents that mention something similar.”"
+        },
+        {
+          "type": "quote",
+          "text": "A RAG system fails long before generation if it lets the wrong documents become eligible evidence."
+        },
+        {
+          "type": "image",
+          "src": "/images/blog/cloudflare-rag-edge-detail.webp",
+          "alt": "Dark engineering desk with edge network diagrams, printed document chunks, and cost notes under low light"
+        },
+        {
+          "type": "heading",
+          "text": "Chunking is a governance decision disguised as a text operation"
+        },
+        {
+          "type": "paragraph",
+          "text": "Chunking is usually discussed in terms of retrieval quality: smaller chunks improve precision, larger chunks preserve context. That is true but incomplete. Chunking also determines what the model can treat as attributable evidence. If a chunk spans multiple policy states, contains a heading without conditions, or cuts off the exception clause that limits a rule, the system may produce a concise answer that is less faithful than the source. In production, this looks like confidence built from fragments."
+        },
+        {
+          "type": "paragraph",
+          "text": "A disciplined approach uses document-aware chunking rather than fixed-size splitting alone. Headings, tables, steps, warnings, effective dates, locale markers, and document status all matter. The chunk record should carry enough metadata to explain why it is eligible: source type, canonical URL or identifier, version, publication state, access class, effective date, and perhaps a short section path. When a response cites evidence, the citation should point back to a stable document segment that a human can inspect. Without that, the system cannot be audited when an answer goes wrong."
+        },
+        {
+          "type": "heading",
+          "text": "Cost caps must be designed into the request path"
+        },
+        {
+          "type": "paragraph",
+          "text": "The phrase “serverless scales” can hide a serious operational blind spot. RAG cost is not a single bill line. It is a chain: indexing work, embeddings for new or changed documents, vector or search queries, prompt assembly, model tokens, and sometimes retries when retrieval quality is poor. On a Worker, where request handling can feel lightweight, it becomes easy to add one more retrieval pass, one more reformulation step, one more validation call. The result may still look elegant in code while quietly turning each ambiguous question into several paid operations."
+        },
+        {
+          "type": "paragraph",
+          "text": "A better design starts with request budgets rather than post hoc optimization. For each route, decide the maximum number of retrieval attempts, the maximum evidence payload, the maximum generation tokens, and the allowed fallback sequence. If the first retrieval pass returns weak or conflicting evidence, the system should often refuse or ask a narrowing question instead of launching another expensive cascade. The product decision here is important: not every user question deserves the full machinery. Many should terminate early because the available evidence does not justify more spending or more certainty."
+        },
+        {
+          "type": "list",
+          "items": [
+            "Set per-request ceilings for retrieval calls, context size, generation tokens, and total execution path complexity.",
+            "Use route-specific budgets: a public FAQ answer path should not inherit the same budget as an authenticated analyst workflow.",
+            "Prefer clarification over repeated blind retrieval when the user intent is broad, cross-domain, or underspecified.",
+            "Track answer states separately: answered with evidence, refused for weak evidence, refused for authorization, and search-results-only."
+          ]
+        },
+        {
+          "type": "heading",
+          "text": "Refusing weak evidence is a feature, not a flaw"
+        },
+        {
+          "type": "paragraph",
+          "text": "Most poor RAG experiences do not come from total failure. They come from plausible partial failure: the system finds adjacent material, the model writes smoothly, and the user receives an answer that sounds complete enough to act on. This is exactly where refusal logic matters. A mature edge RAG system should not be measured by how rarely it says “I cannot answer.” It should be measured by whether its answer states correlate with evidence quality. If the retrieved material is sparse, contradictory, stale, or outside the user’s authorization boundary, refusal is the honest outcome."
+        },
+        {
+          "type": "paragraph",
+          "text": "Refusal can still be useful. The system can say that it found related documents but not enough evidence for a direct answer. It can list document titles, suggest narrower terms, or ask the user to select a product area, jurisdiction, or date range. In high-risk workflows, it may return only citations and extracted snippets with no generated synthesis. This is not a user experience failure. It is the system preserving the distinction between retrieval and judgment. Many teams skip this distinction because generated prose feels more finished. Production systems cannot afford that vanity."
+        },
+        {
+          "type": "quote",
+          "text": "If the evidence is weak, the right output is not a softer answer. It is a different class of answer."
+        },
+        {
+          "type": "heading",
+          "text": "Document lifecycle is where most RAG systems become untrustworthy"
+        },
+        {
+          "type": "paragraph",
+          "text": "Documents are not static assets. Policies are revised. Product screens change. Internal procedures are deprecated. Regional wording diverges. Attachments are replaced without notice. If a RAG system treats ingestion as a one-time setup task, it will drift into quiet inaccuracy. The edge does not rescue this. In fact, because Workers make request handling simple, teams sometimes postpone lifecycle design and assume they can patch errors later. By then, the index may contain duplicate chunks across versions, stale chunks still scoring highly, and documents whose access class no longer matches current policy."
+        },
+        {
+          "type": "paragraph",
+          "text": "The fix is not glamorous: maintain a canonical document registry and tie index records to it. Every answerable chunk should belong to a document with an explicit lifecycle state such as draft, active, superseded, archived, or deleted. Supersession should not merely add a newer copy; it should reduce or eliminate eligibility of the old one for generated answers. Deletion should propagate to retrieval stores and caches. Expiration rules should exist for time-sensitive material. When a user asks for current instructions, the system should not need prompting tricks to avoid quoting a retired procedure."
+        },
+        {
+          "type": "heading",
+          "text": "Multitenancy requires harder walls than prompt instructions"
+        },
+        {
+          "type": "paragraph",
+          "text": "Many business uses of RAG are tenant-aware by nature: customer account records, private knowledge bases, partner contracts, internal memos. In these cases, retrieval scope must be enforced before any similarity search can surface candidate chunks. Prompting the model to “only answer from authorized data” is not a control. It is a wish. The Worker should derive tenant identity and role from verified auth context, route retrieval to the correct namespace or filtered partition, and exclude unauthorized documents at query time. The less policy work left for the model, the more credible the system becomes."
+        },
+        {
+          "type": "paragraph",
+          "text": "This principle extends to logs and analytics. If answer traces include chunk previews, citations, or user prompts, those records may themselves become sensitive artifacts. Observability should help operators inspect failures without accidentally creating a second uncontrolled corpus of private data. A common mistake is to build careful tenant filtering for retrieval and then dump mixed traces into a shared dashboard. Operational exhaust is still data. In regulated environments, it may need retention limits, redaction, or separate access control of its own."
+        },
+        {
+          "type": "heading",
+          "text": "Evaluation should prove boundaries, not just fluency"
+        },
+        {
+          "type": "paragraph",
+          "text": "A weak evaluation set asks whether the answer sounds correct on a handful of hand-picked examples. A useful evaluation set asks whether the system respects scope, time, and evidence rules under stress. Can it refuse when there is no eligible source? Does it prefer the current policy over the archived memo? Does it avoid cross-tenant leakage when a query uses generic terms shared across customers? Does it maintain locale fidelity when English and Japanese documents cover similar features but different legal wording? These are not corner cases. They are ordinary production cases that a polished demo conveniently avoids."
+        },
+        {
+          "type": "paragraph",
+          "text": "For Workers-based RAG, evaluation should also inspect path complexity. Which requests trigger multiple retrieval attempts? Which categories consume the most tokens before refusing? Which source types most often produce contradictory chunks? Where do stale documents remain discoverable after supersession? A proof-first team can answer these questions from traces and structured outcomes, not from impressions. The goal is not to win a generic benchmark. It is to know where the system is safe, where it is cheap, and where it should stop."
+        },
+        {
+          "type": "heading",
+          "text": "A practical request contract for edge RAG"
+        },
+        {
+          "type": "paragraph",
+          "text": "One reliable way to keep the system honest is to define a request contract that every answer path must satisfy. The contract can be simple. Resolve the user’s scope. Classify the query into an answer lane. Retrieve from eligible indexes only. Score evidence sufficiency according to explicit rules. If sufficient, generate with constrained instructions and attach citations. If insufficient, return a refusal or search-only response with a reason code. This kind of contract sounds stricter than many consumer chat interfaces, but that strictness is precisely what makes enterprise or operational use viable."
+        },
+        {
+          "type": "paragraph",
+          "text": "The contract should also define what the system will never do. It will not infer hidden permissions from document wording. It will not merge unsupported claims across conflicting sources. It will not treat archived material as current guidance without saying so. It will not spend through multiple fallback stages when the first stage already shows there is no grounded answer. Once these negatives are codified, implementation details on Workers become far easier to reason about because every module serves a bounded purpose rather than chasing “better answers” without a stop condition."
+        },
+        {
+          "type": "heading",
+          "text": "What edge deployment actually improves"
+        },
+        {
+          "type": "paragraph",
+          "text": "With all of these caveats, edge deployment still offers real advantages. A Worker can keep the front door close to users, handle auth and routing efficiently, and centralize the answer contract in one predictable execution layer. It is a good place to enforce request budgets, refusal policy, tenant isolation, and locale selection before expensive generation begins. It can also stream partial results cleanly: first the retrieval state, then a refusal reason, or finally a grounded answer with citations. None of this requires pretending that the edge is where intelligence lives. The intelligence is in the boundaries."
+        },
+        {
+          "type": "paragraph",
+          "text": "That distinction matters because it keeps architecture honest. If your documents are badly maintained, if your lifecycle is undefined, if your access model is porous, or if your evaluation ignores stale and conflicting evidence, then moving the request handler closer to the user does not create trust. It only moves the same uncertainty to a more convenient runtime. Teams that succeed with edge RAG are not the ones who treat Workers as a magic box. They are the ones who use Workers as a disciplined control plane for retrieval, evidence, and spend."
+        },
+        {
+          "type": "heading",
+          "text": "Not a magic box, but a useful one"
+        },
+        {
+          "type": "paragraph",
+          "text": "The mature claim for RAG on Cloudflare Workers is modest and therefore credible. You can build a fast, well-bounded answer layer near users. You can keep request logic simple and explicit. You can separate ingestion from answering. You can enforce index boundaries that match product and policy boundaries. You can cap costs by limiting retrieval depth and generation paths. You can refuse weak evidence instead of laundering it into confident prose. And you can manage documents as living assets rather than frozen inputs. None of that is magical. All of it is useful."
+        },
+        {
+          "type": "paragraph",
+          "text": "If a team wants one sentence to remember, it should be this: retrieval systems become trustworthy when they know what they are not allowed to know, not when they learn to say more. Edge RAG is worth building when that discipline is part of the architecture from day one. Without it, the system may still answer. It just will not deserve to."
+        },
+        {
+          "type": "cta",
+          "label": "Discuss a bounded RAG architecture",
+          "href": "/contact"
+        }
+      ]
+    },
+    "ja": {
+      "title": "境界を決めてエッジでRAGをつくる",
+      "eyebrow": "Engineering Editorial",
+      "excerpt": "Cloudflare WorkersでRAGを組むときに先に決めるべきなのは、モデルでもベクトル検索でもなく、境界です。何を索引し、いつ捨て、どの弱い根拠を拒否するかを設計しない限り、エッジ上のRAGは便利な箱ではなく、曖昧さを高速に配る装置になります。",
+      "seoTitle": "境界を決めてエッジでRAGをつくる — Tung",
+      "seoDescription": "Cloudflare WorkersでRAGを組むための実務論。索引境界、コスト上限、弱い根拠の拒否、文書ライフサイクルを整理する。",
+      "body": [
+        {
+          "type": "heading",
+          "text": "魔法の箱として扱わない"
+        },
+        {
+          "type": "paragraph",
+          "text": "RAGは、質問に対して関連文書を取り出し、その断片を根拠として応答を組み立てる手法だと簡単に説明されます。けれど実務では、検索精度やモデル選定の前に、どこまでを知識として扱うかという境界設定が全体の品質を決めます。Cloudflare Workersのようなエッジ実行環境でRAGを動かすと、その問題はさらに露出します。レイテンシは短くしたい、コストは予測可能にしたい、しかし情報の鮮度と整合性も守りたい。つまり、速さの話をする前に、何を入れて何を入れないかを厳密に決める必要があります。"
+        },
+        {
+          "type": "paragraph",
+          "text": "Workers上のRAGは、中心に巨大なアプリケーションサーバを置く設計よりも、小さな責務に分解しやすい反面、曖昧な設計をそのまま高速化してしまう危険があります。古い文書、重複した説明、撤回済みのルール、誰が承認したかわからない運用メモ。そうしたノイズを抱えたままベクトル化しても、検索結果は整然と見えるだけで、根拠としては弱いままです。エッジRAGが優れているかどうかは、検索の速さではなく、返さない勇気を持てるかで測るべきです。"
+        },
+        {
+          "type": "heading",
+          "text": "最初に決めるべきは索引の境界"
+        },
+        {
+          "type": "paragraph",
+          "text": "索引対象を広げるのは簡単です。社内FAQ、仕様書、ヘルプ記事、議事録、チャットの抜粋、PDF。ですが、投入できるものと投入すべきものは一致しません。RAGの索引は文書保管庫ではなく、回答の根拠候補を管理する層です。したがって、更新責任者が不明な文書、作成日時しかなく有効期限がない文書、同じ主題で複数版が併存する文書は、原則としてそのまま入れるべきではありません。検索できることと、答えに使ってよいことは別だからです。"
+        },
+        {
+          "type": "list",
+          "items": [
+            "索引対象は「現在も有効な判断材料」に限定する",
+            "版管理できない断片は、知識ではなく参考資料として扱う",
+            "承認者・発行日・失効条件がない文書は、自動で低優先に落とすか除外する"
+          ]
+        },
+        {
+          "type": "heading",
+          "text": "Cloudflareで活きる分割の考え方"
+        },
+        {
+          "type": "paragraph",
+          "text": "Cloudflare Workersで構成を考えるときは、生成、検索、キャッシュ、更新、監査を一つの関数に押し込まないほうがよい場面が多くあります。質問受付と入力正規化、検索クエリの生成、インデックス問い合わせ、本文断片の抽出、最終応答の整形。この流れを段階に分けるだけで、どこで失敗したか、どこにコストが乗っているか、どこで拒否すべきかが見えるようになります。エッジは速いから一体化する、ではなく、速いからこそ責務を分解して監査可能にする、という発想が重要です。"
+        },
+        {
+          "type": "paragraph",
+          "text": "たとえば公開ドキュメントの検索はエッジで完結させても、文書取り込みや再インデックスは非同期に逃がす設計が自然です。質問のたびに重い前処理を動かすのではなく、文書更新時に必要な整形を終えておく。逆に、応答時には権限判定やテナント境界の確認を先に行い、許可されていない文書候補を検索の後で落とすのではなく、検索の前に対象集合そのものを絞る。この順序の違いが、情報漏えいと無駄な計算を同時に減らします。"
+        },
+        {
+          "type": "heading",
+          "text": "チャンク化は文字数ではなく意味境界で切る"
+        },
+        {
+          "type": "paragraph",
+          "text": "RAG実装の初期段階では、一定文字数ごとの単純分割に頼りがちです。しかし実際には、文書の意味単位とチャンク境界がずれるほど、検索ヒットは増えても回答根拠は弱くなります。料金表なら表題・適用条件・例外規定を同じ束として保持する必要があるし、API仕様ならエンドポイント、前提認証、必須パラメータ、エラー条件を離しすぎないほうがよい。検索は断片化に強く見えても、判断は文脈の連続性に依存します。"
+        },
+        {
+          "type": "quote",
+          "text": "速い検索は価値になる。だが、文脈を失った断片を速く返しても、正しい運用にはならない。"
+        },
+        {
+          "type": "image",
+          "src": "/images/blog/cloudflare-rag-edge-detail.webp",
+          "alt": "暗い机上で設計図とモニターが並ぶ、Cloudflare Workers向けRAGの境界設計を想起させる編集写真"
+        },
+        {
+          "type": "heading",
+          "text": "コスト上限は後から監視するものではない"
+        },
+        {
+          "type": "paragraph",
+          "text": "CloudflareでRAGを動かす利点のひとつは、負荷の入口に近い場所で処理を短く閉じやすいことです。ただし、短い実行時間と予測可能なコストは自動では手に入りません。検索候補数、再ランキングの有無、モデルへの投入トークン、キャッシュの粒度、再試行回数。これらを明示的に上限化しない限り、負荷の偏りや長文質問の増加だけで費用も遅延も揺れます。無料枠や低コスト運用を語るなら、なおさら「何をしないか」を設計に書いておくべきです。"
+        },
+        {
+          "type": "paragraph",
+          "text": "たとえば、ひとつの質問に対して常に上位数件だけを根拠候補として採用し、それ以上は別ルートに回す。根拠断片の合計長が一定を超えたら要約ではなく再検索を優先する。曖昧な問い合わせには最初から確認質問を返し、無理に大きなコンテキストを作らない。こうした制約は機能を削る話ではなく、機能の責任範囲を守るためのルールです。コスト管理は財務ではなく、プロダクトの振る舞いの設計に属します。"
+        },
+        {
+          "type": "heading",
+          "text": "弱い根拠を拒否する条件を先に決める"
+        },
+        {
+          "type": "paragraph",
+          "text": "多くのRAGシステムが壊れるのは、検索できなかったときではなく、少しだけ関連がありそうな断片を拾って、もっともらしく埋めてしまうときです。エッジで動く応答系は体感が軽いため、ユーザーはなおさら答えを信用しやすい。だからこそ、弱い根拠を見つけた場合は答えず、質問を狭める、利用可能な文書範囲を明示する、担当者への導線を出す、といった拒否の作法が必要です。回答率より、誤った断定を避けることを優先すべき場面は少なくありません。"
+        },
+        {
+          "type": "list",
+          "items": [
+            "検索結果が単一の版に収束しないときは、断定しない",
+            "例外条件だけが見つかり本文が欠けるときは、回答を保留する",
+            "有効期限切れの文書しか根拠がないときは、最新情報なしとして返す",
+            "権限外文書が上位候補に混ざる設計なら、検索前フィルタへ戻って見直す"
+          ]
+        },
+        {
+          "type": "heading",
+          "text": "文書にはライフサイクルがある"
+        },
+        {
+          "type": "paragraph",
+          "text": "RAGの知識ベースを単なる蓄積と見なすと、古い情報は静かに残り続けます。しかし運用文書には誕生、更新、廃止、差し替え、緊急撤回といったライフサイクルがあります。Cloudflare上で軽快に配信する仕組みをつくるほど、この時間軸の管理が欠かせません。新しい版が公開された瞬間に旧版を検索候補から外すのか、一定期間は比較可能な状態で併存させるのか。法務文書、価格表、障害手順、在庫ポリシーでは答えが違います。"
+        },
+        {
+          "type": "paragraph",
+          "text": "重要なのは、文書の本文だけでなく、状態を持たせることです。公開中、下書き、失効、撤回、確認待ち。こうした状態が検索フィルタと結びついていないRAGは、どれほど検索が賢くても運用に耐えません。ユーザーが欲しいのは「見つかった文章」ではなく、「いま使ってよい根拠」です。文書管理の規律が弱い組織ほど、RAG導入の前に状態設計から始めるべき理由はここにあります。"
+        },
+        {
+          "type": "quote",
+          "text": "RAGは記憶装置ではない。現在有効な根拠を、必要な範囲だけ差し出すための配管である。"
+        },
+        {
+          "type": "heading",
+          "text": "更新パイプラインを応答パスから切り離す"
+        },
+        {
+          "type": "paragraph",
+          "text": "エッジRAGの実装では、文書取り込みと応答生成を同じ思考で設計しないほうが安定します。取り込み側では、HTMLやPDFから不要な装飾を落とし、版情報を埋め、チャンク境界を調整し、失効条件やアクセス制御ラベルを付与する。応答側では、その前処理済みデータだけを参照する。もし応答時に毎回文書を解釈し直しているなら、それは性能の問題というより、知識の整備責任を実行時に先送りしている状態です。"
+        },
+        {
+          "type": "paragraph",
+          "text": "更新頻度が高い領域では、完全再構築よりも差分反映の設計が必要になります。ただし差分反映は、どのチャンクがどの原文に由来し、どの版で無効になるかを追跡できることが前提です。ここが曖昧だと、更新後に古い断片だけが残ったり、引用テキストと表示URLが別の版を指したりします。RAGの不具合はしばしばモデルの問題に見えますが、実際にはデータ系の整合性崩れであることが多いのです。"
+        },
+        {
+          "type": "heading",
+          "text": "検索前フィルタは品質と安全の両方に効く"
+        },
+        {
+          "type": "paragraph",
+          "text": "特にマルチテナントや権限差のある環境では、検索後に不要な候補を削るより、検索前に対象集合を分けるべきです。Cloudflare Workersはリクエストごとの判定をエッジで持ちやすいため、地域、契約プラン、組織、言語、公開状態といった条件で最初から候補群を限定できます。この一手間により、誤引用の可能性だけでなく、似た文書が多すぎて関連性がぼやける問題も減ります。安全のための制約が、そのまま精度改善になる構造です。"
+        },
+        {
+          "type": "heading",
+          "text": "評価は正答率の見栄えより失敗の型で見る"
+        },
+        {
+          "type": "paragraph",
+          "text": "RAGの評価をひとつの数字に押し込むと、現場で起きる失敗が見えなくなります。必要なのは、どの種類の質問で、どの種類の誤りが起きたかを分類することです。最新版を無視して旧版を答えたのか。例外条件を取り逃したのか。根拠不足なのに断定したのか。本文は正しいが適用範囲を誤解したのか。運用上危険なのは、単なる不正解より、もっともらしい半正解です。したがって、評価セットにも時制、例外、否定条件、権限差を意図的に混ぜる必要があります。"
+        },
+        {
+          "type": "list",
+          "items": [
+            "最新版と旧版が競合する質問を用意する",
+            "本文より例外規定が重要になる質問を混ぜる",
+            "答えが存在しない、または根拠不足で拒否すべき質問を含める"
+          ]
+        },
+        {
+          "type": "heading",
+          "text": "無料枠や低コスト運用で現実的に考える"
+        },
+        {
+          "type": "paragraph",
+          "text": "Cloudflareを選ぶ理由として、まずコスト感を挙げる人は多いはずです。それ自体は健全です。ただし、低コストで回ることと、何でも載せられることは両立しません。文書数が増えるほど、索引更新、キャッシュ無効化、再ランキング、監査ログの設計が効いてきます。無料枠に収めるという発想は、機能を削るためではなく、重要度の低い機能を本流から外し、主要フローを細く保つ判断につながるなら意味があります。"
+        },
+        {
+          "type": "paragraph",
+          "text": "公開ナレッジの案内、限定された仕様参照、問い合わせ一次応答の補助。こうした用途では、厳格な境界設計を行えば、エッジRAGは十分に実用的です。一方で、長大な社内文書を横断し、複雑な推論と広い権限制御を一度に担わせるなら、Workersだけで完結させることに固執しないほうがよい。どこまでをエッジに置き、どこからを別の処理系に逃がすか。その判断もまた、アーキテクチャの品位に含まれます。"
+        },
+        {
+          "type": "heading",
+          "text": "RAGは検索ではなく運用設計の問題"
+        },
+        {
+          "type": "paragraph",
+          "text": "最終的に問われるのは、モデルが賢いかではありません。誰が文書を更新し、どの状態で公開し、どの条件なら答えを拒否し、どこまでのコストを許容するか。Cloudflare Workersは、その設計を小さく明快に実装するには向いています。しかし、曖昧な知識ベースをうまく包み込んでくれるわけではない。RAGは魔法の箱ではなく、境界、責任、状態、拒否条件を丁寧に配線したときにだけ、静かに効く仕組みです。"
+        },
+        {
+          "type": "paragraph",
+          "text": "だから、エッジでRAGをつくるときは、まずインデックスの境界を書き出すことから始めるべきです。次に、弱い根拠を拒否する基準を決める。文書のライフサイクルを状態として持たせる。コスト上限をプロンプトの外側で制度化する。その順序を守れば、RAGは万能感のあるデモから、責任を持って使えるプロダクトへ近づきます。速さは最後に効けばいい。先に必要なのは、何を答えないかを決める冷たさです。"
+        },
+        {
+          "type": "cta",
+          "label": "実運用前提のRAG設計を相談する",
+          "href": "/contact"
+        }
+      ]
+    },
+    "zh": {
+      "title": "在边缘构建 RAG：先划清数据与成本边界",
+      "eyebrow": "Edge Engineering",
+      "excerpt": "把 RAG 放到 Cloudflare Workers 这类边缘环境里，真正先要解决的不是“能不能做”，而是“哪些数据值得进索引、哪些请求必须拒答、成本上限由谁来守”。边缘不是魔法盒子，它更像一套必须先写清边界条件的工程系统。",
+      "seoTitle": "在边缘构建 RAG：先划清边界 — Tung",
+      "seoDescription": "讨论 Cloudflare Workers 上的边缘 RAG：索引边界、成本封顶、弱证据拒答与文档生命周期管理。",
+      "body": [
+        {
+          "type": "heading",
+          "text": "RAG 不是“接上模型”就结束的系统"
+        },
+        {
+          "type": "paragraph",
+          "text": "很多团队第一次讨论 RAG，起点往往是模型能力：选哪个大模型、向量检索延迟如何、是否要做多轮对话。但如果部署位置换成 Cloudflare Workers 这样的边缘运行时，优先级会立刻倒过来。边缘环境的真正价值不在于“离用户更近”这句口号，而在于它迫使系统设计者先面对资源边界、状态边界、数据主权边界。RAG 在这里不是一个华丽的 AI 功能，而是一条有入口、有预算、有失效方式的检索链路。链路里每一个环节都需要证明自己存在的必要性，否则就会在看似顺滑的演示之后，迅速变成高频失败的生产负担。"
+        },
+        {
+          "type": "paragraph",
+          "text": "因此，边缘 RAG 的第一原则不是“尽可能回答”，而是“先定义什么情况下不该回答”。如果系统对证据不足、索引过期、权限不明、成本超限的请求仍然给出完整口吻的答案，那么它制造的不是知识服务，而是不透明的错误传播。Cloudflare Workers 适合承接这类第一道裁决：它足够靠近请求入口，能够快速执行规则、检查元数据、切断不应继续消耗算力的请求。但这要求产品和工程团队承认一个事实：RAG 的价值从来不只是召回到内容，而是让系统知道在什么地方停下。"
+        },
+        {
+          "type": "heading",
+          "text": "先划数据边界，再谈检索质量"
+        },
+        {
+          "type": "paragraph",
+          "text": "在边缘做 RAG，最常见的误区是把所有能收集到的文本都视作可索引资产。产品文档、客服话术、内部笔记、旧版公告、带截图的 PDF、法规摘录、群聊记录，统统扔进统一索引，期待检索和模型替自己完成清洗。这种做法在小规模演示里看起来“覆盖面很全”，到了实际运营阶段却会变成最大的噪音源。因为检索系统并不知道哪些文档天然具备权威性，哪些只是临时讨论，哪些已经过期，哪些在语义上接近却在业务上互斥。"
+        },
+        {
+          "type": "paragraph",
+          "text": "真正可用的边缘 RAG，必须先给文档分层。最上层是可直接回答用户的问题源，例如正式政策、版本化产品文档、经过审核的知识库条目；中间层是可作为补充但不能独立裁决的背景材料，例如 FAQ 草稿、历史变更说明、培训手册；最低层则是只能被人工或离线流程使用的原始材料，例如会议纪要、零散工单、未定稿文档。边缘入口只应接触前两层，而且要明确标识每类材料的生效时间、业务域、适用用户群与权限条件。RAG 不是把文档塞进向量库，而是把原本混乱的知识资产改造成可判责的证据系统。"
+        },
+        {
+          "type": "list",
+          "items": [
+            "先定义可索引文档类型：正式发布、已审核、版本明确、可追溯责任人。",
+            "为每份文档补齐元数据：生效时间、失效时间、业务域、语言、权限、可信等级。",
+            "把“可检索”与“可回答”拆开：某些材料可以被查到，但不能单独作为答案依据。",
+            "给旧文档设置淘汰策略：不是永远留在索引里，而是按版本与时效逐步退出主召回路径。"
+          ]
+        },
+        {
+          "type": "heading",
+          "text": "索引边界决定了答案边界"
+        },
+        {
+          "type": "paragraph",
+          "text": "边缘 RAG 最危险的假设，是认为更大的索引天然带来更高的可用性。事实上，索引范围一旦失控，系统就会开始回答那些它本不该回答的问题。比如用户问“当前退款时限”，检索层可能同时召回现行政策、去年节日临时政策、某地区代理说明和客服培训摘要。模型再聪明，也无法替代制度设计去判断哪一份才是当前生效且适用于该用户的答案。边缘入口如果没有先按地区、版本、渠道、客户类型做过滤，后面的生成就只是在对冲突证据做语言润色。"
+        },
+        {
+          "type": "paragraph",
+          "text": "索引边界还直接影响延迟与成本。Workers 这类环境擅长处理轻量、短路径、规则清晰的请求，不适合在每次查询时承担无限制的召回与重排序实验。换句话说，边缘更适合作为‘先筛后问’的执行层，而不是‘把一切都交给模型判断’的冒险层。一个成熟的方案通常会先在请求进入时做问题分类：这是不是一个允许由知识库回答的问题？它属于哪个业务域？是否需要用户身份上下文？是否必须命中某一类权威文档才能继续？只有这些条件被满足，系统才应进入检索与生成。"
+        },
+        {
+          "type": "quote",
+          "text": "边缘 RAG 的核心，不是把模型搬到离用户更近的位置，而是把“允许回答的条件”搬到请求最前面。"
+        },
+        {
+          "type": "heading",
+          "text": "成本上限必须是系统规则，不是事后观察"
+        },
+        {
+          "type": "paragraph",
+          "text": "谈 Cloudflare Workers 上的 RAG，绕不开成本控制。但成本控制不是在月底看账单时才开始的财务动作，而应当在架构阶段就写进每一条请求路径。边缘环境给了团队一个很好的机会：因为运行资源、请求配额、外部调用次数都更容易被显式建模，所以你可以把预算限制做成严格规则，而不是模糊建议。比如，某类查询只允许一次主检索和一次补充检索；命中低置信证据时禁止升级到更长上下文；用户未登录时不触发代价更高的个性化检索。"
+        },
+        {
+          "type": "paragraph",
+          "text": "这里最重要的是承认：并不是每个问题都值得进入完整 RAG 流程。诸如寒暄、模糊愿望表达、缺少主语的问题、超出知识域的泛化问答，完全可以在边缘层被重写、澄清或直接拒绝。工程上，真正省成本的不是把每一次调用压到极限，而是减少那些根本不应该发生的调用。一个看上去保守的拒答机制，往往比激进的召回优化更能稳定系统总成本，因为它直接减少无效路径，而不是在无效路径上做微调。"
+        },
+        {
+          "type": "image",
+          "src": "/images/blog/cloudflare-rag-edge-detail.webp",
+          "alt": "边缘计算环境中的检索增强生成架构细节，显示请求入口、索引过滤与成本控制层"
+        },
+        {
+          "type": "heading",
+          "text": "中间件不是装饰，它是边缘 RAG 的闸门"
+        },
+        {
+          "type": "paragraph",
+          "text": "如果把 Cloudflare Workers 只看作一个执行检索请求的轻量函数，就低估了它在系统中的位置。更准确的理解是：它是一个能够在主业务流最前端执行判断的中间件层。这里适合承接请求规范化、身份态校验、问题分类、业务域路由、缓存命中检查、成本阈值判断、证据最低标准判断等操作。这样做的好处不是“技术栈更先进”，而是系统责任更清晰：不是等模型失败后再解释，而是在进入模型前就说明为什么继续、为什么停止。"
+        },
+        {
+          "type": "paragraph",
+          "text": "一个常见的失败模式是把边缘层做得过薄，只负责转发，然后把复杂性全部推给后端检索与模型。结果就是每个坏请求都完整走一遍昂贵链路，最后再由生成阶段给出含糊答案。相反，边缘层如果承担起严格的前置验证，就能把大量问题拦在入口。例如，问题中若缺少时间条件，而知识库中同主题存在多个互斥版本，系统应先要求补充时间范围；如果用户身份只允许查看公开政策，就不应检索内部运维手册；如果请求明显属于事务办理而不是知识问答，则应直接路由到表单或人工流程，而不是强行生成说明。"
+        },
+        {
+          "type": "list",
+          "items": [
+            "入口先做问题分类：知识问答、事务办理、售后进度、开放式咨询，路径不同。",
+            "设最低证据线：未命中权威来源、来源冲突、版本不明时，直接拒答或要求澄清。",
+            "设成本闸门：超过预设检索次数、上下文长度或外部依赖数时，结束流程而非继续冒险。",
+            "设权限检查：公开、登录可见、内部可见的内容在边缘层先分流，不把风险留给模型。"
+          ]
+        },
+        {
+          "type": "heading",
+          "text": "弱证据要拒绝，不要润色"
+        },
+        {
+          "type": "paragraph",
+          "text": "很多团队愿意投入精力优化提示词，却不愿正视一个更基础的问题：证据本身不够强。如果召回到的只是相似而非适用的文本，模型生成得越顺，误导就越隐蔽。边缘 RAG 的稳健性，恰恰体现在它愿不愿意拒绝弱证据。所谓弱证据，通常包括几类情况：只命中二级材料而未命中权威材料；命中材料存在时间冲突；召回文本主题相近但适用对象不同；文本是摘要转述而非原始政策；文档缺少生效状态。面对这些情况，系统最专业的表现不是“尽力回答”，而是明确告诉用户当前证据不足，并给出下一步建议。"
+        },
+        {
+          "type": "paragraph",
+          "text": "拒答不是糟糕体验，相反，它是可信体验的组成部分。用户真正无法接受的，不是系统说“我不能确定”，而是系统以确定口吻给出错误方向。特别是在支付、物流、售后、合规、价格政策等场景，答案一旦被当成操作依据，错误成本常常远高于一次未回答。边缘层应当将拒答设计成产品能力：说明缺口在哪里、缺的是时间条件还是权限条件、需要查看哪一类正式页面、是否建议转人工。这种拒答不是被动防守，而是主动维护系统可信边界。"
+        },
+        {
+          "type": "quote",
+          "text": "当证据不够强时，最好的生成不是更漂亮的句子，而是停止生成。"
+        },
+        {
+          "type": "heading",
+          "text": "文档生命周期，比向量化更重要"
+        },
+        {
+          "type": "paragraph",
+          "text": "许多 RAG 项目上线后问题不断，不是因为检索技术太弱，而是因为文档生命周期管理几乎不存在。文档被导入一次后，就默认永久留在索引里；后来政策改了、页面下线了、术语替换了、地域规则更新了，旧内容依然作为召回候选存在。边缘环境并不能自动解决这个问题，但它会放大这个问题，因为入口离用户很近，错误也会更直接地暴露出来。所以在边缘做 RAG，必须把文档看作有出生、变更、退役、归档四个阶段的对象，而不是静态文本文件。"
+        },
+        {
+          "type": "paragraph",
+          "text": "实际操作中，文档生命周期至少要回答几个问题：新文档什么时候进入主索引，谁批准它具有回答资格；旧版本何时降级为历史参考，何时彻底退出在线召回；内容冲突时谁拥有优先级；紧急修订如何在边缘缓存和检索层同步生效；删除请求是否需要在生成缓存、摘要缓存、嵌入索引中连带清除。只有这些问题被制度化，RAG 才不会在文档更新后继续复述昨天的答案。对边缘系统而言，这一点尤其关键，因为入口响应很快，如果背后知识更新机制迟缓，用户会更频繁地接收到“快速但过时”的内容。"
+        },
+        {
+          "type": "heading",
+          "text": "缓存可以降低成本，也可能固化错误"
+        },
+        {
+          "type": "paragraph",
+          "text": "边缘架构天然让人想到缓存。确实，在 Workers 侧利用缓存存储热门问答结果、检索片段或标准化后的请求，可以明显减少重复计算和下游依赖。但缓存并不是单向收益。对于 RAG 来说，缓存保存的不只是数据，还可能保存错误的解释路径：错误召回、过时证据、在旧版本政策下生成的答案、对特定上下文过拟合的结果。一旦这类内容被缓存，错误会以更低延迟传播给更多用户。"
+        },
+        {
+          "type": "paragraph",
+          "text": "因此，边缘 RAG 的缓存策略必须与文档生命周期联动，而不是仅按访问热度决定。一个稳妥的原则是：缓存可以优先用于中间结果，而不是无条件缓存最终答案。比如缓存问题分类结果、可公开文档的过滤集合、已验证的片段摘要、规则命中情况，而对直接面向用户的最终生成文本设置更严格的失效条件。此外，任何与时间敏感政策、价格、库存、地区规则相关的回答，都应附带更短的生存期，甚至在命中某些关键域时直接禁用最终答案缓存。成本优化不能以知识陈旧化为代价。"
+        },
+        {
+          "type": "heading",
+          "text": "不要把评估只做成离线分数"
+        },
+        {
+          "type": "paragraph",
+          "text": "评估边缘 RAG，很多团队喜欢先做一套离线问答集，跑若干轮召回与生成打分，然后据此决定是否上线。离线评估当然必要，但它不足以代表实际生产情况，尤其是在边缘环境里。真实请求会带着拼写错误、口语缩写、身份差异、地区条件、省略前提、版本混杂和强烈意图。离线问题集往往过于整洁，容易高估系统稳定性。更关键的是，边缘层还承担着大量“是否继续”的判断，而这些判断在传统问答准确率指标里经常被忽略。"
+        },
+        {
+          "type": "paragraph",
+          "text": "更有价值的评估方式，是把系统拆成多个可审查环节：入口分类是否正确、权限判断是否过宽、检索过滤是否命中正确业务域、证据强度裁决是否足够严格、拒答理由是否清楚、文档更新时间是否及时反映到回答链路。这样的评估不会给出一个漂亮但空泛的总分，却能明确指出系统在哪个环节失真。边缘 RAG 需要的不是抽象的“智能感”，而是每一步都能解释的工程可控性。"
+        },
+        {
+          "type": "heading",
+          "text": "适合边缘的 RAG，通常比想象中更克制"
+        },
+        {
+          "type": "paragraph",
+          "text": "当团队真正开始在 Cloudflare Workers 上实现 RAG，最后往往会发现：最稳的方案不是功能最多的方案，而是边界最清晰的方案。它回答的问题域更窄，要求文档治理更严格，拒答比例可能更高，检索路径更短，模型角色更像压缩与组织证据，而不是凭空补全常识。这样的系统看上去没有那么“全能”，却更适合作为生产基础设施，因为它不依赖幻觉来掩盖流程缺口。"
+        },
+        {
+          "type": "paragraph",
+          "text": "这也是为什么边缘 RAG 更像一项知识供应链工程，而不是单点 AI 集成。你要处理的不是一个模型接口，而是一整套围绕证据、成本、权限、时效和问责的机制。Cloudflare Workers 这类平台提供了足够好的入口执行条件，让这些机制可以在离用户最近的地方被贯彻。但前提是团队愿意承认系统的限制，愿意把“不知道”“不适用”“请补充条件”“请查看正式页面”也当成产品输出的一部分。"
+        },
+        {
+          "type": "heading",
+          "text": "先把边界写清楚，边缘 RAG 才值得上线"
+        },
+        {
+          "type": "paragraph",
+          "text": "如果要用一句话概括边缘 RAG 的建设顺序，那就是：先划边界，再做能力。先定义哪些文档能进索引、哪些问题能被回答、哪些证据足够强、哪些成本绝不能突破、哪些内容何时退役；再去讨论召回策略、提示设计和响应风格。只有这样，边缘上的 RAG 才不会沦为一个耗费资源却难以追责的黑箱，而会成为一个能够谨慎工作、必要时沉默、并且始终知道自己依据何在的系统。边缘不是魔法盒子。它更像一道门。门后的每一步，都要先有规则。"
+        },
+        {
+          "type": "cta",
+          "label": "讨论你的边缘知识系统设计",
+          "href": "/contact"
+        }
+      ]
+    }
+  },
+  "wordCounts": {
+    "vi": 3155,
+    "en": 2633,
+    "ja": 2206,
+    "zh": 2390
+  }
+}

@@ -1,0 +1,112 @@
+---
+interface Props {
+  steps: { cart: string; details: string; pay: string; keys: string };
+  /** 1=cart 2=details 3=pay 4=keys */
+  current: 1 | 2 | 3 | 4;
+  label?: string;
+}
+
+const { steps, current, label = steps.cart } = Astro.props;
+const items = [
+  { id: 1 as const, text: steps.cart },
+  { id: 2 as const, text: steps.details },
+  { id: 3 as const, text: steps.pay },
+  { id: 4 as const, text: steps.keys },
+];
+---
+
+<ol class="flow-steps" aria-label={label}>
+  {items.map((item, index) => {
+    const state = item.id < current ? "done" : item.id === current ? "active" : "todo";
+    return (
+      <li class:list={[`is-${state}`]} aria-current={state === "active" ? "step" : undefined}>
+        {index > 0 ? <i class="flow-steps__connector" aria-hidden="true"></i> : null}
+        <b aria-hidden="true">{state === "done" ? "✓" : String(item.id)}</b>
+        <span>{item.text}</span>
+      </li>
+    );
+  })}
+</ol>
+
+<style>
+  .flow-steps {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0;
+    margin: 0;
+    padding: 0.15rem;
+    list-style: none;
+    border: 1px solid var(--shop-line, #e2e8f0);
+    border-radius: var(--shop-radius, 0.5rem);
+    background: var(--shop-surface, #ffffff);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+    overflow: hidden;
+  }
+  .flow-steps li {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    min-height: 3.8rem;
+    padding: 0.6rem 0.4rem;
+    color: var(--shop-ink-muted, #94a3b8);
+    text-align: center;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  .flow-steps__connector {
+    position: absolute;
+    top: 1.25rem;
+    left: -50%;
+    width: 100%;
+    height: 1px;
+    background: var(--shop-line, #e2e8f0);
+    z-index: 0;
+  }
+  .flow-steps li.is-done .flow-steps__connector,
+  .flow-steps li.is-active .flow-steps__connector {
+    background: var(--shop-ink, #0f172a);
+  }
+  .flow-steps li.is-active {
+    background: var(--shop-surface-alt, #f8fafc);
+    color: var(--shop-ink, #0f172a);
+  }
+  .flow-steps li.is-done {
+    color: var(--shop-ink, #0f172a);
+  }
+  .flow-steps b {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    width: 1.4rem;
+    height: 1.4rem;
+    place-items: center;
+    border-radius: 50%;
+    border: 1px solid var(--shop-line-strong, #cbd5e1);
+    background: var(--shop-surface, #ffffff);
+    font: 600 0.68rem/1 var(--font-sans);
+    color: var(--shop-ink-muted, #94a3b8);
+  }
+  .flow-steps li.is-done b {
+    border-color: var(--shop-ink, #0f172a);
+    background: var(--shop-ink, #0f172a);
+    color: #ffffff;
+  }
+  .flow-steps li.is-active b {
+    border-color: var(--shop-ink, #0f172a);
+    background: var(--shop-ink, #0f172a);
+    color: #ffffff;
+  }
+  .flow-steps span {
+    font: 600 0.72rem/1.2 var(--font-sans);
+    letter-spacing: -0.01em;
+  }
+  @media (max-width: 640px) {
+    .flow-steps {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .flow-steps__connector { display: none; }
+    .flow-steps li { min-height: 3.4rem; }
+  }
+</style>

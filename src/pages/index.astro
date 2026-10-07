@@ -1,0 +1,29 @@
+---
+import HomePage from "../components/pages/HomePage.astro";
+import NotFoundPage from "../components/pages/NotFoundPage.astro";
+import UnavailablePage from "../components/pages/UnavailablePage.astro";
+import { type Locale } from "../i18n/dictionaries";
+import { resolveRequestLocale } from "../i18n/locale-preference";
+import { isManagedSlug, loadPublicSnapshot } from "../lib/public-runtime";
+import { canUseBundledFallback, publishedBlogPosts, publishedProjects, publishedSiteSection, setPublicCache } from "../lib/public-content";
+
+export const prerender = false;
+const pageLocale: Locale = resolveRequestLocale(Astro.request);
+setPublicCache(Astro.response.headers);
+const snapshot = await loadPublicSnapshot(pageLocale);
+const unavailable = snapshot.status === "unavailable";
+const heroContent = publishedSiteSection(snapshot, "home-hero");
+const heroHidden = isManagedSlug(snapshot, "site_section", "home-hero") && !heroContent;
+const projects = canUseBundledFallback(snapshot, "project") ? undefined : publishedProjects(snapshot);
+const blogPosts = canUseBundledFallback(snapshot, "post") ? [] : publishedBlogPosts(snapshot);
+
+if (unavailable) {
+  Astro.response.status = 503;
+  setPublicCache(Astro.response.headers, "unavailable");
+} else if (heroHidden) {
+  Astro.response.status = 404;
+  setPublicCache(Astro.response.headers, "not-found");
+}
+---
+
+{unavailable ? <UnavailablePage locale={pageLocale} /> : heroHidden ? <NotFoundPage locale={pageLocale} /> : <HomePage locale={pageLocale} heroContent={heroContent} projects={projects} blogPosts={blogPosts} />}

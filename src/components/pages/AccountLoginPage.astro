@@ -1,0 +1,156 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { localizePath, type Locale } from "../../i18n/dictionaries";
+import { getShopCopy } from "../../i18n/shop";
+import { sanitizeReturnPath } from "../../lib/shop/customer-auth";
+
+interface Props {
+  locale: Locale;
+  turnstileSiteKey?: string;
+  googleEnabled?: boolean;
+  magicEnabled?: boolean;
+  errorCode?: string | null;
+  returnPath?: string | null;
+}
+
+const {
+  locale,
+  turnstileSiteKey = "",
+  googleEnabled = false,
+  magicEnabled = false,
+  errorCode = null,
+  returnPath: requestedReturnPath = null,
+} = Astro.props;
+const copy = getShopCopy(locale);
+const account = copy.account;
+const returnPath = sanitizeReturnPath(requestedReturnPath, localizePath("/shop/account", locale));
+const googleStart = `/api/shop/auth/oauth/google/start?return=${encodeURIComponent(returnPath)}`;
+---
+
+<BaseLayout title={account.login.metaTitle} description={account.login.metaDescription} locale={locale} chrome="store" noindex={true} alternateLocales={[locale]} rss={false}>
+  <div class="account shell">
+    <header class="account__head">
+      <p class="account__label">{account.login.label}</p>
+      <h1>{account.login.title}</h1>
+      <p class="account__intro">{account.login.intro}</p>
+    </header>
+
+    {errorCode ? <p class="account__error" role="alert" data-account-error>{account.errors[errorCode as keyof typeof account.errors] ?? account.errors.generic}</p> : null}
+
+    <section class="account__card">
+      {googleEnabled ? (
+        <a class="account__google" href={googleStart} data-account-google><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1Z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23Z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18A10.96 10.96 0 0 0 1 12c0 1.77.42 3.44 1.18 4.93l3.66-2.84Z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53Z" fill="#EA4335"/></svg>{account.login.google}</a>
+      ) : (
+        <p class="account__muted">{account.login.googleUnavailable}</p>
+      )}
+
+      {magicEnabled ? (
+        <form class="account__magic" data-account-magic novalidate>
+          <div class="account__divider"><span>{account.login.orEmail}</span></div>
+          <label>
+            <span>{account.login.email}</span>
+            <input type="email" name="email" autocomplete="email" required maxlength="320" placeholder={account.login.emailPlaceholder} />
+          </label>
+          {turnstileSiteKey ? (
+            <div class="cf-turnstile" data-sitekey={turnstileSiteKey} data-theme="light"></div>
+          ) : null}
+          <button type="submit" data-account-magic-submit>{account.login.sendLink}</button>
+          <p class="account__status" data-account-magic-status aria-live="polite"></p>
+        </form>
+      ) : null}
+
+      <p class="account__note">{account.login.guestNote}</p>
+      <a class="account__back" href={localizePath("/shop", locale)}>{account.login.backShop}</a>
+    </section>
+  </div>
+</BaseLayout>
+
+<script is:inline define:vars={{ locale, returnPath, labels: account.login, turnstileSiteKey }}>
+  const form = document.querySelector("[data-account-magic]");
+  if (form) {
+    const status = form.querySelector("[data-account-magic-status]");
+    const submit = form.querySelector("[data-account-magic-submit]");
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const email = new FormData(form).get("email");
+      if (typeof email !== "string" || !email.includes("@")) {
+        if (status) status.textContent = labels.validation;
+        return;
+      }
+      let turnstileToken = "";
+      if (turnstileSiteKey && window.turnstile) {
+        turnstileToken = window.turnstile.getResponse() || "";
+        if (!turnstileToken) {
+          if (status) status.textContent = labels.challenge;
+          return;
+        }
+      }
+      if (submit) submit.disabled = true;
+      if (status) status.textContent = labels.sending;
+      try {
+        const response = await fetch("/api/shop/auth/magic-link/request", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({ email, locale, returnPath, turnstileToken }),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data.ok) {
+          if (status) status.textContent = labels.error;
+        } else if (status) {
+          status.textContent = labels.sent;
+        }
+      } catch {
+        if (status) status.textContent = labels.error;
+      } finally {
+        if (submit) submit.disabled = false;
+        if (window.turnstile && turnstileSiteKey) window.turnstile.reset();
+      }
+    });
+  }
+</script>
+{turnstileSiteKey ? <script is:inline src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script> : null}
+
+<style>
+  .account { max-width: 32rem; margin: 0 auto; padding: clamp(2rem, 5vw, 3.5rem) 0 4rem; }
+  .account__label {
+    display: inline-flex; margin: 0; padding: .35rem .7rem; border-radius: 999px;
+    background: var(--shop-accent-soft, rgba(42, 157, 143,.12));
+    color: var(--shop-accent-hover, var(--accent)); font: 700 .74rem/1 var(--font-sans);
+  }
+  .account__head h1 {
+    margin: .85rem 0 .5rem; font: 800 clamp(1.7rem, 4vw, 2.2rem)/1.12 var(--font-sans);
+    letter-spacing: -.03em; color: var(--shop-ink, var(--paper));
+  }
+  .account__intro, .account__note, .account__muted { color: var(--shop-ink-soft, var(--paper-soft)); line-height: 1.6; }
+  .account__card {
+    margin-top: 1.5rem; padding: 1.5rem; border: 1px solid var(--shop-line, var(--line));
+    border-radius: var(--shop-radius-lg, 1.25rem); background: var(--shop-surface, #fff);
+    display: grid; gap: 1.1rem; box-shadow: var(--shop-shadow, 0 10px 28px rgba(42, 157, 143,.1));
+  }
+  .account__google {
+    display: inline-flex; align-items: center; justify-content: center; gap: .6rem; min-height: 3.1rem;
+    border-radius: var(--shop-radius-btn, .85rem); background: var(--shop-accent, var(--accent));
+    color: #fff; font-weight: 750; text-decoration: none; box-shadow: 0 10px 20px rgba(42, 157, 143,.26);
+  }
+  .account__google:hover { background: var(--shop-accent-hover, #218578); }
+  .account__divider { display: grid; place-items: center; color: var(--shop-ink-soft, var(--paper-soft)); font: 650 .76rem/1 var(--font-sans); }
+  .account__magic { display: grid; gap: .85rem; }
+  .account__magic label { display: grid; gap: .4rem; color: var(--shop-ink-soft, var(--paper-soft)); font-size: .88rem; }
+  .account__magic input {
+    min-height: 2.8rem; padding: .7rem .9rem; border: 1px solid var(--shop-line-strong, var(--line-strong));
+    border-radius: var(--shop-radius-sm, .65rem); background: var(--shop-bg-soft, #eaf5f3); color: var(--shop-ink, var(--paper));
+  }
+  .account__magic button {
+    min-height: 3rem; border: 0; border-radius: var(--shop-radius-btn, .85rem);
+    background: var(--shop-accent, var(--accent)); color: #fff; font-weight: 750; cursor: pointer;
+    box-shadow: 0 8px 18px rgba(42, 157, 143,.25);
+  }
+  .account__status { min-height: 1.25rem; color: var(--shop-ink-soft, var(--paper-soft)); font-size: .85rem; }
+  .account__error {
+    margin: 1rem 0 0; padding: .85rem 1rem; border-radius: var(--shop-radius, 1rem);
+    border: 1px solid rgba(255,92,108,.28); background: var(--shop-danger-soft, rgba(255,92,108,.1)); color: #c43a48;
+  }
+  .account__back { color: var(--shop-ink-soft, var(--paper-soft)); font-size: .88rem; text-decoration: none; }
+  .account__back:hover { color: var(--shop-accent, var(--accent)); }
+</style>

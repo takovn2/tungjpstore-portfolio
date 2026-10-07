@@ -1,0 +1,150 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import CmsBlocks from "../CmsBlocks.astro";
+import CaseEvidence from "../CaseEvidence.astro";
+import ProjectVisual from "../ProjectVisual.astro";
+import FlywheelBand from "../shop/FlywheelBand.astro";
+import { getTranslation, localizePath, type Locale } from "../../i18n/dictionaries";
+import { projectCoverAlt, resolveProjectCover } from "../../content/project-media";
+import type { PublicProject } from "../../lib/public-content";
+import { hasRepositoryReference } from "../../lib/public-content";
+import { getProjectEvidence } from "../../content/portfolio-evidence";
+
+type Copy = ReturnType<typeof getTranslation>;
+type ProjectKey = "logivn" | "paymentInfrastructure" | "fball";
+interface Props { locale: Locale; slug: string; projectContent?: Copy["projects"][ProjectKey]; project?: PublicProject; navigationProjects?: PublicProject[]; }
+type ProjectWithOptionalState = Copy["projects"][ProjectKey] & { currentState?: string };
+
+const { locale, slug, projectContent, project: cmsProject, navigationProjects = [] } = Astro.props;
+const t = getTranslation(locale);
+const projectKeyBySlug: Partial<Record<string, ProjectKey>> = {
+  logivn: "logivn",
+  fball: "fball",
+  "payment-infrastructure": "paymentInfrastructure",
+};
+const key = projectKeyBySlug[slug] ?? null;
+const legacyProject = key
+  ? (projectContent ?? t.projects[key]) as ProjectWithOptionalState
+  : null;
+// Use the curated narrative for built-in case studies so old CMS revisions
+// cannot reintroduce internal editorial notes on public routes.
+const projectName = legacyProject?.name ?? cmsProject?.name ?? slug;
+const projectCategory = legacyProject?.category ?? cmsProject?.category ?? "";
+const projectThesis = legacyProject?.thesis ?? cmsProject?.thesis ?? "";
+const projectSummary = legacyProject?.summary ?? cmsProject?.summary ?? "";
+const publicEvidence = legacyProject?.evidence.filter((item) => !hasRepositoryReference(item)) ?? [];
+const order = ["logivn", "fball"] as const;
+const projectNumbers: Partial<Record<string, string>> = {
+  logivn: "01",
+  fball: "02",
+  "payment-infrastructure": "LAB",
+};
+const currentIndex = order.indexOf(slug as typeof order[number]);
+const nextSlug = order[(currentIndex + 1) % order.length];
+const nextKey = nextSlug;
+const variants = { logivn: "logivn", "payment-infrastructure": "payment", fball: "fball" } as const;
+const fallbackWebsite = slug === "logivn" ? "https://logivn.com" : slug === "fball" ? "https://fball.vn" : null;
+const website = cmsProject ? cmsProject.liveUrl : fallbackWebsite;
+const architectureLayers = legacyProject?.architectureLayers ?? t.caseStudy.architectureLayers;
+const coverImage = resolveProjectCover(slug, cmsProject?.image);
+const coverAlt = coverImage === cmsProject?.image && cmsProject?.image ? cmsProject.imageAlt : projectCoverAlt(slug, locale);
+const orderedNavigationProjects = navigationProjects.filter((project) => !project.research).sort((left, right) => {
+  const leftIndex = order.indexOf(left.slug as typeof order[number]);
+  const rightIndex = order.indexOf(right.slug as typeof order[number]);
+  if (leftIndex < 0 && rightIndex < 0) return 0;
+  if (leftIndex < 0) return 1;
+  if (rightIndex < 0) return -1;
+  return leftIndex - rightIndex;
+});
+const cmsCurrentIndex = orderedNavigationProjects.findIndex((candidate) => candidate.slug === slug);
+const nextCmsProject = cmsCurrentIndex >= 0 && orderedNavigationProjects.length > 1
+  ? orderedNavigationProjects[(cmsCurrentIndex + 1) % orderedNavigationProjects.length]
+  : null;
+const displayNumber = projectNumbers[slug]
+  ?? String(Math.max(1, cmsCurrentIndex + 1)).padStart(2, "0");
+const contactClass = website ? "button-link" : "button-link primary";
+// Built-in projects use the curated case-study narrative so CMS revisions can
+// update the summary without leaking internal editorial notes into the public page.
+const showLegacyDetail = Boolean(legacyProject);
+const enhancedEvidence = getProjectEvidence(slug, locale);
+---
+
+<BaseLayout title={cmsProject?.seoTitle || `${projectName} — ${projectCategory}`} description={cmsProject?.seoDescription || projectSummary} image={coverImage ?? undefined} locale={locale}>
+  <article class="case-page" data-project={slug}>
+    <header class="case-hero shell">
+      <a class="text-link" href={localizePath("/work", locale)}>← {t.caseStudy.backToWork}</a>
+      <div class="case-hero__meta"><span class="mono-label">{t.caseStudy.projectNumber.replace("{number}", displayNumber)}</span></div>
+      <div class="case-hero__grid">
+        <div><p class="section-label">{projectCategory}</p><h1 class="page-title">{projectName}</h1><p class="case-thesis">{projectThesis}</p><p class="case-summary">{projectSummary}</p></div>
+        <div><ProjectVisual name={projectName} category={projectCategory} variant={cmsProject?.variant || variants[slug as keyof typeof variants] || "logivn"} image={coverImage} imageAlt={coverAlt} /></div>
+      </div>
+      <div class="case-hero__actions">
+        {website && <a class="button-link primary" href={website} target="_blank" rel="noreferrer">{t.work.openProject} <span aria-hidden="true">↗</span></a>}
+        <a class={contactClass} href={localizePath("/contact", locale)}>{t.common.navigation.contact} <span aria-hidden="true">↗</span></a>
+      </div>
+    </header>
+
+    {enhancedEvidence && <div class="shell case-body case-evidence-body"><CaseEvidence evidence={enhancedEvidence} locale={locale} slug={slug} /></div>}
+
+    {cmsProject?.body?.length && !legacyProject ? <div class="shell case-body">
+      <section class="case-section split" aria-labelledby={`${slug}-content`}>
+        <div><p class="section-label">{t.caseStudy.caseStudyLabel}</p><h2 id={`${slug}-content`}>{cmsProject.name}</h2></div>
+        <CmsBlocks blocks={cmsProject.body} locale={locale} />
+      </section>
+    </div> : showLegacyDetail && legacyProject ? <div class="shell case-body">
+      <section class="case-section case-proof split" aria-labelledby={`${slug}-proof`}>
+        <div><p class="section-label">{t.caseStudy.outcomes}</p><h2 id={`${slug}-proof`}>{t.caseStudy.currentState}</h2></div>
+        <div class="evidence-panel"><p class="mono-label">{t.caseStudy.currentState}</p><p>{legacyProject.currentState ?? legacyProject.status}</p><ul class="line-list">{publicEvidence.map((item) => <li>{item}</li>)}</ul></div>
+      </section>
+
+      <section class="case-section split" aria-labelledby={`${slug}-before-after`}>
+        <div><p class="section-label">{t.caseStudy.beforeAfter}</p><h2 id={`${slug}-before-after`}>{legacyProject.beforeLabel} → {legacyProject.afterLabel}</h2></div>
+        <div class="evidence-panel">
+          <p class="mono-label">{legacyProject.beforeLabel}</p><p>{legacyProject.beforeText}</p>
+          <p class="mono-label" style="margin-top: 1rem;">{legacyProject.afterLabel}</p><p>{legacyProject.afterText}</p>
+        </div>
+      </section>
+
+      <section class="case-section split" aria-labelledby={`${slug}-context`}>
+        <div><p class="section-label">{t.caseStudy.context}</p><h2 id={`${slug}-context`}>{t.caseStudy.contextHeading}</h2></div>
+        <div class="prose">{legacyProject.context.map((paragraph) => <p>{paragraph}</p>)}<blockquote><p>{legacyProject.problem}</p></blockquote></div>
+      </section>
+
+      <section class="case-section split" aria-labelledby={`${slug}-role`}>
+        <div><p class="section-label">{t.caseStudy.responsibilities}</p><h2 id={`${slug}-role`}>{legacyProject.role}</h2></div>
+        <div class="evidence-panel"><p class="mono-label">{legacyProject.period}</p><ul class="line-list">{legacyProject.scope.map((item) => <li>{item}</li>)}</ul></div>
+      </section>
+
+      <section class="case-section" aria-labelledby={`${slug}-timeline`}>
+        <div class="section-heading-row"><div><p class="section-label">{t.caseStudy.timeline}</p><h2 id={`${slug}-timeline`}>{legacyProject.period}</h2></div></div>
+        <ol class="case-list" role="list">{legacyProject.timeline.map((item, index) => <li><span>0{index + 1}</span>{item}</li>)}</ol>
+      </section>
+
+      <section class="case-section" aria-labelledby={`${slug}-walkthrough`}>
+        <div class="section-heading-row"><div><p class="section-label">{t.caseStudy.walkthrough}</p><h2 id={`${slug}-walkthrough`}>{legacyProject.walkthroughLabel}</h2></div></div>
+        <ol class="case-list" role="list">{legacyProject.walkthrough.map((item, index) => <li><span>0{index + 1}</span>{item}</li>)}</ol>
+      </section>
+
+      <section class="case-section" aria-labelledby={`${slug}-principles`}>
+        <div class="section-heading-row"><div><p class="section-label">{t.caseStudy.principles}</p><h2 id={`${slug}-principles`}>{legacyProject.decisions[0]}</h2></div><p>{legacyProject.summary}</p></div>
+        <ol class="case-list" role="list">{legacyProject.decisions.map((decision, index) => <li><span>0{index + 1}</span>{decision}</li>)}</ol>
+      </section>
+
+      <section class="case-section" aria-labelledby={`${slug}-architecture`}>
+        <div class="section-heading-row"><div><p class="section-label">{t.caseStudy.architecture}</p><h2 id={`${slug}-architecture`}>{t.caseStudy.architectureIntro}</h2></div><p>{t.caseStudy.architectureIntro}</p></div>
+        <ol class="architecture-stack architecture-stack--path" role="list">{architectureLayers.map((layer, index) => <li><span>0{index + 1}</span><strong>{layer}</strong></li>)}</ol>
+      </section>
+
+      <section class="case-section split" aria-labelledby={`${slug}-outcomes`}>
+        <div><p class="section-label">{t.caseStudy.outcomes}</p><h2 id={`${slug}-outcomes`}>{t.caseStudy.currentState}</h2></div>
+        <ul class="case-list" role="list">{legacyProject.outcomes.map((outcome, index) => <li><span>0{index + 1}</span>{outcome}</li>)}</ul>
+      </section>
+
+      <section class="case-reflection" aria-labelledby={`${slug}-reflection`}><p class="section-label">{t.caseStudy.reflection}</p><h2 id={`${slug}-reflection`}>{legacyProject.reflection}</h2></section>
+    </div> : null}
+
+    {(nextCmsProject || !cmsProject) && <nav class="next-project shell" aria-label={t.caseStudy.nextProject}><span class="mono-label">{t.caseStudy.nextProject}</span><a href={localizePath(`/work/${nextCmsProject?.slug || nextSlug}`, locale)}><span><small>{nextCmsProject?.category || t.projects[nextKey].category}</small><strong>{nextCmsProject?.name || t.projects[nextKey].name}</strong></span><span aria-hidden="true">→</span></a></nav>}
+
+    <FlywheelBand locale={locale} surface="case" />
+  </article>
+</BaseLayout>

@@ -1,0 +1,35 @@
+---
+import AdminApp from "../../components/admin/AdminApp";
+import "../../styles/admin.css";
+export const prerender = false;
+if (Astro.url.pathname === "/admin") {
+  return Astro.redirect(`/admin/${Astro.url.search}`, 308);
+}
+Astro.response.headers.set("Cache-Control", "private, no-store, max-age=0");
+Astro.response.headers.set("X-Robots-Tag", "noindex, nofollow, noarchive");
+---
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <meta name="robots" content="noindex, nofollow, noarchive" />
+    <meta name="referrer" content="same-origin" />
+    <title>Editorial Control Desk — TUNG</title>
+  </head>
+  <body>
+    <noscript>
+      <main class="admin-boot">
+        <p class="eyebrow">TUNG Admin</p>
+        <p>Control desk cần JavaScript để tạo khóa dẫn xuất và ký challenge đăng nhập. Hãy bật JavaScript rồi tải lại trang.</p>
+      </main>
+    </noscript>
+    <div id="admin-root">
+      <main class="admin-boot">
+        <p class="eyebrow">TUNG Admin</p>
+        <p>Đang khởi tạo control desk…</p>
+      </main>
+    </div>
+    <AdminApp client:only="react" />
+  </body>
+</html>

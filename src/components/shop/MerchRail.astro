@@ -1,0 +1,31 @@
+---
+import ProductCard from "./ProductCard.astro";
+import type { Locale } from "../../i18n/dictionaries";
+import type { ProductViewModel } from "../../i18n/shop";
+
+interface Props {
+  locale: Locale;
+  title: string;
+  subtitle?: string;
+  products: readonly ProductViewModel[];
+  id?: string;
+}
+
+const { locale, title, subtitle, products, id } = Astro.props;
+---
+
+{products.length > 0 && (
+  <section class="market-rail" id={id} aria-label={title}>
+    <header class="market-rail__head">
+      <div>
+        <h2>{title}</h2>
+        {subtitle ? <p>{subtitle}</p> : null}
+      </div>
+    </header>
+    <div class="market-rail__scroller">
+      {products.map((product, index) => (
+        <ProductCard product={product} locale={locale} index={index} priority={index < 2} />
+      ))}
+    </div>
+  </section>
+)}

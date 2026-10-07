@@ -1,0 +1,178 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { localizePath, type Locale } from "../../i18n/dictionaries";
+import { getLegalNav, getPolicyCopy, type PolicyKind } from "../../i18n/legal";
+
+interface Props {
+  locale: Locale;
+  kind: PolicyKind;
+}
+
+const { locale, kind } = Astro.props;
+const copy = getPolicyCopy(locale, kind);
+const relatedPolicies = getLegalNav(locale).filter((item) => item.kind !== kind);
+const contactHref = localizePath(`/contact?subject=${encodeURIComponent(copy.navLabel)}`, locale);
+const siteUrl = Astro.site ?? new URL("https://tung.codes");
+const pageUrl = new URL(Astro.url.pathname, siteUrl);
+const structuredData = {
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  "@id": `${pageUrl.href}#webpage`,
+  name: copy.metaTitle,
+  description: copy.metaDescription,
+  url: pageUrl.href,
+  dateModified: copy.effectiveIsoDate,
+  about: { "@id": "https://tung.codes/#person" },
+  isPartOf: { "@id": "https://tung.codes/#website" },
+};
+---
+
+<BaseLayout title={copy.metaTitle} description={copy.metaDescription} locale={locale} structuredData={structuredData}>
+  <article class="legal-document">
+    <header class="legal-hero shell">
+      <div class="legal-hero__top" data-reveal>
+        <p class="section-label">{copy.label}</p>
+        <p class="legal-version"><span>{copy.effectiveLabel}</span><strong>{copy.effectiveDate}</strong></p>
+      </div>
+      <h1 class="page-title" data-reveal style="--reveal-delay: 70ms">{copy.heading}</h1>
+      <div class="legal-hero__intro" data-reveal style="--reveal-delay: 140ms">
+        <span aria-hidden="true">POLICY / 01</span>
+        <p class="lead">{copy.intro}</p>
+      </div>
+    </header>
+
+    <section class="legal-summary section-rule" aria-labelledby="legal-summary-title">
+      <div class="shell">
+        <p class="section-label" id="legal-summary-title">{copy.summaryLabel}</p>
+        <div class="legal-summary__grid">
+          {copy.summaries.map((item, index) => (
+            <article class="reveal" style={`--reveal-delay: ${index * 70}ms`}>
+              <span>{String(index + 1).padStart(2, "0")}</span>
+              <h2>{item.label}</h2>
+              <p>{item.value}</p>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <div class="legal-layout shell">
+      <aside class="legal-toc" aria-label={copy.tocLabel}>
+        <p class="mono-label">{copy.tocLabel}</p>
+        <nav>
+          {copy.sections.map((section) => <a href={`#${section.id}`}>{section.title}</a>)}
+        </nav>
+      </aside>
+
+      <details class="legal-toc-mobile">
+        <summary>{copy.tocLabel}<span aria-hidden="true">+</span></summary>
+        <nav>
+          {copy.sections.map((section) => <a href={`#${section.id}`}>{section.title}</a>)}
+        </nav>
+      </details>
+
+      <div class="legal-content">
+        {copy.sections.map((section) => (
+          <section id={section.id} class="legal-section reveal">
+            <h2>{section.title}</h2>
+            {section.paragraphs.map((paragraph) => <p>{paragraph}</p>)}
+            {section.bullets && (
+              <ul>
+                {section.bullets.map((item) => <li>{item}</li>)}
+              </ul>
+            )}
+            {section.note && <p class="legal-note"><span aria-hidden="true">↳</span>{section.note}</p>}
+          </section>
+        ))}
+
+        <section class="legal-contact" aria-labelledby="legal-contact-title">
+          <p class="section-label">TUNG / CONTACT</p>
+          <h2 id="legal-contact-title">{copy.contactHeading}</h2>
+          <p>{copy.contactBody}</p>
+          <a class="button-link primary" href={contactHref}>{copy.contactCta}<span aria-hidden="true">↗</span></a>
+        </section>
+
+        <nav class="legal-related" aria-label={copy.relatedLabel}>
+          <p class="mono-label">{copy.relatedLabel}</p>
+          {relatedPolicies.map((item, index) => (
+            <a href={localizePath(item.kind === "privacy" ? "/privacy" : item.href, locale)}>
+              <span>0{index + 1}</span><strong>{item.label}</strong><i aria-hidden="true">↗</i>
+            </a>
+          ))}
+        </nav>
+      </div>
+    </div>
+  </article>
+</BaseLayout>
+
+<style>
+  .legal-document { background: var(--ink); }
+  .legal-hero { display: grid; min-height: 72svh; align-content: end; padding-top: 8.5rem; padding-bottom: clamp(4rem, 8vw, 7rem); }
+  .legal-hero__top { display: flex; align-items: start; justify-content: space-between; gap: 2rem; margin-bottom: clamp(2.5rem, 5vw, 4.5rem); }
+  .legal-version { display: grid; justify-items: end; gap: .35rem; margin: 0; color: var(--paper-soft); font: 600 .63rem/1.35 var(--font-mono); letter-spacing: .06em; text-transform: uppercase; }
+  .legal-version strong { color: var(--paper); font-weight: 600; }
+  .legal-hero__intro { display: grid; grid-template-columns: minmax(8rem, .7fr) minmax(0, 1.3fr); gap: 2rem; align-items: end; margin-top: clamp(2.5rem, 6vw, 5rem); }
+  .legal-hero__intro > span { color: var(--paper-soft); font: 600 .65rem/1.4 var(--font-mono); letter-spacing: .1em; }
+  .legal-hero__intro .lead { margin: 0; }
+
+  .legal-summary { padding-block: clamp(3.5rem, 7vw, 6rem); background: var(--ink-soft); }
+  .legal-summary__grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 2rem; border-top: 1px solid var(--line-strong); }
+  .legal-summary article { display: grid; align-content: start; min-height: 14rem; gap: 1.2rem; padding: 1.25rem 1.5rem 1.5rem 0; border-bottom: 1px solid var(--line); }
+  .legal-summary article + article { padding-left: 1.5rem; border-left: 1px solid var(--line); }
+  .legal-summary article > span { color: var(--accent); font: 600 .64rem/1 var(--font-mono); }
+  .legal-summary h2 { margin: 0; font: 400 clamp(1.8rem, 2.8vw, 2.8rem)/1 var(--font-serif); letter-spacing: -.03em; }
+  .legal-summary article p { max-width: 27rem; margin: 0; color: var(--paper-soft); }
+
+  .legal-layout { display: grid; grid-template-columns: minmax(12rem, .48fr) minmax(0, 1.52fr); gap: clamp(3rem, 8vw, 9rem); padding-block: clamp(4rem, 8vw, 8rem); }
+  .legal-toc { position: sticky; top: 6.5rem; align-self: start; max-height: calc(100svh - 8rem); overflow-y: auto; padding-right: 1rem; }
+  .legal-toc nav { display: grid; margin-top: 1.5rem; border-top: 1px solid var(--line); }
+  .legal-toc a { padding: .72rem 0; border-bottom: 1px solid var(--line); color: var(--paper-soft); font-size: .76rem; line-height: 1.35; }
+  .legal-toc a:hover, .legal-toc a:focus-visible { color: var(--accent); }
+  .legal-toc-mobile { display: none; }
+  .legal-content { min-width: 0; max-width: 66rem; }
+  .legal-section { scroll-margin-top: 7rem; padding: 0 0 clamp(3.5rem, 7vw, 6rem); border-top: 1px solid var(--line-strong); }
+  .legal-section h2 { max-width: 23ch; margin: 0; padding-top: 1.25rem; font: 400 clamp(2rem, 3.8vw, 4.2rem)/1.02 var(--font-serif); letter-spacing: -.04em; }
+  .legal-section p, .legal-section li { color: var(--paper-soft); font-size: clamp(1rem, 1.2vw, 1.12rem); line-height: 1.75; }
+  .legal-section h2 + p { margin-top: clamp(1.8rem, 4vw, 3rem); }
+  .legal-section p { max-width: 68ch; }
+  .legal-section ul { max-width: 68ch; margin: 2rem 0 0; padding: 0; list-style: none; counter-reset: legal-list; }
+  .legal-section li { position: relative; padding: .85rem 0 .85rem 2.5rem; border-top: 1px solid var(--line); counter-increment: legal-list; }
+  .legal-section li::before { content: counter(legal-list, decimal-leading-zero); position: absolute; top: 1.15rem; left: 0; color: var(--accent); font: 600 .62rem/1 var(--font-mono); }
+  .legal-note { display: grid; grid-template-columns: 1.5rem 1fr; gap: .7rem; margin-top: 2rem; padding: 1.1rem 1.2rem; border-left: 1px solid var(--accent); background: var(--ink-soft); color: var(--paper) !important; font-size: .94rem !important; }
+  .legal-note span { color: var(--accent); }
+
+  .legal-contact { margin-top: 1rem; padding: clamp(2rem, 5vw, 4rem); border: 1px solid var(--line-strong); background: var(--ink-soft); }
+  .legal-contact h2 { max-width: 16ch; margin: 2rem 0 1rem; font: 400 clamp(2.6rem, 5vw, 5.3rem)/.98 var(--font-serif); letter-spacing: -.045em; }
+  .legal-contact > p:not(.section-label) { max-width: 46rem; margin-bottom: 2rem; color: var(--paper-soft); }
+  .legal-related { margin-top: clamp(4rem, 8vw, 7rem); border-top: 1px solid var(--line-strong); }
+  .legal-related > p { margin: 1.2rem 0 2rem; }
+  .legal-related a { display: grid; grid-template-columns: 3rem 1fr auto; gap: 1rem; align-items: center; padding: 1.5rem 0; border-top: 1px solid var(--line); }
+  .legal-related a:last-child { border-bottom: 1px solid var(--line); }
+  .legal-related a > span { color: var(--paper-soft); font: 600 .62rem/1 var(--font-mono); }
+  .legal-related strong { font: 400 clamp(1.7rem, 3vw, 3rem)/1 var(--font-serif); }
+  .legal-related i { color: var(--accent); font-size: 1.2rem; font-style: normal; transition: transform 180ms ease; }
+  .legal-related a:hover i, .legal-related a:focus-visible i { transform: translate(3px, -3px); }
+
+  @media (max-width: 860px) {
+    .legal-summary__grid { grid-template-columns: 1fr; }
+    .legal-summary article { min-height: 0; padding: 1.25rem 0 2rem; }
+    .legal-summary article + article { padding-left: 0; border-left: 0; }
+    .legal-layout { grid-template-columns: 1fr; }
+    .legal-toc { display: none; }
+    .legal-toc-mobile { display: block; margin-bottom: 1rem; border-top: 1px solid var(--line-strong); border-bottom: 1px solid var(--line-strong); }
+    .legal-toc-mobile summary { display: flex; min-height: 3.5rem; align-items: center; justify-content: space-between; cursor: pointer; font: 600 .68rem/1 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; }
+    .legal-toc-mobile summary::-webkit-details-marker { display: none; }
+    .legal-toc-mobile[open] summary span { transform: rotate(45deg); }
+    .legal-toc-mobile nav { display: grid; padding-bottom: 1rem; }
+    .legal-toc-mobile a { padding: .65rem 0; border-top: 1px solid var(--line); color: var(--paper-soft); font-size: .82rem; }
+  }
+
+  @media (max-width: 620px) {
+    .legal-hero { min-height: 62svh; padding-top: 7rem; }
+    .legal-hero__top, .legal-hero__intro { grid-template-columns: 1fr; flex-direction: column; }
+    .legal-version { justify-items: start; }
+    .legal-hero__intro { gap: 1rem; }
+    .legal-contact { padding-inline: 1.25rem; }
+    .legal-related a { grid-template-columns: 2.25rem 1fr auto; }
+  }
+</style>

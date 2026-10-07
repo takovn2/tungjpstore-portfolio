@@ -1,0 +1,160 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { localizePath, type Locale } from "../../i18n/dictionaries";
+import { blogFeedPath, getBlogCopy } from "../../i18n/blog";
+import { estimateReadingMinutes } from "../../lib/blog";
+import type { PublicPost } from "../../lib/public-content";
+
+interface Props { locale: Locale; posts?: PublicPost[]; }
+
+const { locale, posts = [] } = Astro.props;
+const blog = getBlogCopy(locale);
+const blogPosts = posts.filter((post) => post.surface === "blog");
+const dateLocale = locale === "zh" ? "zh-CN" : locale;
+const site = Astro.site ?? new URL("https://tung.codes");
+const canonicalUrl = new URL(Astro.url.pathname.replace(/\/$/, "") || "/", site).href;
+const homeUrl = new URL(localizePath("/", locale), site).href;
+const collectionSchema = {
+  "@context": "https://schema.org",
+  "@type": "CollectionPage",
+  "@id": `${canonicalUrl}#collection`,
+  name: blog.metaTitle,
+  description: blog.metaDescription,
+  url: canonicalUrl,
+  inLanguage: locale === "zh" ? "zh-Hans" : locale,
+  isPartOf: { "@id": "https://tung.codes/#website" },
+  publisher: { "@id": "https://tung.codes/#person" },
+  about: blog.audiencePillars.map((pillar) => ({ "@type": "Thing", name: pillar.title, description: pillar.description })),
+  mainEntity: {
+    "@type": "ItemList",
+    numberOfItems: blogPosts.length,
+    itemListElement: blogPosts.map((post, index) => ({
+      "@type": "ListItem",
+      position: index + 1,
+      url: new URL(localizePath(`/blog/${post.slug}`, locale), site).href,
+      name: post.title,
+    })),
+  },
+};
+const breadcrumbSchema = {
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  itemListElement: [
+    { "@type": "ListItem", position: 1, name: "TUNG", item: homeUrl },
+    { "@type": "ListItem", position: 2, name: blog.label, item: canonicalUrl },
+  ],
+};
+const formatDate = (value: string | null) => {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.valueOf()) ? null : new Intl.DateTimeFormat(dateLocale, { dateStyle: "medium" }).format(date);
+};
+---
+
+<BaseLayout title={blog.metaTitle} description={blog.metaDescription} locale={locale} structuredData={[collectionSchema, breadcrumbSchema]}>
+  <article class="content-page publication-page blog-page">
+    <header class="page-hero publication-hero shell">
+      <div class="publication-hero__top reveal">
+        <p class="section-label"><span class="status-dot"></span>{blog.label}</p>
+        <a class="text-link publication-rss" href={blogFeedPath(locale)}>{blog.rssLabel} <span aria-hidden="true">↗</span></a>
+      </div>
+      <h1 class="page-title reveal" style="--reveal-delay: 80ms">{blog.heading}</h1>
+      <div class="page-hero__meta reveal" style="--reveal-delay: 150ms">
+        <span class="mono-label">{blog.articleCount(blogPosts.length)}</span>
+        <p class="lead">{blog.intro}</p>
+      </div>
+      <div class="blog-hero-actions reveal" style="--reveal-delay: 220ms">
+        <a class="button-link primary" href={localizePath("/pricing", locale)}>{blog.heroPrimaryCta} <span aria-hidden="true">↗</span></a>
+        <a class="button-link" href={localizePath("/work", locale)}>{blog.heroSecondaryCta}</a>
+      </div>
+    </header>
+
+    <section class="shell blog-audience reveal" aria-labelledby="blog-audience-heading">
+      <div class="blog-audience__intro">
+        <p class="section-label"><span class="status-dot"></span>{blog.audienceLabel}</p>
+        <h2 id="blog-audience-heading">{blog.audienceHeading}</h2>
+        <p>{blog.audienceIntro}</p>
+      </div>
+      <div class="blog-audience__grid">
+        {blog.audiencePillars.map((pillar) => <a class="blog-audience__card" href={localizePath(`/blog/${pillar.slug}`, locale)}>
+          <span class="mono-label">{pillar.index}</span>
+          <h3>{pillar.title}</h3>
+          <p>{pillar.description}</p>
+          <strong>{blog.audienceReadLabel} <span aria-hidden="true">↗</span></strong>
+        </a>)}
+      </div>
+    </section>
+
+    {blogPosts.length === 0 ? (
+      <section class="shell publication-empty reveal" aria-labelledby="blog-empty-title">
+        <p class="mono-label">00 / {blog.label}</p>
+        <div>
+          <h2 id="blog-empty-title">{blog.emptyTitle}</h2>
+          <p>{blog.emptyBody}</p>
+          <a class="button-link primary" href={localizePath("/work", locale)}>{blog.emptyCta} <span aria-hidden="true">↗</span></a>
+        </div>
+      </section>
+    ) : (
+      <section class="shell publication-grid" aria-labelledby="blog-list-heading">
+        <h2 class="sr-only" id="blog-list-heading">{blog.label}</h2>
+        {blogPosts.map((post, index) => {
+          const dateLabel = formatDate(post.publishedAt);
+          const readingTime = estimateReadingMinutes(post.body);
+          return <article class:list={["publication-card", "reveal", { "publication-card--featured": index === 0 }]} style={`--reveal-delay: ${index * 70}ms`}>
+            <a class="publication-card__link" href={localizePath(`/blog/${post.slug}`, locale)}>
+              <div class="publication-card__visual">
+                {post.image ? <img src={post.image} alt={post.imageAlt} loading={index === 0 ? "eager" : "lazy"} decoding="async" /> : <div class="publication-card__signal" aria-hidden="true"><span>{String(index + 1).padStart(2, "0")}</span><i></i><i></i><i></i></div>}
+              </div>
+              <div class="publication-card__body">
+                <div class="publication-card__meta"><span>{String(index + 1).padStart(2, "0")}</span><span>{post.category || blog.label}</span>{dateLabel && <time datetime={post.publishedAt ?? undefined}>{dateLabel}</time>}</div>
+                <h2>{post.title}</h2>
+                <p>{post.excerpt}</p>
+                <div class="publication-card__footer"><span>{blog.readingTime(readingTime)}</span><strong>{blog.readArticle} <span aria-hidden="true">↗</span></strong></div>
+              </div>
+            </a>
+          </article>;
+        })}
+      </section>
+    )}
+
+    <section class="shell blog-service-bridge reveal" aria-labelledby="blog-service-heading">
+      <div>
+        <p class="section-label"><span class="status-dot"></span>{blog.serviceBridgeLabel}</p>
+        <h2 id="blog-service-heading">{blog.serviceBridgeHeading}</h2>
+      </div>
+      <div class="blog-service-bridge__body">
+        <p>{blog.serviceBridgeBody}</p>
+        <div class="hero-actions">
+          <a class="button-link primary" href={localizePath("/pricing", locale)}>{blog.serviceBridgePrimary} <span aria-hidden="true">↗</span></a>
+          <a class="button-link" href={localizePath("/contact", locale)}>{blog.serviceBridgeSecondary}</a>
+        </div>
+      </div>
+    </section>
+  </article>
+</BaseLayout>
+
+<style>
+  .blog-hero-actions { display: flex; flex-wrap: wrap; gap: .75rem; margin-top: clamp(2rem, 5vw, 4rem); }
+  .blog-audience { display: grid; grid-template-columns: minmax(0, .72fr) minmax(0, 1.28fr); gap: clamp(2.5rem, 8vw, 8rem); padding-block: clamp(5rem, 10vw, 9rem); border-block: 1px solid var(--line); }
+  .blog-audience__intro h2 { max-width: 15ch; margin: 1rem 0 1.25rem; font: 400 clamp(2.4rem, 4.5vw, 5.3rem)/.98 var(--font-serif); letter-spacing: -.045em; }
+  .blog-audience__intro > p:last-child { max-width: 31rem; color: var(--paper-soft); }
+  .blog-audience__grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; align-self: end; background: var(--line); border: 1px solid var(--line); }
+  .blog-audience__card { display: flex; min-height: 16.5rem; flex-direction: column; padding: clamp(1.25rem, 2.6vw, 2rem); background: var(--ink); transition: background-color 220ms ease, transform 300ms var(--ease); }
+  .blog-audience__card:hover, .blog-audience__card:focus-visible { position: relative; z-index: 1; background: var(--ink-soft); transform: translateY(-3px); }
+  .blog-audience__card h3 { margin: 2.5rem 0 .8rem; font-size: 1.15rem; }
+  .blog-audience__card p { margin: 0; color: var(--paper-soft); font-size: .9rem; line-height: 1.65; }
+  .blog-audience__card strong { margin-top: auto; padding-top: 1.5rem; color: var(--paper); font: 600 .64rem/1.4 var(--font-mono); letter-spacing: .06em; text-transform: uppercase; }
+  .blog-audience__card:hover strong, .blog-audience__card:focus-visible strong { color: var(--accent); }
+  .blog-service-bridge { display: grid; grid-template-columns: minmax(0, 1fr) minmax(18rem, .75fr); gap: clamp(2rem, 8vw, 9rem); align-items: end; padding-block: clamp(5rem, 11vw, 10rem); border-top: 1px solid var(--line); }
+  .blog-service-bridge h2 { max-width: 13ch; margin: 1rem 0 0; font: 400 clamp(2.5rem, 5vw, 5.8rem)/.96 var(--font-serif); letter-spacing: -.045em; }
+  .blog-service-bridge__body > p { max-width: 35rem; margin: 0 0 2rem; color: var(--paper-soft); font-size: 1.05rem; line-height: 1.7; }
+  @media (max-width: 900px) {
+    .blog-audience, .blog-service-bridge { grid-template-columns: 1fr; }
+    .blog-audience__grid { grid-template-columns: 1fr; }
+    .blog-audience__card { min-height: 0; }
+  }
+  @media (max-width: 600px) {
+    .blog-hero-actions, .blog-service-bridge .hero-actions { display: grid; }
+    .blog-hero-actions .button-link, .blog-service-bridge .button-link { width: 100%; }
+  }
+</style>

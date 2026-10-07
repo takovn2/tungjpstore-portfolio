@@ -1,0 +1,26 @@
+---
+import CaseStudyPage from "../../components/pages/CaseStudyPage.astro";
+import NotFoundPage from "../../components/pages/NotFoundPage.astro";
+import UnavailablePage from "../../components/pages/UnavailablePage.astro";
+import { type Locale } from "../../i18n/dictionaries";
+import { resolveRequestLocale } from "../../i18n/locale-preference";
+import { loadPublicSnapshot } from "../../lib/public-runtime";
+import { canUseBundledFallback, publishedProjects, setPublicCache } from "../../lib/public-content";
+
+export const prerender = false;
+const pageLocale: Locale = resolveRequestLocale(Astro.request);
+setPublicCache(Astro.response.headers);
+const snapshot = await loadPublicSnapshot(pageLocale);
+const unavailable = snapshot.status === "unavailable";
+const projects = canUseBundledFallback(snapshot, "project") ? undefined : publishedProjects(snapshot);
+const project = projects?.find((candidate) => candidate.slug === "payment-infrastructure");
+const hidden = !unavailable && !canUseBundledFallback(snapshot, "project", "payment-infrastructure") && !project;
+if (unavailable) {
+  Astro.response.status = 503;
+  setPublicCache(Astro.response.headers, "unavailable");
+} else if (hidden) {
+  Astro.response.status = 404;
+  setPublicCache(Astro.response.headers, "not-found");
+}
+---
+{unavailable ? <UnavailablePage locale={pageLocale} /> : hidden ? <NotFoundPage locale={pageLocale} /> : <CaseStudyPage locale={pageLocale} slug="payment-infrastructure" project={project} navigationProjects={projects} />}

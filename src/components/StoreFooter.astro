@@ -1,0 +1,92 @@
+---
+import { localizePath, type Locale } from "../i18n/dictionaries";
+import { getLegalNav } from "../i18n/legal";
+
+interface Props { locale: Locale; }
+const { locale } = Astro.props;
+const legal = getLegalNav(locale);
+const labels = ({
+  vi: { shop: "Cửa hàng", browse: "Sản phẩm", support: "Hỗ trợ", legal: "Điều khoản & policy", note: "Giá và trạng thái được kiểm tra lại trước khi tạo thanh toán." },
+  en: { shop: "Shop", browse: "Products", support: "Support", legal: "Terms & policies", note: "Price and availability are checked again before payment is created." },
+  ja: { shop: "ショップ", browse: "商品", support: "サポート", legal: "規約・ポリシー", note: "支払作成前に価格と販売状況を再確認します。" },
+  zh: { shop: "商店", browse: "商品", support: "支持", legal: "条款与政策", note: "创建付款前会再次验证价格和库存状态。" },
+} as const)[locale];
+---
+
+<footer class="store-footer">
+  <div class="shell store-footer__grid">
+    <div class="store-footer__brand">
+      <a href={localizePath("/shop", locale)} aria-label={`TUNG Shop — ${labels.shop}`}><span>TUNG</span><strong>SHOP</strong></a>
+      <p>{labels.note}</p>
+    </div>
+    <nav aria-label={labels.shop}>
+      <p>{labels.shop}</p>
+      <a href={localizePath("/shop", locale)}>{labels.browse}</a>
+      <a href={localizePath("/contact?subject=TUNG%20Shop", locale)}>{labels.support}</a>
+    </nav>
+    <nav aria-label={labels.legal}>
+      <p>{labels.legal}</p>
+      {legal.map((item) => <a href={localizePath(item.kind === "privacy" ? "/privacy" : item.href, locale)}>{item.label}</a>)}
+    </nav>
+    <div class="store-footer__meta"><p>Vietnam / Japan</p><p>© {new Date().getFullYear()} TUNG</p></div>
+  </div>
+</footer>
+
+<style>
+  .store-footer {
+    border-top: 1px solid var(--shop-line, var(--line));
+    padding-block: 3.25rem 2rem;
+    background:
+      linear-gradient(180deg, rgba(255, 241, 232, 0.65), rgba(255, 248, 243, 0.95)),
+      var(--shop-bg-soft, var(--ink-soft));
+  }
+  .store-footer__grid {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr 1fr 0.8fr;
+    gap: clamp(1.75rem, 4vw, 4rem);
+  }
+  .store-footer__brand > a {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.3rem;
+    font: 750 1.3rem/1 var(--font-sans);
+    letter-spacing: -0.04em;
+    text-decoration: none;
+    color: var(--shop-ink, var(--paper));
+  }
+  .store-footer__brand > a span { color: var(--shop-accent, var(--accent)); }
+  .store-footer__brand > p {
+    max-width: 24rem;
+    margin: 1rem 0 0;
+    color: var(--shop-ink-soft, var(--paper-soft));
+    font-size: 0.86rem;
+    line-height: 1.5;
+  }
+  nav { display: grid; align-content: start; gap: 0.55rem; }
+  nav > p,
+  .store-footer__meta p {
+    margin: 0 0 0.55rem;
+    color: var(--shop-ink-soft, var(--paper-soft));
+    font: 700 0.72rem/1.3 var(--font-sans);
+    letter-spacing: 0.02em;
+  }
+  nav a {
+    width: fit-content;
+    color: var(--shop-ink-soft, var(--paper-soft));
+    font-size: 0.88rem;
+    text-decoration: none;
+  }
+  nav a:hover,
+  nav a:focus-visible { color: var(--shop-accent, var(--accent)); }
+  .store-footer__meta { text-align: right; }
+  .store-footer__meta p { margin-bottom: 0.55rem; }
+  @media (max-width: 800px) {
+    .store-footer__grid { grid-template-columns: 1fr 1fr; }
+    .store-footer__brand { grid-column: 1 / -1; }
+    .store-footer__meta { text-align: left; }
+  }
+  @media (max-width: 480px) {
+    .store-footer__grid { grid-template-columns: 1fr; }
+    .store-footer__brand { grid-column: auto; }
+  }
+</style>

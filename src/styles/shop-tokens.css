@@ -1,0 +1,456 @@
+/**
+ * TUNG Shop — "Porcelain White" storefront design system
+ * Shared by web storefront (body.chrome-store) and Telegram miniapps (:root.tg-mini).
+ * White-dominant, hairline structure, layered cool shadows, ink-on-porcelain CTAs.
+ * Portfolio dark editorial tokens stay in globals.css :root and are not modified here.
+ */
+
+:root {
+  /* ── Palette (Porcelain White / Cool Ink) ────────────────── */
+  --shop-bg: #ffffff;
+  --shop-bg-soft: #f6f7f9;
+  --shop-bg-deep: #eef1f5;
+  --shop-surface: #ffffff;
+  --shop-surface-alt: #fafbfc;
+  --shop-ink: #0b0f1a;
+  --shop-ink-soft: #4b5565;
+  --shop-ink-muted: #9aa3b2;
+  --shop-accent: #0b0f1a;
+  --shop-accent-hover: #252e42;
+  --shop-accent-ink: #ffffff;
+  --shop-accent-soft: #f0f2f6;
+  --shop-accent-2: #414b60;
+  --shop-accent-2-soft: #f4f6f9;
+  --shop-mint: #0da678;
+  --shop-mint-soft: #e8f8f1;
+  --shop-sun: #e8930c;
+  --shop-sun-soft: #fdf4e3;
+  --shop-danger: #e0483f;
+  --shop-danger-soft: #fdeeed;
+  --shop-line: #e9ecf1;
+  --shop-line-soft: #f0f2f6;
+  --shop-line-strong: #d4dae3;
+  --shop-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 8px 24px -6px rgba(16, 24, 40, 0.08);
+  --shop-shadow-soft: 0 1px 2px rgba(16, 24, 40, 0.04);
+  --shop-shadow-lift: 0 2px 4px rgba(16, 24, 40, 0.04), 0 18px 40px -12px rgba(16, 24, 40, 0.16);
+  --shop-ring: 0 0 0 4px rgba(11, 15, 26, 0.07);
+
+  /* ── Typography ────────────────────────────────────────── */
+  --font-sans: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --font-mono: "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+
+  /* ── Shape (Porcelain — soft, modern) ────────────────────── */
+  --shop-radius-sm: 0.625rem;
+  --shop-radius: 0.875rem;
+  --shop-radius-lg: 1.25rem;
+  --shop-radius-xl: 1.75rem;
+  --shop-radius-pill: 999px;
+  --shop-radius-btn: 0.75rem;
+
+  /* ── Motion ──────────────────────────────────────────────── */
+  --shop-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --shop-ease-spring: cubic-bezier(0.3, 1.4, 0.4, 1);
+  --shop-dur: 0.22s;
+}
+
+body.chrome-store {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/**
+ * Map legacy shop variable names onto the porcelain palette
+ */
+body.chrome-store,
+:root.tg-mini {
+  color-scheme: light;
+  --ink: var(--shop-bg);
+  --ink-soft: var(--shop-bg-soft);
+  --surface: var(--shop-surface);
+  --paper: var(--shop-ink);
+  --paper-soft: var(--shop-ink-soft);
+  --line: var(--shop-line);
+  --line-strong: var(--shop-line-strong);
+  --accent: var(--shop-accent);
+  --accent-ink: var(--shop-accent-ink);
+  --danger: var(--shop-danger);
+  --ease: var(--shop-ease);
+}
+
+/* ── Ambient canvas / aurora layers ────────────────────────── */
+
+.shop-aurora {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.shop-aurora::before {
+  content: "";
+  position: absolute;
+  top: -42%;
+  left: 50%;
+  width: min(120vw, 1320px);
+  aspect-ratio: 2 / 1;
+  transform: translateX(-50%);
+  background:
+    radial-gradient(38% 46% at 30% 55%, rgba(13, 166, 120, 0.06), transparent 70%),
+    radial-gradient(34% 42% at 68% 40%, rgba(59, 130, 246, 0.06), transparent 70%),
+    radial-gradient(30% 40% at 50% 70%, rgba(11, 15, 26, 0.05), transparent 72%);
+  filter: blur(2px);
+}
+
+.shop-aurora canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Fine dot grid — quiet texture on porcelain */
+.shop-dotgrid {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: radial-gradient(circle, rgba(11, 15, 26, 0.055) 1px, transparent 1px);
+  background-size: 26px 26px;
+  mask-image: radial-gradient(80% 70% at 50% 32%, #000 30%, transparent 100%);
+  -webkit-mask-image: radial-gradient(80% 70% at 50% 32%, #000 30%, transparent 100%);
+}
+
+/* ── Shared primitives ─────────────────────────────────────── */
+
+.shop-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  min-height: 2.55rem;
+  padding: 0.55rem 1.1rem;
+  border: 1px solid transparent;
+  border-radius: var(--shop-radius-btn);
+  font: 650 0.85rem/1.2 var(--font-sans);
+  letter-spacing: -0.008em;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background var(--shop-dur) var(--shop-ease), border-color var(--shop-dur) var(--shop-ease),
+    box-shadow var(--shop-dur) var(--shop-ease), transform var(--shop-dur) var(--shop-ease), color var(--shop-dur) var(--shop-ease);
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.shop-btn:focus-visible {
+  outline: 2px solid var(--shop-ink);
+  outline-offset: 2px;
+}
+
+.shop-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.shop-btn--primary {
+  background: var(--shop-accent);
+  color: var(--shop-accent-ink);
+  border-color: var(--shop-accent);
+  box-shadow: 0 1px 2px rgba(11, 15, 26, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.09);
+}
+
+.shop-btn--primary:hover:not(:disabled) {
+  background: var(--shop-accent-hover);
+  border-color: var(--shop-accent-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(11, 15, 26, 0.22), 0 10px 24px -8px rgba(11, 15, 26, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.09);
+}
+
+.shop-btn--primary:active:not(:disabled) {
+  transform: translateY(0) scale(0.985);
+}
+
+.shop-btn--secondary {
+  background: var(--shop-surface);
+  border-color: var(--shop-line-strong);
+  color: var(--shop-ink);
+  box-shadow: var(--shop-shadow-soft);
+}
+
+.shop-btn--secondary:hover:not(:disabled) {
+  border-color: #b9c2d0;
+  background: var(--shop-surface-alt);
+  transform: translateY(-1px);
+  box-shadow: var(--shop-shadow);
+}
+
+.shop-btn--ghost {
+  background: transparent;
+  color: var(--shop-ink-soft);
+}
+
+.shop-btn--ghost:hover:not(:disabled) {
+  color: var(--shop-ink);
+  background: var(--shop-accent-soft);
+}
+
+.shop-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 2rem;
+  padding: 0.3rem 0.8rem;
+  border: 1px solid var(--shop-line);
+  border-radius: var(--shop-radius-pill);
+  background: var(--shop-surface);
+  color: var(--shop-ink-soft);
+  font: 620 0.78rem/1 var(--font-sans);
+  transition: background 0.18s var(--shop-ease), border-color 0.18s var(--shop-ease), color 0.18s var(--shop-ease),
+    box-shadow 0.18s var(--shop-ease);
+}
+
+.shop-chip:hover {
+  border-color: var(--shop-line-strong);
+  color: var(--shop-ink);
+}
+
+.shop-chip[aria-pressed="true"],
+.shop-chip.is-active {
+  border-color: var(--shop-ink);
+  background: var(--shop-ink);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(11, 15, 26, 0.22);
+}
+
+.shop-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.26rem 0.56rem;
+  border-radius: var(--shop-radius-pill);
+  font: 700 0.68rem/1 var(--font-sans);
+  letter-spacing: 0.01em;
+}
+
+.shop-badge--featured {
+  background: var(--shop-sun-soft);
+  color: #8a6410;
+}
+
+.shop-badge--deal,
+.badge--deal {
+  background: var(--shop-sun-soft);
+  color: #8a6410;
+  border: 1px solid rgba(232, 147, 12, 0.35);
+}
+
+.shop-badge--stock {
+  background: var(--shop-mint-soft);
+  color: #0b7a54;
+}
+
+.shop-badge--oos {
+  background: var(--shop-danger-soft);
+  color: #b03830;
+}
+
+.shop-badge--info {
+  background: var(--shop-accent-2-soft);
+  color: #3c4860;
+}
+
+.shop-card-shell {
+  position: relative;
+  border: 1px solid var(--shop-line);
+  border-radius: var(--shop-radius-lg);
+  background: var(--shop-surface);
+  box-shadow: var(--shop-shadow-soft);
+  transition: border-color 0.24s var(--shop-ease), box-shadow 0.24s var(--shop-ease),
+    transform 0.24s var(--shop-ease);
+}
+
+.shop-card-shell:hover {
+  border-color: #dce1ea;
+  box-shadow: var(--shop-shadow);
+  transform: translateY(-3px);
+}
+
+.shop-empty {
+  display: grid;
+  place-items: center;
+  gap: 0.75rem;
+  padding: 2.5rem 1.5rem;
+  border: 1px dashed var(--shop-line-strong);
+  border-radius: var(--shop-radius-lg);
+  background: var(--shop-surface-alt);
+  text-align: center;
+  color: var(--shop-ink-soft);
+}
+
+.shop-empty strong {
+  color: var(--shop-ink);
+  font-size: 1.05rem;
+}
+
+/* Spec chips — scannable PDP / sheet facts */
+.shop-spec-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.shop-spec-chips li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 1.85rem;
+  padding: 0.3rem 0.68rem;
+  border: 1px solid var(--shop-line);
+  border-radius: var(--shop-radius-pill);
+  background: var(--shop-surface);
+  color: var(--shop-ink-soft);
+  font: 620 0.74rem/1 var(--font-sans);
+}
+.shop-spec-chips li[data-tone="ok"] {
+  border-color: transparent;
+  background: var(--shop-mint-soft);
+  color: #0b7a54;
+}
+.shop-spec-chips li[data-tone="warn"] {
+  border-color: transparent;
+  background: var(--shop-sun-soft);
+  color: #8a6410;
+}
+.shop-spec-chips li[data-tone="accent"] {
+  border-color: transparent;
+  background: var(--shop-accent-soft);
+  color: var(--shop-accent-hover);
+}
+
+/* Order / fulfillment progress rail */
+.shop-progress {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: shop-step;
+}
+.shop-progress li {
+  position: relative;
+  display: grid;
+  gap: 0.45rem;
+  justify-items: center;
+  text-align: center;
+  padding: 0.35rem 0.4rem 0.15rem;
+  color: var(--shop-ink-soft);
+  font: 620 0.72rem/1.25 var(--font-sans);
+  counter-increment: shop-step;
+}
+.shop-progress li::before {
+  content: counter(shop-step);
+  display: grid;
+  width: 1.7rem;
+  height: 1.7rem;
+  place-items: center;
+  border-radius: 50%;
+  border: 1.5px solid var(--shop-line-strong);
+  background: var(--shop-surface);
+  color: var(--shop-ink-soft);
+  font: 750 0.7rem/1 var(--font-sans);
+  z-index: 1;
+  transition: background 0.2s var(--shop-ease), border-color 0.2s var(--shop-ease), color 0.2s var(--shop-ease);
+}
+.shop-progress li:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  top: 1.15rem;
+  left: calc(50% + 0.95rem);
+  width: calc(100% - 1.9rem);
+  height: 1.5px;
+  background: var(--shop-line-strong);
+}
+.shop-progress li.is-done {
+  color: var(--shop-ink);
+}
+.shop-progress li.is-done::before {
+  border-color: transparent;
+  background: var(--shop-mint);
+  color: #fff;
+  content: "✓";
+}
+.shop-progress li.is-done:not(:last-child)::after {
+  background: var(--shop-mint);
+}
+.shop-progress li.is-active {
+  color: var(--shop-ink);
+  font-weight: 720;
+}
+.shop-progress li.is-active::before {
+  border-color: var(--shop-accent);
+  background: var(--shop-accent);
+  color: #fff;
+  box-shadow: var(--shop-ring);
+}
+.shop-progress li.is-active:not(:last-child)::after {
+  background: linear-gradient(90deg, var(--shop-accent), var(--shop-line-strong));
+}
+@media (max-width: 520px) {
+  .shop-progress {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem 0.35rem;
+  }
+  .shop-progress li:not(:last-child)::after {
+    display: none;
+  }
+}
+
+/* Hairline section divider used across store pages */
+.shop-rule {
+  height: 1px;
+  border: 0;
+  background: linear-gradient(90deg, transparent, var(--shop-line) 12%, var(--shop-line) 88%, transparent);
+}
+
+/* Reveal-on-scroll (progressive enhancement, no-JS visible) */
+.shop-reveal {
+  opacity: 1;
+  transform: none;
+}
+.js .shop-reveal {
+  opacity: 0;
+  transform: translateY(14px);
+  transition: opacity 0.6s var(--shop-ease), transform 0.6s var(--shop-ease);
+  transition-delay: var(--shop-reveal-delay, 0s);
+}
+.js .shop-reveal.is-in {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shop-btn,
+  .shop-card-shell {
+    transition: none;
+  }
+
+  .shop-btn--primary:hover:not(:disabled),
+  .shop-btn--secondary:hover:not(:disabled),
+  .shop-card-shell:hover {
+    transform: none;
+  }
+
+  .js .shop-reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}

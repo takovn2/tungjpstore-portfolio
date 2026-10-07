@@ -1,0 +1,32 @@
+---
+import { env } from "cloudflare:workers";
+import AccountDashboardPage from "../../../components/pages/AccountDashboardPage.astro";
+import { localizePath, type Locale } from "../../../i18n/dictionaries";
+import { resolveRequestLocale } from "../../../i18n/locale-preference";
+import { getCustomerProfile, listCustomerOrders } from "../../../lib/shop/customer-account";
+import { getCustomerSession, setPrivateNoStore } from "../../../lib/shop/customer-auth";
+
+export const prerender = false;
+const shopLocale: Locale = resolveRequestLocale(Astro.request);
+if (shopLocale !== "vi") {
+  return Astro.redirect(`/${shopLocale}/shop/account${Astro.url.search}`, 302);
+}
+const accountLoginPath = localizePath("/shop/account/login", shopLocale);
+setPrivateNoStore(Astro.response.headers);
+
+const session = await getCustomerSession(env, Astro.request);
+if (!session) {
+  return Astro.redirect(accountLoginPath, 302);
+}
+
+const profile = await getCustomerProfile(env, session.customerId);
+if (!profile) {
+  return Astro.redirect(accountLoginPath, 302);
+}
+const { orders } = await listCustomerOrders(env, session.customerId, { limit: 5 });
+const { getCustomerLifetimeSpend } = await import("../../../lib/shop/loyalty");
+const loyalty = env.CONTENT_DB && session.emailNormalized
+  ? await getCustomerLifetimeSpend(env.CONTENT_DB, session.emailNormalized)
+  : null;
+---
+<AccountDashboardPage locale={shopLocale} customer={profile} orders={orders} loyalty={loyalty} />

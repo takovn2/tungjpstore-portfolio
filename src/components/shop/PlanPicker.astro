@@ -1,0 +1,120 @@
+---
+import type { Locale } from "../../i18n/dictionaries";
+import { formatMoney } from "../../i18n/shop";
+import type { PublicVariant } from "../../lib/shop/types";
+
+interface Props {
+  locale: Locale;
+  variants: readonly PublicVariant[];
+  selectedId: string;
+  stockLabels: Record<string, string>;
+  label: string;
+}
+
+const { locale, variants, selectedId, stockLabels, label } = Astro.props;
+---
+
+<fieldset class="plan-picker" data-plan-picker>
+  <legend class="plan-picker__legend">{label}</legend>
+  <div class="plan-picker__list">
+    {variants.map((variant) => {
+      const selected = variant.id === selectedId;
+      const oos = variant.availability === "out_of_stock";
+      const href = `?variant=${encodeURIComponent(variant.id)}`;
+      return (
+        <a
+          class:list={["plan-picker__card", { "is-selected": selected, "is-oos": oos }]}
+          href={href}
+          data-plan-id={variant.id}
+          aria-current={selected ? "true" : undefined}
+        >
+          <span class="plan-picker__check" aria-hidden="true">
+            {selected ? (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            ) : null}
+          </span>
+          <span class="plan-picker__main">
+            <strong>{variant.title}</strong>
+            <small>{stockLabels[variant.availability] || variant.availability}</small>
+          </span>
+          <span class="plan-picker__price">
+            <b>{formatMoney(variant.priceMinor, variant.currency, locale)}</b>
+            {variant.compareAtMinor ? <del>{formatMoney(variant.compareAtMinor, variant.currency, locale)}</del> : null}
+          </span>
+        </a>
+      );
+    })}
+  </div>
+</fieldset>
+
+<style>
+  .plan-picker { margin: 0 0 1.25rem; padding: 0; border: 0; }
+  .plan-picker__legend {
+    margin: 0 0 0.5rem;
+    color: var(--shop-ink-muted, #94a3b8);
+    font: 600 0.72rem/1 var(--font-sans);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .plan-picker__list { display: grid; gap: 0.45rem; }
+  .plan-picker__card {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 0.75rem;
+    align-items: center;
+    min-height: 3.8rem;
+    padding: 0.75rem 0.95rem;
+    border: 1px solid var(--shop-line, #e2e8f0);
+    border-radius: var(--shop-radius, 0.5rem);
+    background: var(--shop-surface, #ffffff);
+    text-decoration: none;
+    color: inherit;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+    transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+  }
+  .plan-picker__card:hover,
+  .plan-picker__card:focus-visible {
+    border-color: var(--shop-line-strong, #cbd5e1);
+    background: var(--shop-surface-alt, #f8fafc);
+  }
+  .plan-picker__card.is-selected {
+    border-color: var(--shop-ink, #0f172a);
+    background: var(--shop-surface-alt, #f8fafc);
+    box-shadow: 0 0 0 1px var(--shop-ink, #0f172a);
+  }
+  .plan-picker__check {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.25rem;
+    height: 1.25rem;
+    border-radius: 50%;
+    border: 1px solid var(--shop-line-strong, #cbd5e1);
+    background: #ffffff;
+    color: var(--shop-ink, #0f172a);
+  }
+  .plan-picker__card.is-selected .plan-picker__check {
+    border-color: var(--shop-ink, #0f172a);
+    background: var(--shop-ink, #0f172a);
+    color: #ffffff;
+  }
+  .plan-picker__card.is-oos { opacity: 0.4; }
+  .plan-picker__main { display: grid; gap: 0.15rem; min-width: 0; }
+  .plan-picker__main strong {
+    font: 600 0.9rem/1.25 var(--font-sans);
+    color: var(--shop-ink, #0f172a);
+  }
+  .plan-picker__main small {
+    color: var(--shop-ink-soft, #64748b);
+    font: 500 0.72rem/1.2 var(--font-sans);
+  }
+  .plan-picker__price { text-align: right; display: grid; gap: 0.15rem; }
+  .plan-picker__price b {
+    font: 700 0.95rem/1 var(--font-sans);
+    color: var(--shop-ink, #0f172a);
+  }
+  .plan-picker__price del {
+    color: var(--shop-ink-muted, #94a3b8);
+    font: 500 0.72rem/1 var(--font-sans);
+  }
+</style>

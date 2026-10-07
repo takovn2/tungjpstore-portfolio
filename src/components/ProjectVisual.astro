@@ -1,0 +1,47 @@
+---
+interface Props {
+  name: string;
+  category?: string;
+  variant?: "logivn" | "payment" | "fball";
+  image?: string | null;
+  imageAlt?: string;
+  compact?: boolean;
+  loading?: "lazy" | "eager";
+  caption?: string | null;
+}
+
+const { name, category = "", variant = "logivn", image, imageAlt = name, compact = false, loading = "lazy", caption } = Astro.props;
+const variantClass = `project-visual--${variant}`;
+const showcaseClass = image?.includes("-showcase-") ? "project-visual--showcase" : null;
+const showcaseProjectClass = image?.includes("logivn-showcase")
+  ? "project-visual--showcase-logivn"
+  : image?.includes("fball-showcase") ? "project-visual--showcase-fball" : null;
+const visualCode = variant === "fball" ? "02" : variant === "payment" ? "LAB" : "01";
+const resolvedCaption = caption === undefined ? `${name}${category ? ` — ${category}` : ""}` : caption;
+---
+
+<figure class:list={["project-visual", variantClass, showcaseClass, showcaseProjectClass, compact && "project-visual--compact"]} data-variant={variant} data-has-image={Boolean(image)}>
+  {image ? (
+    <img src={image} alt={imageAlt} loading={loading} decoding="async" fetchpriority={loading === "eager" ? "high" : undefined} />
+  ) : (
+    <div class="project-visual__canvas" aria-hidden="true">
+      <div class="visual-window">
+        <div class="visual-window__bar"><span></span><span></span><span></span></div>
+        <div class="visual-window__body">
+          <div class="visual-sidebar"><i></i><i></i><i></i><i></i></div>
+          <div class="visual-content">
+            <div class="visual-content__top"><b>{name}</b><small>{category}</small></div>
+            <div class="visual-metric-row"><i></i><i></i><i></i></div>
+            <div class="visual-chart"><span></span><span></span><span></span><span></span><span></span><span></span></div>
+            <div class="visual-table"><i></i><i></i><i></i><i></i></div>
+          </div>
+        </div>
+      </div>
+      <span class="visual-stamp" aria-hidden="true">{visualCode}</span>
+      <span class="visual-telemetry" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span class="visual-grid-line visual-grid-line--one"></span>
+      <span class="visual-grid-line visual-grid-line--two"></span>
+    </div>
+  )}
+  {resolvedCaption && <figcaption class="sr-only">{resolvedCaption}</figcaption>}
+</figure>

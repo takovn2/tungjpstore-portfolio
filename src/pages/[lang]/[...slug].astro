@@ -1,0 +1,207 @@
+---
+import { env } from "cloudflare:workers";
+import AboutPage from "../../components/pages/AboutPage.astro";
+import AccountDashboardPage from "../../components/pages/AccountDashboardPage.astro";
+import AccountLoginPage from "../../components/pages/AccountLoginPage.astro";
+import AccountOrderDetailPage from "../../components/pages/AccountOrderDetailPage.astro";
+import AccountOrdersPage from "../../components/pages/AccountOrdersPage.astro";
+import CartPage from "../../components/pages/CartPage.astro";
+import BlogPage from "../../components/pages/BlogPage.astro";
+import CaseStudyPage from "../../components/pages/CaseStudyPage.astro";
+import ContactPage from "../../components/pages/ContactPage.astro";
+import LabPage from "../../components/pages/LabPage.astro";
+import NotFoundPage from "../../components/pages/NotFoundPage.astro";
+import OrderPage from "../../components/pages/OrderPage.astro";
+import PostPage from "../../components/pages/PostPage.astro";
+import PricingPage from "../../components/pages/PricingPage.astro";
+import PrivacyPage from "../../components/pages/PrivacyPage.astro";
+import ProductPage from "../../components/pages/ProductPage.astro";
+import RefundPolicyPage from "../../components/pages/RefundPolicyPage.astro";
+import ShopPage from "../../components/pages/ShopPage.astro";
+import TermsPage from "../../components/pages/TermsPage.astro";
+import UnavailablePage from "../../components/pages/UnavailablePage.astro";
+import WorkPage from "../../components/pages/WorkPage.astro";
+import { locales, type Locale } from "../../i18n/dictionaries";
+import { curateLabPost, curateLabPosts } from "../../lib/curated-lab-content";
+import { loadPublicContentItem, loadPublicSnapshot, isManagedSlug, publicContactEmail } from "../../lib/public-runtime";
+import { canUseBundledFallback, postFromPublished, publishedPosts, publishedProjects, publishedSiteSection, setPublicCache } from "../../lib/public-content";
+import { getCustomerOrderDetail, getCustomerProfile, listCustomerOrders } from "../../lib/shop/customer-account";
+import { getCustomerSession, sanitizeReturnPath, setPrivateNoStore } from "../../lib/shop/customer-auth";
+import { isMagicLinkEmailConfigured } from "../../lib/shop/magic-link";
+import { isGoogleOAuthConfigured } from "../../lib/shop/oauth-google";
+import { getPublicProductBySlug, listPublicProducts } from "../../lib/shop/repository";
+import { getShopCheckoutReadiness } from "../../lib/shop/service";
+import type { PublicProduct } from "../../lib/shop/types";
+
+export const prerender = false;
+
+const rawLang = String(Astro.params.lang ?? "");
+const rawSlug = String(Astro.params.slug ?? "");
+const slug = rawSlug.replace(/^\/+|\/+$/g, "");
+const segments = slug ? slug.split("/") : [];
+const first = segments[0] ?? "";
+const second = segments[1] ?? "";
+const staticRoutes = new Set(["work", "shop", "pricing", "about", "lab", "blog", "contact", "privacy", "terms-of-service", "refund-policy"]);
+const exactStaticRoute = segments.length === 1 && staticRoutes.has(first);
+const exactDynamicRoute = segments.length === 2 && (first === "work" || first === "lab" || first === "blog" || first === "shop") && Boolean(second);
+const validRouteShape = exactStaticRoute || exactDynamicRoute;
+if (rawLang === "vi") return Astro.redirect(`${slug ? `/${slug}` : "/"}${Astro.url.search}`, 308);
+const isLocale = (locales as readonly string[]).includes(rawLang) && rawLang !== "vi";
+const locale = (isLocale ? rawLang : "vi") as Locale;
+if (isLocale && validRouteShape && Astro.url.pathname.endsWith("/")) {
+  return Astro.redirect(`/${rawLang}${slug ? `/${slug}` : ""}${Astro.url.search}`, 308);
+}
+const isPostDetail = isLocale && (first === "lab" || first === "blog") && Boolean(second);
+const isShopRoute = isLocale && first === "shop";
+const isOrderStatus = isShopRoute && second === "order" && segments.length === 2;
+const isCart = isShopRoute && second === "cart" && segments.length === 2;
+const isAccountLogin = isShopRoute && second === "account" && segments[2] === "login" && segments.length === 3;
+const isAccountOrders = isShopRoute && second === "account" && segments[2] === "orders" && segments.length === 3;
+const isAccountOrderDetail = isShopRoute && second === "account" && segments[2] === "orders" && Boolean(segments[3]) && segments.length === 4;
+const isAccountDashboard = isShopRoute && second === "account" && segments.length === 2;
+const isAccountRoute = isAccountLogin || isAccountOrders || isAccountOrderDetail || isAccountDashboard;
+const shopDb = env.CONTENT_DB;
+const needsCmsData = isLocale && validRouteShape && (first === "work" || first === "lab" || first === "blog" || first === "contact") && !isPostDetail;
+const [snapshot, postResult] = await Promise.all([
+  needsCmsData ? loadPublicSnapshot(locale) : null,
+  isPostDetail ? loadPublicContentItem({ type: "post", slug: second, locale }) : null,
+]);
+let shopResult: PublicProduct | PublicProduct[] | null = null;
+let shopRelatedProducts: PublicProduct[] = [];
+let shopUnavailable: boolean = isShopRoute && !isOrderStatus && !isCart && !isAccountRoute && !shopDb;
+if (isShopRoute && !isOrderStatus && !isCart && !isAccountRoute && shopDb) {
+  try {
+    if (second) {
+      shopResult = await getPublicProductBySlug(shopDb, second, locale);
+      if (shopResult) {
+        const catalog = await listPublicProducts(shopDb, { locale, limit: 48 });
+        const current = shopResult;
+        shopRelatedProducts = catalog
+          .filter((item) => item.id !== current.id)
+          .filter((item) =>
+            (current.categorySlug && item.categorySlug === current.categorySlug)
+            || item.productType === current.productType
+            || item.featured,
+          )
+          .slice(0, 4);
+        if (shopRelatedProducts.length < 4) {
+          const fill = catalog
+            .filter((item) => item.id !== current.id && !shopRelatedProducts.some((row) => row.id === item.id))
+            .slice(0, 4 - shopRelatedProducts.length);
+          shopRelatedProducts = [...shopRelatedProducts, ...fill];
+        }
+      }
+    } else {
+      shopResult = await listPublicProducts(shopDb, { locale, limit: 48 });
+    }
+  } catch {
+    shopUnavailable = true;
+  }
+}
+
+let accountSession = null as Awaited<ReturnType<typeof getCustomerSession>>;
+let accountProfile = null as Awaited<ReturnType<typeof getCustomerProfile>>;
+let accountOrders: Awaited<ReturnType<typeof listCustomerOrders>>["orders"] = [];
+let accountOrderDetail = null as Awaited<ReturnType<typeof getCustomerOrderDetail>>;
+const accountReturnPath = sanitizeReturnPath(Astro.url.searchParams.get("return"), `/${rawLang}/shop/account`);
+if (isAccountRoute || isCart) {
+  accountSession = await getCustomerSession(env, Astro.request);
+  if (isAccountLogin && accountSession) {
+    return Astro.redirect(accountReturnPath, 302);
+  }
+  if (isAccountRoute && !isAccountLogin && !accountSession) {
+    return Astro.redirect(`/${rawLang}/shop/account/login${Astro.url.search}`, 302);
+  }
+  if (accountSession && isAccountRoute && !isAccountLogin) {
+    accountProfile = await getCustomerProfile(env, accountSession.customerId);
+    if (!accountProfile) {
+      return Astro.redirect(`/${rawLang}/shop/account/login${Astro.url.search}`, 302);
+    }
+    if (isAccountDashboard) {
+      accountOrders = (await listCustomerOrders(env, accountSession.customerId, { limit: 5 })).orders;
+    } else if (isAccountOrders) {
+      accountOrders = (await listCustomerOrders(env, accountSession.customerId, { limit: 50 })).orders;
+    } else if (isAccountOrderDetail) {
+      accountOrderDetail = await getCustomerOrderDetail(env, accountSession.customerId, segments[3]!);
+      if (!accountOrderDetail) {
+        return Astro.redirect(`/${rawLang}/shop/account/orders`, 302);
+      }
+    }
+  }
+}
+const shopProduct = second && isShopRoute && shopResult && !Array.isArray(shopResult) ? shopResult : null;
+const selectedVariantId = Astro.url.searchParams.get("variant")?.trim() || null;
+const shopProducts = isShopRoute && !second && Array.isArray(shopResult) ? shopResult : [];
+let checkoutReady = false;
+if (shopProduct) {
+  try {
+    checkoutReady = (await getShopCheckoutReadiness(env)).ready;
+  } catch {
+    checkoutReady = false;
+  }
+}
+if (isCart) {
+  try {
+    checkoutReady = (await getShopCheckoutReadiness(env)).ready;
+  } catch {
+    checkoutReady = false;
+  }
+}
+const unavailable = snapshot?.status === "unavailable" || postResult?.status === "unavailable" || shopUnavailable;
+const cmsProjects = snapshot && !canUseBundledFallback(snapshot, "project") ? publishedProjects(snapshot) : undefined;
+const cmsPosts = snapshot && !canUseBundledFallback(snapshot, "post") ? publishedPosts(snapshot) : undefined;
+const cmsBlogPosts = cmsPosts?.filter((post) => post.surface === "blog");
+const cmsLabPosts = cmsPosts ? curateLabPosts(cmsPosts.filter((post) => post.surface !== "blog"), locale) : undefined;
+const projectManaged = cmsProjects !== undefined;
+const fallbackProjectSlugs = new Set(["logivn", "payment-infrastructure", "fball"]);
+const projectItem = first === "work" && second ? cmsProjects?.find((project) => project.slug === second) : undefined;
+const mappedPostItem = postResult?.status === "ready" ? postFromPublished(postResult.item) : undefined;
+const postItem = mappedPostItem && first === "lab" ? curateLabPost(mappedPostItem, locale) : mappedPostItem;
+const matchingPost = postItem && ((first === "blog" && postItem.surface === "blog") || (first === "lab" && postItem.surface !== "blog")) ? postItem : undefined;
+const found = isLocale && !unavailable && (
+  (validRouteShape && (
+    exactStaticRoute ||
+    isOrderStatus ||
+    isCart ||
+    (first === "shop" && !second) ||
+    (first === "shop" && Boolean(second) && Boolean(shopProduct)) ||
+    (first === "work" && Boolean(second) && (projectItem || (fallbackProjectSlugs.has(second) && !projectManaged))) ||
+    ((first === "lab" || first === "blog") && Boolean(second) && matchingPost)
+  )) ||
+  isAccountRoute
+);
+if (isAccountRoute || isCart) setPrivateNoStore(Astro.response.headers);
+else setPublicCache(Astro.response.headers);
+const contactSection = snapshot ? publishedSiteSection(snapshot, "contact-profile") : null;
+const contactHidden = snapshot ? isManagedSlug(snapshot, "site_section", "contact-profile") && !contactSection : false;
+const hidden = found && first === "contact" && contactHidden;
+if (unavailable) {
+  Astro.response.status = 503;
+  setPublicCache(Astro.response.headers, "unavailable");
+} else if (!found || hidden) {
+  Astro.response.status = 404;
+  setPublicCache(Astro.response.headers, "not-found");
+}
+---
+{unavailable ? <UnavailablePage locale={locale} /> : null}
+{found && !hidden && slug === "work" ? <WorkPage locale={locale} projects={cmsProjects} /> : null}
+{found && !hidden && slug === "shop" ? <ShopPage locale={locale} products={shopProducts} /> : null}
+{found && !hidden && slug === "pricing" ? <PricingPage locale={locale} /> : null}
+{found && !hidden && isOrderStatus ? <OrderPage locale={locale} /> : null}
+{found && !hidden && isCart ? <CartPage locale={locale} checkoutReady={checkoutReady} turnstileSiteKey={env.TURNSTILE_SITE_KEY?.trim() || ""} authenticated={Boolean(accountSession)} customerDisplayName={accountSession?.displayName ?? ""} customerEmail={accountSession?.emailNormalized ?? ""} /> : null}
+{found && !hidden && isAccountLogin ? <AccountLoginPage locale={locale} turnstileSiteKey={env.TURNSTILE_SITE_KEY?.trim() || ""} googleEnabled={isGoogleOAuthConfigured(env)} magicEnabled={isMagicLinkEmailConfigured(env)} errorCode={Astro.url.searchParams.get("error")} returnPath={accountReturnPath} /> : null}
+{found && !hidden && isAccountDashboard && accountProfile ? <AccountDashboardPage locale={locale} customer={accountProfile} orders={accountOrders} /> : null}
+{found && !hidden && isAccountOrders ? <AccountOrdersPage locale={locale} orders={accountOrders} /> : null}
+{found && !hidden && isAccountOrderDetail && accountOrderDetail ? <AccountOrderDetailPage locale={locale} order={accountOrderDetail} /> : null}
+{found && !hidden && first === "shop" && second && !isOrderStatus && !isAccountRoute && shopProduct ? <ProductPage locale={locale} product={shopProduct} selectedVariantId={selectedVariantId} relatedProducts={shopRelatedProducts} /> : null}
+{found && first === "work" && second && (projectItem || (fallbackProjectSlugs.has(second) && !projectManaged)) ? <CaseStudyPage locale={locale} slug={second} project={projectItem} navigationProjects={cmsProjects} /> : null}
+{found && !hidden && slug === "about" ? <AboutPage locale={locale} /> : null}
+{found && !hidden && slug === "lab" ? <LabPage locale={locale} posts={cmsLabPosts} /> : null}
+{found && !hidden && slug === "blog" ? <BlogPage locale={locale} posts={cmsBlogPosts} /> : null}
+{found && first === "lab" && second && matchingPost ? <PostPage locale={locale} post={matchingPost} availableLocales={postResult?.locales} /> : null}
+{found && first === "blog" && second && matchingPost ? <PostPage locale={locale} post={matchingPost} availableLocales={postResult?.locales} /> : null}
+{found && slug === "contact" && !contactHidden ? <ContactPage locale={locale} contactSection={contactSection} contactEmail={snapshot ? publicContactEmail(snapshot) : null} /> : null}
+{found && !hidden && slug === "privacy" ? <PrivacyPage locale={locale} /> : null}
+{found && !hidden && slug === "terms-of-service" ? <TermsPage locale={locale} /> : null}
+{found && !hidden && slug === "refund-policy" ? <RefundPolicyPage locale={locale} /> : null}
+{!unavailable && (hidden || !found) ? <NotFoundPage locale={locale} /> : null}

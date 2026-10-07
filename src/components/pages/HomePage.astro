@@ -1,0 +1,639 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import ProductCard from "../shop/ProductCard.astro";
+import FlywheelBand from "../shop/FlywheelBand.astro";
+import HomeProjectShowcase from "../HomeProjectShowcase.astro";
+import SkillMatrix from "../SkillMatrix.astro";
+import Icon from "../Icon.astro";
+import { formatProjectCount, getTranslation, localizePath, type Locale } from "../../i18n/dictionaries";
+import { getBlogCopy } from "../../i18n/blog";
+import { formatProductCount, getShopCopy, type ProductViewModel } from "../../i18n/shop";
+import { estimateReadingMinutes } from "../../lib/blog";
+import { projectCover, projectCoverAlt, resolveProjectCover } from "../../content/project-media";
+import type { PublicPost, PublicProject, PublicSiteSection } from "../../lib/public-content";
+import { getSkillGroups } from "../../content/portfolio-evidence";
+import { getHomeServiceCopy } from "../../i18n/home";
+
+type Copy = ReturnType<typeof getTranslation>;
+interface Props {
+  locale: Locale;
+  homeContent?: Copy["home"];
+  projectContent?: Copy["projects"];
+  projects?: PublicProject[];
+  heroContent?: PublicSiteSection | null;
+  blogPosts?: PublicPost[];
+  shopProducts?: ProductViewModel[];
+  showShop?: boolean;
+}
+
+const { locale, homeContent, projectContent, projects: projectOverrides, heroContent, blogPosts = [], shopProducts = [], showShop = false } = Astro.props;
+const t = getTranslation(locale);
+const h = homeContent ?? t.home;
+const projectCopy = projectContent ?? t.projects;
+const withCover = (project: PublicProject): PublicProject => {
+  const image = resolveProjectCover(project.slug, project.image);
+  return { ...project, image, imageAlt: image === project.image && project.image ? project.imageAlt : projectCoverAlt(project.slug, locale) };
+};
+const curatedProject = (project: PublicProject): PublicProject => {
+  const key = project.slug === "payment-infrastructure" ? "paymentInfrastructure" : project.slug === "logivn" || project.slug === "fball" ? project.slug : null;
+  const copy = key ? projectCopy[key] : null;
+  return withCover(copy ? { ...project, name: copy.name, category: copy.category, status: copy.status, thesis: copy.thesis, summary: copy.summary, seoTitle: copy.name, seoDescription: copy.summary } : project);
+};
+const fallbackProjects: PublicProject[] = [
+  { slug: "logivn", name: projectCopy.logivn.name, category: projectCopy.logivn.category, status: projectCopy.logivn.status, thesis: projectCopy.logivn.thesis, summary: projectCopy.logivn.summary, seoTitle: projectCopy.logivn.name, seoDescription: projectCopy.logivn.summary, liveUrl: "https://logivn.com", image: projectCover("logivn"), imageAlt: projectCoverAlt("logivn", locale), variant: "logivn", research: false, body: null, publishedAt: null },
+  { slug: "fball", name: projectCopy.fball.name, category: projectCopy.fball.category, status: projectCopy.fball.status, thesis: projectCopy.fball.thesis, summary: projectCopy.fball.summary, seoTitle: projectCopy.fball.name, seoDescription: projectCopy.fball.summary, liveUrl: "https://fball.vn", image: projectCover("fball"), imageAlt: projectCoverAlt("fball", locale), variant: "fball", research: false, body: null, publishedAt: null },
+  { slug: "payment-infrastructure", name: projectCopy.paymentInfrastructure.name, category: projectCopy.paymentInfrastructure.category, status: projectCopy.paymentInfrastructure.status, thesis: projectCopy.paymentInfrastructure.thesis, summary: projectCopy.paymentInfrastructure.summary, seoTitle: projectCopy.paymentInfrastructure.name, seoDescription: projectCopy.paymentInfrastructure.summary, liveUrl: null, image: projectCover("payment-infrastructure"), imageAlt: projectCoverAlt("payment-infrastructure", locale), variant: "payment", research: true, body: null, publishedAt: null },
+];
+const projectEntries = (projectOverrides ?? fallbackProjects).map(curatedProject);
+const primaryProjects = projectEntries.filter((project) => !project.research);
+const heroProject = primaryProjects[0] ?? null;
+const heroImage = heroContent?.image || "/images/tung-hero-v2.webp";
+const heroImageAltByLocale: Record<Locale, string> = {
+  vi: "Chân dung Tung trong bộ suit đen trên nền studio tối",
+  en: "Portrait of Tung in a black suit against a dark studio backdrop",
+  ja: "暗いスタジオ背景で黒いスーツを着たTungのポートレート",
+  zh: "Tung身穿黑色西装、置于深色影棚背景中的肖像",
+};
+const heroImageAlt = heroContent?.imageAlt || heroImageAltByLocale[locale];
+const heroCtas = heroContent?.body.filter((block) => block.type === "cta") ?? [];
+const primaryHeroCta = heroCtas[0]?.type === "cta" ? heroCtas[0] : null;
+const secondaryHeroCta = heroCtas[1]?.type === "cta" ? heroCtas[1] : null;
+const ctaHref = (href: string) => href.startsWith("/") ? localizePath(href, locale) : href;
+const buildingValue = projectOverrides
+  ? primaryProjects.map((project) => project.name).join(" · ") || formatProjectCount(locale, 0)
+  : h.currentBuildingValue;
+const blog = getBlogCopy(locale);
+const shop = getShopCopy(locale);
+const featuredShopProducts = shopProducts.filter((product) => product.featured).slice(0, 3);
+const latestBlogPosts = [...blogPosts].sort((left, right) => Date.parse(right.publishedAt ?? "") - Date.parse(left.publishedAt ?? "")).slice(0, 3);
+const dateLocale = locale === "zh" ? "zh-CN" : locale;
+const formatDate = (value: string | null) => {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.valueOf()) ? null : new Intl.DateTimeFormat(dateLocale, { dateStyle: "medium" }).format(date);
+};
+const skillGroups = getSkillGroups(locale);
+const serviceCopy = getHomeServiceCopy(locale);
+const serviceImageAltByLocale: Record<Locale, string> = {
+  vi: "Minh họa hành trình từ website doanh nghiệp qua giao diện sản phẩm đến nền tảng SaaS và hạ tầng backend",
+  en: "Illustration of a business website moving through product surfaces into a SaaS platform and backend infrastructure",
+  ja: "企業サイトからプロダクト画面、SaaSプラットフォーム、backend基盤へ広がる流れのイラスト",
+  zh: "从企业网站、产品界面延伸到 SaaS 平台与后端基础设施的流程插图",
+};
+const serviceSchema = {
+  "@context": "https://schema.org",
+  "@type": "ProfessionalService",
+  "@id": "https://tung.codes/#services",
+  name: serviceCopy.schemaName,
+  url: "https://tung.codes/pricing",
+  description: serviceCopy.intro,
+  provider: { "@id": "https://tung.codes/#person" },
+  areaServed: [
+    { "@type": "Country", name: "Vietnam" },
+    { "@type": "Country", name: "Japan" },
+  ],
+  availableLanguage: ["Vietnamese", "English", "Japanese", "Chinese"],
+  hasOfferCatalog: {
+    "@type": "OfferCatalog",
+    name: serviceCopy.label,
+    itemListElement: serviceCopy.items.map((item) => ({
+      "@type": "Offer",
+      itemOffered: { "@type": "Service", name: item.title, description: item.description },
+    })),
+  },
+};
+const skillIntro = {
+  vi: { label: "Năng lực triển khai", heading: "Từ thông điệp, tốc độ đến hạ tầng.", body: "Một website tốt cần vừa rõ với khách hàng vừa đáng tin khi doanh nghiệp vận hành." },
+  en: { label: "Delivery capabilities", heading: "From message and speed to infrastructure.", body: "A good website needs to feel clear to customers and dependable when the business runs on it." },
+  ja: { label: "実装につながる能力", heading: "伝えること、速度、基盤まで。", body: "よいウェブサイトは顧客に明快で、事業の運用にも信頼できる必要があります。" },
+  zh: { label: "交付能力", heading: "从信息、速度到基础设施。", body: "好的网站要让客户看得清楚，也要让企业运行时足够可靠。" },
+}[locale];
+const humanNote = {
+  vi: {
+    label: "Góc nhìn cá nhân",
+    heading: "Tôi thường bắt đầu bằng một ca làm việc, không phải một danh sách tính năng.",
+    body: "Một order bị nhắc lại nhiều lần, một đội trưởng phải nhớ thay cả đội, hay một lần thanh toán cần quá nhiều bước kiểm tra — đó là những điểm khởi đầu thật. Tôi theo sát vấn đề để hiểu điều người dùng cần, giảm phần lặp lại và đưa nó thành một sản phẩm dễ sử dụng.",
+    location: "Việt Nam / Nhật Bản",
+    focus: "Product · Architecture · Full-stack",
+    cta: "Đọc câu chuyện của tôi",
+  },
+  en: {
+    label: "A personal perspective",
+    heading: "I usually begin with a working day, not a feature list.",
+    body: "An order repeated three times, a captain remembering everything for the team, or a payment that needs too many manual checks: those are real starting points. I stay close to the problem, remove repeated work and turn it into a product people can use with confidence.",
+    location: "Vietnam / Japan",
+    focus: "Product · Architecture · Full-stack",
+    cta: "Read my story",
+  },
+  ja: {
+    label: "個人的な視点",
+    heading: "機能一覧ではなく、一日の仕事から始めます。",
+    body: "同じ注文が何度も説明される、キャプテンがチーム全体の記憶になる、支払い確認に手作業が多すぎる。そうした現実から出発し、繰り返しを減らし、安心して使えるプロダクトへ変えていきます。",
+    location: "ベトナム / 日本",
+    focus: "Product · Architecture · Full-stack",
+    cta: "私のストーリーを読む",
+  },
+  zh: {
+    label: "个人视角",
+    heading: "我通常从真实的一天工作开始，而不是功能清单。",
+    body: "同一笔订单被反复确认、队长替全队记住所有事情，或一次付款需要太多人工核对——这些才是真实起点。我会贴近问题，减少重复工作，再把它变成大家能够放心使用的产品。",
+    location: "越南 / 日本",
+    focus: "Product · Architecture · Full-stack",
+    cta: "阅读我的故事",
+  },
+}[locale];
+---
+
+<BaseLayout title={heroContent?.seoTitle || h.metaTitle} description={heroContent?.seoDescription || heroContent?.excerpt || h.metaDescription} image={heroContent?.image ?? undefined} locale={locale} structuredData={serviceSchema}>
+  <section class="hero-cover" aria-labelledby="home-title" data-hero-media={heroContent?.image ? "cms" : "portrait"}>
+    <div class="hero-cover__media" data-reveal style="--reveal-delay: 40ms">
+      <img src={heroImage} alt={heroImageAlt} width={heroContent?.image ? undefined : 1672} height={heroContent?.image ? undefined : 941} loading="eager" decoding="async" fetchpriority="high" />
+    </div>
+
+    <div class="hero-cover__copy shell">
+      <h1 class="display" id="home-title" data-reveal style="--reveal-delay: 100ms">{heroContent?.title ? heroContent.title : <>{h.titleLead} <em>{h.titleEmphasis}</em> {h.titleTail}</>}</h1>
+      <div class="hero-cover__support" data-reveal style="--reveal-delay: 180ms">
+        <p>{heroContent?.excerpt || h.supporting}</p>
+        <div class="hero-actions">
+          <a class="button-link primary" href={primaryHeroCta ? ctaHref(primaryHeroCta.href) : localizePath("/pricing", locale)} target={primaryHeroCta?.href.startsWith("https://") ? "_blank" : undefined} rel={primaryHeroCta?.href.startsWith("https://") ? "noreferrer" : undefined}>{primaryHeroCta?.label || h.primaryCta} <span aria-hidden="true">↘</span></a>
+          <a class="button-link" href={secondaryHeroCta ? ctaHref(secondaryHeroCta.href) : localizePath("/contact", locale)} target={secondaryHeroCta?.href.startsWith("https://") ? "_blank" : undefined} rel={secondaryHeroCta?.href.startsWith("https://") ? "noreferrer" : undefined}>{secondaryHeroCta?.label || h.contactCta?.cta || t.common.navigation.contact} <span aria-hidden="true">↗</span></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="hero-cover__rail shell" data-reveal style="--reveal-delay: 320ms">
+      {heroProject
+        ? <a class="hero-cover__project" href={localizePath(`/work/${heroProject.slug}`, locale)} aria-label={`${h.selectedWork.viewCaseStudy}: ${heroProject.name}`}>
+            <span class="status-dot" aria-hidden="true"></span>
+            <span><small class="mono-label">{h.currentBuildingLabel}</small><strong>{buildingValue}</strong></span>
+            <span aria-hidden="true">↗</span>
+          </a>
+        : <div class="hero-cover__project"><span class="status-dot" aria-hidden="true"></span><span><small class="mono-label">{h.currentBuildingLabel}</small><strong>{buildingValue}</strong></span></div>}
+      <div><span class="mono-label">{heroContent?.eyebrow || h.eyebrow}</span><strong>VI / EN / JA / ZH</strong></div>
+      <div><span class="mono-label">{h.focusLabel}</span><strong>{h.focusValue}</strong></div>
+      <div><span class="mono-label">{h.availabilityLabel}</span><strong>{h.availabilityValue}</strong></div>
+    </div>
+  </section>
+
+  <section class="home-services section section-rule" id="services" aria-labelledby="home-services-heading">
+    <div class="shell">
+      <div class="home-services__intro reveal">
+        <div>
+          <p class="section-label">{serviceCopy.label}</p>
+          <h2 class="section-title" id="home-services-heading">{serviceCopy.heading}</h2>
+        </div>
+        <div>
+          <p class="lead">{serviceCopy.intro}</p>
+          <div class="home-services__actions">
+            <a class="button-link primary" href={localizePath("/pricing", locale)}>{serviceCopy.pricingCta} <span aria-hidden="true">↗</span></a>
+            <a class="button-link" href={localizePath("/contact", locale)}>{serviceCopy.contactCta} <span aria-hidden="true">↗</span></a>
+          </div>
+        </div>
+      </div>
+
+      <figure class="home-services__visual reveal">
+        <img src="/images/services/services-website-to-saas.webp" alt={serviceImageAltByLocale[locale]} width="1717" height="916" loading="lazy" decoding="async" />
+        <figcaption><span>{serviceCopy.visualCaption}</span><span aria-hidden="true">01 — 03</span></figcaption>
+      </figure>
+
+      <div class="home-services__list">
+        {serviceCopy.items.map((item) => <article class="home-service-card reveal">
+          <div class="home-service-card__topline"><span>{item.number}</span><span>{item.label}</span></div>
+          <h3>{item.title}</h3>
+          <p class="home-service-card__outcome">{item.outcome}</p>
+          <p class="home-service-card__description">{item.description}</p>
+          <ul>{item.deliverables.map((deliverable) => <li>{deliverable}</li>)}</ul>
+          <p class="home-service-card__fit"><strong>{serviceCopy.fitLabel}</strong>{item.fit}</p>
+          <a class="home-service-card__evidence" href={localizePath(item.evidenceHref, locale)}><span>{item.evidenceLabel}</span><strong>{item.evidence}</strong><em>{item.evidenceLink} ↗</em></a>
+        </article>)}
+      </div>
+
+      <div class="home-services__proof reveal">
+        <span class="mono-label">{serviceCopy.proofLabel}</span>
+        <ul>{serviceCopy.proof.map((proof) => <li><span class="status-dot" aria-hidden="true"></span>{proof}</li>)}</ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="home-proof section-rule" aria-labelledby="home-proof-heading">
+    <div class="shell home-proof__frame reveal">
+      <div class="home-proof__topline">
+        <p class="section-label">{h.mission.label}</p>
+        <span class="mono-label">01 — 04 / {h.glance.coreDisciplinesLabel}</span>
+      </div>
+      <div class="home-proof__statement">
+        <h2 id="home-proof-heading" aria-label={`${h.mission.lines[0]} ${h.mission.lines[1]}`}>
+          <span aria-hidden="true">{h.mission.lines[0]}</span>
+          <em class="home-proof__typing-line" aria-hidden="true">
+            <span data-typewriter data-typing-text={h.mission.lines[1]}>{h.mission.lines[1]}</span><i></i>
+          </em>
+        </h2>
+        <p>{h.glance.heading}</p>
+      </div>
+      <div class="home-proof__flow">
+        <span class="mono-label">{h.glance.label}</span>
+        <ol role="list">{h.glance.coreDisciplines.map((item, index) => <li><span>0{index + 1}</span><strong>{item}</strong></li>)}</ol>
+      </div>
+      <div class="home-proof__footer">
+        <blockquote>{h.glance.philosophy}</blockquote>
+        <span aria-hidden="true">↘</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="work section section-rule" id="selected-work">
+    <div class="shell">
+      <div class="work-intro reveal">
+        <p class="section-label">{h.selectedWork.label}</p>
+        <div><h2 class="section-title">{h.selectedWork.heading}</h2><p class="lead">{h.selectedWork.intro}</p></div>
+        <div class="work-intro__actions">
+          <a class="button-link primary" href={localizePath("/work", locale)}>{h.selectedWork.viewCaseStudy} <span aria-hidden="true">↗</span></a>
+        </div>
+      </div>
+      <div class="project-list reveal"><HomeProjectShowcase projects={primaryProjects} locale={locale} /></div>
+    </div>
+  </section>
+
+  <section class="home-skills section section-rule deferred-section" aria-labelledby="home-skills-heading">
+    <div class="shell">
+      <div class="section-heading-row reveal">
+        <div><p class="section-label">{skillIntro.label}</p><h2 class="section-title" id="home-skills-heading">{skillIntro.heading}</h2></div>
+        <p>{skillIntro.body}</p>
+      </div>
+      <div class="reveal"><SkillMatrix groups={skillGroups} compact /></div>
+    </div>
+  </section>
+
+  <section class="architecture section section-rule deferred-section">
+    <div class="shell architecture-grid reveal">
+      <div><p class="section-label">{h.systems.label}</p><h2 class="section-title">{h.systems.heading}</h2><p class="lead">{h.systems.body}</p></div>
+      <ol class="architecture-flow" role="list">{h.systems.stages.map((stage, index) => <li><span>0{index + 1}</span><strong>{stage}</strong><small>{h.systems.stageDescriptions[index] || h.glance.philosophy}</small></li>)}</ol>
+    </div>
+  </section>
+
+  <section class="home-human section section-rule deferred-section" aria-labelledby="home-human-heading">
+    <div class="shell home-human__grid reveal">
+      <figure class="home-human__portrait">
+        <img src="/images/tung-about-portrait.webp" alt={heroImageAltByLocale[locale]} width="900" height="1125" loading="lazy" decoding="async" />
+        <figcaption><span>{humanNote.location}</span><span>07 / 2026</span></figcaption>
+      </figure>
+      <div class="home-human__copy">
+        <p class="section-label">{humanNote.label}</p>
+        <h2 class="section-title" id="home-human-heading">{humanNote.heading}</h2>
+        <p class="lead">{humanNote.body}</p>
+        <div class="home-human__meta"><span>{humanNote.focus}</span><a class="button-link" href={localizePath("/about", locale)}>{humanNote.cta} <span aria-hidden="true">↗</span></a></div>
+      </div>
+    </div>
+  </section>
+
+  {showShop && (
+    <>
+      {featuredShopProducts.length > 0 && <section class="home-shop section section-rule deferred-section" aria-labelledby="home-shop-heading">
+        <div class="shell">
+          <div class="home-shop__intro reveal">
+            <div><p class="section-label"><span class="status-dot" aria-hidden="true"></span>{shop.featuredLabel}</p><h2 class="section-title" id="home-shop-heading">{shop.featuredHeading}</h2></div>
+            <div><p class="lead">{shop.catalogIntro}</p><div class="home-shop__actions"><span class="mono-label">{formatProductCount(locale, featuredShopProducts.length)}</span><a class="button-link primary" href={localizePath("/shop", locale)}>{shop.viewFeatured} <span aria-hidden="true">↗</span></a></div></div>
+          </div>
+          <div class="home-shop__grid">
+            {featuredShopProducts.map((product, index) => <ProductCard product={product} locale={locale} index={index} priority={index === 0} />)}
+          </div>
+        </div>
+      </section>}
+
+      <FlywheelBand locale={locale} surface="portfolio" />
+    </>
+  )}
+
+  {latestBlogPosts.length > 0 && <section class="home-journal section section-rule deferred-section" aria-labelledby="home-journal-heading">
+    <div class="shell">
+      <div class="home-journal__intro reveal">
+        <div><p class="section-label"><Icon name="article" size={18} />{blog.homeLabel}</p><h2 class="section-title" id="home-journal-heading">{blog.homeHeading}</h2></div>
+        <div><p class="lead">{blog.homeIntro}</p><a class="button-link" href={localizePath("/blog", locale)}>{blog.viewAll} <span aria-hidden="true">↗</span></a></div>
+      </div>
+      <div class="home-journal__grid">
+        {latestBlogPosts.map((post, index) => <article class:list={["home-journal-card", "reveal", { "home-journal-card--featured": index === 0 }]} style={`--reveal-delay: ${index * 70}ms`}>
+          <a href={localizePath(`/blog/${post.slug}`, locale)}>
+            <div class="home-journal-card__visual">{post.image ? <img src={post.image} alt={post.imageAlt} loading="lazy" decoding="async" /> : <span>{String(index + 1).padStart(2, "0")}</span>}</div>
+            <div class="home-journal-card__body"><div class="publication-card__meta"><span>{post.category || blog.label}</span>{formatDate(post.publishedAt) && <time datetime={post.publishedAt ?? undefined}>{formatDate(post.publishedAt)}</time>}</div><h3>{post.title}</h3><p>{post.excerpt}</p><div class="home-journal-card__footer"><span><Icon name="clock" size={15} />{blog.readingTime(estimateReadingMinutes(post.body))}</span><strong>{blog.readArticle} <span aria-hidden="true">↗</span></strong></div></div>
+          </a>
+        </article>)}
+      </div>
+    </div>
+  </section>}
+
+  <section class="philosophy section section-rule deferred-section">
+    <div class="shell philosophy-grid reveal">
+      <p class="section-label">{h.philosophy.label}</p>
+      <blockquote>{h.philosophy.quote}</blockquote>
+      <ol role="list">{h.philosophy.principles.map((principle, index) => <li><span>0{index + 1}</span>{principle}</li>)}</ol>
+    </div>
+  </section>
+
+  <section class="contact-cta section section-rule deferred-section">
+    <div class="shell contact-grid reveal"><p class="section-label">{t.common.navigation.contact}</p><div><h2 class="section-title">{h.contactCta.heading}</h2><p class="lead">{h.contactCta.body}</p><a class="button-link primary" href={localizePath("/contact", locale)}>{h.contactCta.cta} <span aria-hidden="true">↗</span></a></div></div>
+  </section>
+
+  <style>
+    .home-services {
+      padding-block: clamp(5rem, 10vw, 9rem);
+      background:
+        linear-gradient(90deg, transparent 0 67%, rgba(201, 244, 61, .035) 67% 100%),
+        var(--ink);
+    }
+
+    .home-services__intro {
+      display: grid;
+      grid-template-columns: minmax(15rem, .82fr) minmax(0, 1.18fr);
+      gap: clamp(2rem, 7vw, 9rem);
+      align-items: end;
+      padding-bottom: clamp(3.5rem, 7vw, 6rem);
+    }
+
+    .home-services__intro .section-title {
+      max-width: 16ch;
+      margin-top: .9rem;
+    }
+
+    .home-services__intro .lead {
+      max-width: 43rem;
+      margin: 0;
+    }
+
+    .home-services__actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .7rem;
+      margin-top: 2rem;
+    }
+
+    .home-services__visual {
+      position: relative;
+      margin: 0 0 clamp(3.5rem, 7vw, 6rem);
+      overflow: hidden;
+      border: 1px solid var(--line-strong);
+      background: #060707;
+    }
+
+    .home-services__visual::after {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, rgba(6, 7, 7, .16), transparent 40%, rgba(6, 7, 7, .1));
+      content: "";
+      pointer-events: none;
+    }
+
+    .home-services__visual img {
+      display: block;
+      width: 100%;
+      height: auto;
+      filter: saturate(.88) contrast(1.03);
+    }
+
+    .home-services__visual figcaption {
+      position: absolute;
+      z-index: 1;
+      right: 1rem;
+      bottom: 1rem;
+      left: 1rem;
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      color: var(--paper-soft);
+      font: 600 .62rem/1.3 var(--font-mono);
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+
+    .home-services__list {
+      border-top: 1px solid var(--line-strong);
+    }
+
+    .home-service-card {
+      display: grid;
+      grid-template-columns: minmax(7rem, .28fr) minmax(15rem, .8fr) minmax(16rem, .92fr);
+      gap: clamp(1.5rem, 4vw, 4.5rem);
+      padding-block: clamp(2.5rem, 5vw, 4.5rem);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .home-service-card__topline {
+      display: flex;
+      flex-direction: column;
+      gap: .65rem;
+      color: var(--paper-soft);
+      font: 600 .62rem/1.45 var(--font-mono);
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+
+    .home-service-card__topline span:first-child {
+      color: var(--accent);
+      font-size: 1.15rem;
+    }
+
+    .home-service-card h3 {
+      max-width: 14ch;
+      margin: 0;
+      font: 400 clamp(2rem, 3.6vw, 4.25rem)/.95 var(--font-serif);
+      letter-spacing: -.045em;
+    }
+
+    .home-service-card__outcome {
+      grid-column: 2;
+      max-width: 31rem;
+      margin: -.8rem 0 0;
+      color: var(--accent);
+      font: 500 clamp(1rem, 1.35vw, 1.22rem)/1.45 var(--font-sans);
+    }
+
+    .home-service-card__description {
+      grid-column: 3;
+      grid-row: 1;
+      max-width: 40rem;
+      margin: 0;
+      color: var(--paper-soft);
+      line-height: 1.65;
+    }
+
+    .home-service-card ul {
+      grid-column: 3;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      border-top: 1px solid var(--line);
+    }
+
+    .home-service-card li {
+      position: relative;
+      padding: .8rem 0 .8rem 1.1rem;
+      border-bottom: 1px solid var(--line);
+      color: var(--paper);
+      font-size: .86rem;
+    }
+
+    .home-service-card li::before {
+      position: absolute;
+      top: 1.15rem;
+      left: 0;
+      width: .38rem;
+      height: .38rem;
+      background: var(--accent);
+      content: "";
+    }
+
+    .home-service-card__fit {
+      grid-column: 2;
+      margin: 1rem 0 0;
+      color: var(--paper-soft);
+      font-size: .82rem;
+      line-height: 1.6;
+    }
+
+    .home-service-card__fit strong {
+      display: block;
+      margin-bottom: .35rem;
+      color: var(--paper);
+      font: 600 .61rem/1.4 var(--font-mono);
+      letter-spacing: .09em;
+      text-transform: uppercase;
+    }
+
+    .home-service-card__evidence {
+      display: grid;
+      grid-column: 3;
+      gap: .55rem;
+      align-content: start;
+      margin-top: 1rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--accent);
+      transition: color 180ms ease, border-color 180ms ease;
+    }
+
+    .home-service-card__evidence span,
+    .home-service-card__evidence em {
+      color: var(--paper-soft);
+      font: 600 .6rem/1.35 var(--font-mono);
+      letter-spacing: .09em;
+      text-transform: uppercase;
+    }
+
+    .home-service-card__evidence strong {
+      max-width: 36rem;
+      color: var(--paper);
+      font-size: .84rem;
+      font-weight: 400;
+      line-height: 1.55;
+    }
+
+    .home-service-card__evidence em {
+      color: var(--accent);
+      font-style: normal;
+    }
+
+    .home-service-card__evidence:hover strong,
+    .home-service-card__evidence:focus-visible strong {
+      color: var(--accent);
+    }
+
+    .home-services__proof {
+      display: grid;
+      grid-template-columns: minmax(12rem, .55fr) minmax(0, 1.45fr);
+      gap: 2rem;
+      align-items: start;
+      padding-top: 2rem;
+    }
+
+    .home-services__proof ul {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: .8rem 2rem;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .home-services__proof li {
+      display: flex;
+      gap: .65rem;
+      align-items: center;
+      color: var(--paper-soft);
+      font-size: .83rem;
+    }
+
+    @media (max-width: 900px) {
+      .home-services {
+        background: var(--ink);
+      }
+
+      .home-services__intro,
+      .home-service-card,
+      .home-services__proof {
+        grid-template-columns: 1fr;
+      }
+
+      .home-service-card {
+        gap: 1.25rem;
+      }
+
+      .home-service-card__topline {
+        flex-direction: row;
+        align-items: baseline;
+        justify-content: space-between;
+      }
+
+      .home-service-card__outcome,
+      .home-service-card__description,
+      .home-service-card ul,
+      .home-service-card__fit,
+      .home-service-card__evidence {
+        grid-column: 1;
+        grid-row: auto;
+      }
+
+      .home-service-card__outcome {
+        margin-top: 0;
+      }
+    }
+
+    @media (max-width: 560px) {
+      .home-services__actions .button-link {
+        width: 100%;
+      }
+
+      .home-services__proof ul {
+        grid-template-columns: 1fr;
+      }
+
+    }
+  </style>
+
+  <script>
+    const typewriterTargets = Array.from(document.querySelectorAll<HTMLElement>("[data-typewriter]"));
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    const typeLine = async (element: HTMLElement) => {
+      if (element.dataset.typed === "true") return;
+      element.dataset.typed = "true";
+      const text = element.dataset.typingText ?? element.textContent ?? "";
+      const characters = Array.from(text);
+      element.textContent = "";
+      element.closest(".home-proof__typing-line")?.classList.add("is-typing");
+      for (const character of characters) {
+        element.textContent += character;
+        await new Promise((resolve) => window.setTimeout(resolve, 34));
+      }
+      element.closest(".home-proof__typing-line")?.classList.add("is-complete");
+    };
+
+    if (!reduceMotion && "IntersectionObserver" in window) {
+      const typewriterObserver = new IntersectionObserver((entries, observer) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) return;
+          void typeLine(entry.target as HTMLElement);
+          observer.unobserve(entry.target);
+        });
+      }, { threshold: .7 });
+      typewriterTargets.forEach((element) => typewriterObserver.observe(element));
+    }
+  </script>
+</BaseLayout>

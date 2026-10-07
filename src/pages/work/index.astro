@@ -1,0 +1,20 @@
+---
+import WorkPage from "../../components/pages/WorkPage.astro";
+import UnavailablePage from "../../components/pages/UnavailablePage.astro";
+import { type Locale } from "../../i18n/dictionaries";
+import { resolveRequestLocale } from "../../i18n/locale-preference";
+import { loadPublicSnapshot } from "../../lib/public-runtime";
+import { canUseBundledFallback, publishedProjects, setPublicCache } from "../../lib/public-content";
+
+export const prerender = false;
+const pageLocale: Locale = resolveRequestLocale(Astro.request);
+setPublicCache(Astro.response.headers);
+const snapshot = await loadPublicSnapshot(pageLocale);
+const unavailable = snapshot.status === "unavailable";
+const projects = canUseBundledFallback(snapshot, "project") ? undefined : publishedProjects(snapshot);
+if (unavailable) {
+  Astro.response.status = 503;
+  setPublicCache(Astro.response.headers, "unavailable");
+}
+---
+{unavailable ? <UnavailablePage locale={pageLocale} /> : <WorkPage locale={pageLocale} projects={projects} />}

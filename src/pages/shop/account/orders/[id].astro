@@ -1,0 +1,28 @@
+---
+import { env } from "cloudflare:workers";
+import AccountOrderDetailPage from "../../../../components/pages/AccountOrderDetailPage.astro";
+import { localizePath, type Locale } from "../../../../i18n/dictionaries";
+import { resolveRequestLocale } from "../../../../i18n/locale-preference";
+import { getCustomerOrderDetail } from "../../../../lib/shop/customer-account";
+import { getCustomerSession, setPrivateNoStore } from "../../../../lib/shop/customer-auth";
+
+export const prerender = false;
+const shopLocale: Locale = resolveRequestLocale(Astro.request);
+const accountLoginPath = localizePath("/shop/account/login", shopLocale);
+const accountOrdersPath = localizePath("/shop/account/orders", shopLocale);
+setPrivateNoStore(Astro.response.headers);
+
+const session = await getCustomerSession(env, Astro.request);
+if (!session) {
+  return Astro.redirect(accountLoginPath, 302);
+}
+const orderId = Astro.params.id?.trim() ?? "";
+if (!orderId) {
+  return Astro.redirect(accountOrdersPath, 302);
+}
+const order = await getCustomerOrderDetail(env, session.customerId, orderId);
+if (!order) {
+  return Astro.redirect(accountOrdersPath, 302);
+}
+---
+<AccountOrderDetailPage locale={shopLocale} order={order} />

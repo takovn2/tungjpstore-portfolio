@@ -1,0 +1,33 @@
+/**
+ * Shared Telegram Mini App skin (TUNG Shop + GLB).
+ * Currently mirrored into page-level :root tokens; import when pages are modularized.
+ */
+:root.tg-mini,
+.tg-mini {
+  --shop-bg: #f4faf9;
+  --shop-bg-soft: #eaf5f3;
+  --shop-surface: #ffffff;
+  --shop-ink: #2a2430;
+  --shop-ink-soft: #7a6f7c;
+  --shop-accent: #2a9d8f;
+  --shop-accent-hover: #218578;
+  --shop-mint: #2fc48a;
+  --shop-sun: #ffc857;
+  --shop-accent-2: #7c9cff;
+  --ink: var(--shop-bg);
+  --ink-soft: var(--shop-bg-soft);
+  --surface: var(--shop-surface);
+  --paper: var(--shop-ink);
+  --paper-soft: var(--shop-ink-soft);
+  --line: rgba(42, 36, 48, 0.08);
+  --line-strong: rgba(42, 36, 48, 0.16);
+  --accent: var(--shop-accent);
+  --accent-ink: #ffffff;
+  --danger: #ff5c6c;
+  --card: var(--shop-surface);
+  --nav: rgba(255, 248, 243, 0.9);
+  --notice: rgba(42, 157, 143, 0.12);
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.2, 0.9, 0.2, 1.08);
+  color-scheme: light;
+}

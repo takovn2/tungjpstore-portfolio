@@ -1,0 +1,35 @@
+---
+import HomePage from "../../components/pages/HomePage.astro";
+import NotFoundPage from "../../components/pages/NotFoundPage.astro";
+import UnavailablePage from "../../components/pages/UnavailablePage.astro";
+import { locales, type Locale } from "../../i18n/dictionaries";
+import { loadPublicSnapshot, isManagedSlug } from "../../lib/public-runtime";
+import { canUseBundledFallback, publishedBlogPosts, publishedProjects, publishedSiteSection, setPublicCache } from "../../lib/public-content";
+
+export const prerender = false;
+
+const rawLang = String(Astro.params.lang ?? "");
+if (rawLang === "vi") return Astro.redirect(`/${Astro.url.search}`, 308);
+const isLocale = (locales as readonly string[]).includes(rawLang) && rawLang !== "vi";
+const locale = (isLocale ? rawLang : "vi") as Locale;
+setPublicCache(Astro.response.headers);
+if (isLocale && Astro.url.pathname.endsWith("/")) return Astro.redirect(`/${rawLang}${Astro.url.search}`, 308);
+if (!isLocale) {
+  Astro.response.status = 404;
+  setPublicCache(Astro.response.headers, "not-found");
+}
+const snapshot = isLocale ? await loadPublicSnapshot(locale) : null;
+const heroContent = snapshot ? publishedSiteSection(snapshot, "home-hero") : null;
+const heroHidden = snapshot ? isManagedSlug(snapshot, "site_section", "home-hero") && !heroContent : false;
+const unavailable = snapshot?.status === "unavailable";
+const projects = snapshot && !canUseBundledFallback(snapshot, "project") ? publishedProjects(snapshot) : undefined;
+const blogPosts = snapshot && !canUseBundledFallback(snapshot, "post") ? publishedBlogPosts(snapshot) : [];
+if (unavailable) {
+  Astro.response.status = 503;
+  setPublicCache(Astro.response.headers, "unavailable");
+} else if (heroHidden) {
+  Astro.response.status = 404;
+  setPublicCache(Astro.response.headers, "not-found");
+}
+---
+{unavailable ? <UnavailablePage locale={locale} /> : isLocale && !heroHidden ? <HomePage locale={locale} heroContent={heroContent} projects={projects} blogPosts={blogPosts} /> : <NotFoundPage locale={locale} />}

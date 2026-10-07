@@ -1,0 +1,11 @@
+---
+import PrivacyPage from "../components/pages/PrivacyPage.astro";
+import { type Locale } from "../i18n/dictionaries";
+import { resolveRequestLocale } from "../i18n/locale-preference";
+
+// Keep this route on the Worker so HTTPS and canonical-host middleware cannot
+// be bypassed by a cached Static Asset response.
+export const prerender = false;
+const pageLocale: Locale = resolveRequestLocale(Astro.request);
+---
+<PrivacyPage locale={pageLocale} />

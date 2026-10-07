@@ -1,0 +1,329 @@
+---
+import { env } from "cloudflare:workers";
+import Header from "../components/Header.astro";
+import StoreHeader from "../components/StoreHeader.astro";
+import StoreFooter from "../components/StoreFooter.astro";
+import Footer from "../components/Footer.astro";
+import QuickContactFab from "../components/QuickContactFab.astro";
+import { defaultLocale, getTranslation, locales, localizePath, type Locale } from "../i18n/dictionaries";
+import { blogFeedPath, getBlogCopy } from "../i18n/blog";
+import { getSiteState } from "../lib/admin/repository";
+import { getQuickContactMenu, type QuickContactMenu } from "../lib/quick-contact";
+import "../styles/globals.css";
+
+interface Props {
+  title?: string;
+  description?: string;
+  image?: string;
+  imageAlt?: string;
+  noindex?: boolean;
+  locale?: Locale;
+  ogType?: "website" | "article" | "product";
+  articlePublishedTime?: string | null;
+  articleModifiedTime?: string | null;
+  articleSection?: string;
+  structuredData?: Record<string, unknown> | Array<Record<string, unknown>>;
+  alternateLocales?: Locale[];
+  rss?: boolean;
+  chrome?: "portfolio" | "store";
+  storeCartDrawer?: boolean;
+}
+
+const {
+  title = "TUNG — Independent Product Builder",
+  description = "Independent product builder focused on SaaS, business automation and financial infrastructure.",
+  image = "/og/default.png",
+  imageAlt,
+  noindex = false,
+  locale = defaultLocale,
+  ogType = "website",
+  articlePublishedTime = null,
+  articleModifiedTime = null,
+  articleSection,
+  structuredData,
+  alternateLocales = locales,
+  rss = true,
+  chrome = "portfolio",
+  storeCartDrawer = false,
+} = Astro.props;
+const t = getTranslation(locale);
+const siteUrl = Astro.site ?? new URL("https://tung.codes");
+const canonicalPath = Astro.url.pathname === "/" ? "/" : Astro.url.pathname.replace(/\/$/, "");
+const canonical = new URL(canonicalPath, siteUrl);
+const fullTitle = /\btung\b/i.test(title) ? title : `${title} — TUNG`;
+const socialImage = new URL(image, siteUrl);
+const analyticsToken = import.meta.env.PUBLIC_CLOUDFLARE_ANALYTICS_TOKEN;
+const localeTag = locale === "zh" ? "zh-Hans" : locale;
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "Person",
+  name: "TUNG",
+  "@id": "https://tung.codes/#person",
+  url: "https://tung.codes",
+  image: new URL("/images/tung-about-portrait.webp", siteUrl).href,
+  jobTitle: t.home.eyebrow,
+  description: t.about.metaDescription,
+  knowsLanguage: ["Vietnamese", "English", "Japanese", "Chinese"],
+  knowsAbout: ["Product strategy", "Software architecture", "SaaS", "Business automation", "Operational systems", "Cloudflare"],
+  workLocation: [
+    { "@type": "Country", name: "Vietnam" },
+    { "@type": "Country", name: "Japan" },
+  ],
+};
+const websiteJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  "@id": "https://tung.codes/#website",
+  url: "https://tung.codes/",
+  name: "TUNG",
+  description: t.home.metaDescription,
+  publisher: { "@id": "https://tung.codes/#person" },
+  inLanguage: ["vi", "en", "ja", "zh-Hans"],
+};
+const webpageJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  "@id": `${canonical.href}#webpage`,
+  url: canonical.href,
+  name: fullTitle,
+  description,
+  isPartOf: { "@id": "https://tung.codes/#website" },
+  about: { "@id": "https://tung.codes/#person" },
+  inLanguage: localeTag,
+};
+const structuredDataItems = structuredData ? (Array.isArray(structuredData) ? structuredData : [structuredData]) : [];
+const openGraphLocales: Record<Locale, string> = {
+  vi: "vi_VN",
+  en: "en_US",
+  ja: "ja_JP",
+  zh: "zh_CN",
+};
+const geoMetadata: Record<Locale, { region: string; placename: string }> = {
+  vi: { region: "VN", placename: "Vietnam" },
+  ja: { region: "JP", placename: "Japan" },
+  zh: { region: "CN", placename: "China" },
+  en: { region: "US", placename: "United States" },
+};
+const geo = geoMetadata[locale] ?? geoMetadata.en;
+const rssUrl = new URL(blogFeedPath(locale), Astro.site ?? "https://tung.codes");
+const rssTitle = `${getBlogCopy(locale).publicationName} — RSS`;
+const socialImageAlt = imageAlt || fullTitle;
+// `x-default` is the fallback for visitors whose language matches none of the
+// announced alternates. English is the global default: it matches the geo route
+// in middleware.ts, which sends every unrecognised country to `en`. It was
+// previously pinned to `vi`, which told Google the Vietnamese page was the
+// catch-all for a site that is actively expanding beyond Vietnam.
+const xDefaultLocale: Locale = alternateLocales.includes("en") ? "en" : locale;
+let quickContactMenu: QuickContactMenu | null = null;
+if (chrome === "portfolio" && env.CONTENT_DB) {
+  try {
+    quickContactMenu = getQuickContactMenu((await getSiteState(env.CONTENT_DB))?.config, locale);
+  } catch {
+    // Keep the portfolio available if the optional CMS settings table is unavailable.
+  }
+}
+const serializeJsonLd = (value: unknown) => JSON.stringify(value)
+  .replaceAll("<", "\\u003c")
+  .replaceAll(">", "\\u003e")
+  .replaceAll("&", "\\u0026");
+---
+
+<!doctype html>
+<html class="no-js" lang={locale === "zh" ? "zh-Hans" : locale}>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="generator" content={Astro.generator} />
+    <meta name="theme-color" content="#111317" />
+    <meta name="description" content={description} />
+    <meta name="geo.region" content={geo.region} />
+    <meta name="geo.placename" content={geo.placename} />
+    <meta property="og:site_name" content="TUNG" />
+    <meta property="og:locale" content={openGraphLocales[locale]} />
+    {alternateLocales.filter((item) => item !== locale).map((item) => <meta property="og:locale:alternate" content={openGraphLocales[item]} />)}
+    <meta name="author" content="TUNG" />
+    {noindex ? <meta name="robots" content="noindex, nofollow" /> : <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />}
+    {!noindex && <link rel="canonical" href={canonical} />}
+    {!noindex && alternateLocales.map((item) => <link rel="alternate" hreflang={item === "zh" ? "zh-Hans" : item} href={new URL(localizePath(canonicalPath, item), Astro.site ?? "https://tung.codes")} />)}
+    {!noindex && <link rel="alternate" hreflang="x-default" href={new URL(localizePath(canonicalPath, xDefaultLocale), Astro.site ?? "https://tung.codes")} />}
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300..800;1,300..800&display=swap" rel="stylesheet" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/tung-app-icon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/icons/tung-app-icon-16.png" />
+    <link rel="shortcut icon" href="/favicon.ico" />
+    <link rel="apple-touch-icon" sizes="192x192" href="/icons/tung-app-icon-192.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+    {rss && <link rel="alternate" type="application/rss+xml" title={rssTitle} href={rssUrl} />}
+    <meta property="og:type" content={ogType} />
+    <meta property="og:title" content={fullTitle} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={socialImage} />
+    <meta property="og:image:alt" content={socialImageAlt} />
+    {image === "/og/default.png" && <meta property="og:image:width" content="1200" />}
+    {image === "/og/default.png" && <meta property="og:image:height" content="630" />}
+    <meta property="og:image:type" content={socialImage.pathname.endsWith(".webp") ? "image/webp" : "image/png"} />
+    {ogType === "article" && articlePublishedTime && <meta property="article:published_time" content={articlePublishedTime} />}
+    {ogType === "article" && articleModifiedTime && <meta property="article:modified_time" content={articleModifiedTime} />}
+    {ogType === "article" && articleSection && <meta property="article:section" content={articleSection} />}
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={fullTitle} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={socialImage} />
+    <meta name="twitter:image:alt" content={socialImageAlt} />
+    <title>{fullTitle}</title>
+    <script is:inline type="application/ld+json" set:html={serializeJsonLd(jsonLd)} />
+    <script is:inline type="application/ld+json" set:html={serializeJsonLd(websiteJsonLd)} />
+    <script is:inline type="application/ld+json" set:html={serializeJsonLd(webpageJsonLd)} />
+    {structuredDataItems.map((item) => <script is:inline type="application/ld+json" set:html={serializeJsonLd({ ...item, inLanguage: item.inLanguage ?? localeTag })} />)}
+    {analyticsToken && <script is:inline defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon={JSON.stringify({ token: analyticsToken })}></script>}
+    <script is:inline>
+      document.documentElement.classList.replace("no-js", "js");
+      document.documentElement.dataset.enhanced = "true";
+    </script>
+  </head>
+  <body class:list={{ "chrome-store": chrome === "store" }}>
+    <a class="skip-link" href="#main-content">{t.common.skipToContent}</a>
+    {chrome === "store" ? <StoreHeader locale={locale} cartDrawer={storeCartDrawer} /> : <Header locale={locale} availableLocales={alternateLocales} />}
+    <main id="main-content">
+      <slot />
+    </main>
+    {chrome === "store" ? <StoreFooter locale={locale} /> : <Footer locale={locale} />}
+    {chrome === "portfolio" && quickContactMenu && <QuickContactFab menu={quickContactMenu} />}
+    <slot name="page-scripts" />
+    {chrome === "store" && (
+      <script is:inline>
+        (() => {
+          const ATTR_KEY = "tung:shop:attribution:v1";
+          const CART_KEY = "tung:shop:cart:v1";
+          const cleanCode = (value) => {
+            if (typeof value !== "string") return null;
+            const v = value.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, "").slice(0, 40);
+            return v.length >= 2 ? v : null;
+          };
+          const readAttr = () => {
+            try { return JSON.parse(localStorage.getItem(ATTR_KEY) || "null") || {}; } catch { return {}; }
+          };
+          const writeAttr = (next) => {
+            try { localStorage.setItem(ATTR_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+          };
+          const params = new URLSearchParams(window.location.search);
+          const existing = readAttr();
+          const next = {
+            ref: existing.ref || null,
+            discountCode: existing.discountCode || null,
+            channel: existing.channel || "web",
+            utmSource: existing.utmSource || null,
+            utmMedium: existing.utmMedium || null,
+            utmCampaign: existing.utmCampaign || null,
+            landingPath: existing.landingPath || window.location.pathname,
+            capturedAt: existing.capturedAt || new Date().toISOString(),
+            lastProductSlug: existing.lastProductSlug || null,
+          };
+          const ref = cleanCode(params.get("ref") || params.get("affiliate") || params.get("partner"));
+          const discount = cleanCode(params.get("discount") || params.get("promo") || params.get("code"));
+          if (ref) next.ref = ref;
+          if (discount) next.discountCode = discount;
+          if (params.get("utm_source")) next.utmSource = String(params.get("utm_source")).slice(0, 80);
+          if (params.get("utm_medium")) next.utmMedium = String(params.get("utm_medium")).slice(0, 80);
+          if (params.get("utm_campaign")) next.utmCampaign = String(params.get("utm_campaign")).slice(0, 80);
+          const productMatch = window.location.pathname.match(/\/shop\/([^/]+)\/?$/);
+          if (productMatch && productMatch[1] && productMatch[1] !== "cart" && productMatch[1] !== "account" && productMatch[1] !== "order") {
+            next.lastProductSlug = decodeURIComponent(productMatch[1]).slice(0, 80);
+          }
+          writeAttr(next);
+
+          // Prefill discount field if present on cart page
+          if (next.discountCode) {
+            const discountInput = document.querySelector("[data-discount-code], input[name='discountCode'], input[name='discount']");
+            if (discountInput && !discountInput.value) discountInput.value = next.discountCode;
+          }
+
+          // Cart bridge: server token (preferred) or legacy base64 payload
+          const bridge = params.get("bridge");
+          if (bridge) {
+            const mergeItems = (incoming) => {
+              const current = (() => { try { return JSON.parse(localStorage.getItem(CART_KEY) || "[]"); } catch { return []; } })();
+              const map = new Map();
+              [...(Array.isArray(current) ? current : []), ...(Array.isArray(incoming) ? incoming : [])].forEach((item) => {
+                if (!item?.variantId) return;
+                const prev = map.get(item.variantId);
+                const maxQ = Math.max(1, Math.min(50, Number(item.maxQuantity || prev?.maxQuantity || 10)));
+                if (prev) prev.quantity = Math.min(maxQ, (Number(prev.quantity) || 0) + (Number(item.quantity) || 0));
+                else map.set(item.variantId, { ...item, quantity: Math.min(maxQ, Math.max(1, Number(item.quantity) || 1)) });
+              });
+              localStorage.setItem(CART_KEY, JSON.stringify(Array.from(map.values()).slice(0, 30)));
+              window.dispatchEvent(new CustomEvent("tung:shop-cart"));
+            };
+            const clearBridgeParam = () => {
+              try {
+                const url = new URL(window.location.href);
+                url.searchParams.delete("bridge");
+                history.replaceState(null, "", url.pathname + url.search + url.hash);
+              } catch { /* ignore */ }
+            };
+            // Server-side one-time token
+            fetch(`/api/shop/bridge?token=${encodeURIComponent(bridge)}`, { credentials: "same-origin", cache: "no-store" })
+              .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
+              .then(({ ok, data }) => {
+                if (ok && data?.bridge?.items) {
+                  mergeItems(data.bridge.items);
+                  if (data.bridge.attribution) {
+                    const a = { ...readAttr(), ...data.bridge.attribution };
+                    writeAttr(a);
+                  }
+                  clearBridgeParam();
+                  return;
+                }
+                // Legacy inline base64url payload fallback
+                try {
+                  const padded = bridge.replace(/-/g, "+").replace(/_/g, "/");
+                  const pad = padded.length % 4 === 0 ? "" : "=".repeat(4 - (padded.length % 4));
+                  const json = decodeURIComponent(escape(atob(padded + pad)));
+                  const dataLegacy = JSON.parse(json);
+                  if (dataLegacy?.v === 1 && Array.isArray(dataLegacy.items)) {
+                    const created = Date.parse(dataLegacy.createdAt || 0);
+                    if (Number.isFinite(created) && Date.now() - created < 2 * 60 * 60 * 1000) {
+                      mergeItems(dataLegacy.items);
+                    }
+                  }
+                } catch { /* ignore */ }
+                clearBridgeParam();
+              })
+              .catch(() => { clearBridgeParam(); });
+          }
+
+          // Expose for checkout scripts
+          window.__tungShopAttribution = () => readAttr();
+          window.__tungShopEncodeRef = () => {
+            const a = readAttr();
+            const parts = [];
+            if (a.ref) parts.push(`ref=${a.ref}`);
+            if (a.discountCode) parts.push(`promo=${a.discountCode}`);
+            if (a.channel) parts.push(`ch=${a.channel}`);
+            if (a.utmSource) parts.push(`us=${String(a.utmSource).slice(0, 40)}`);
+            if (a.lastProductSlug) parts.push(`p=${String(a.lastProductSlug).slice(0, 40)}`);
+            return parts.join("|").slice(0, 180) || null;
+          };
+        })();
+      </script>
+    )}
+    <script>
+      const revealItems = Array.from(document.querySelectorAll(".reveal"));
+      if (!("IntersectionObserver" in window)) {
+        revealItems.forEach((element) => element.classList.add("is-visible"));
+      } else {
+        const observer = new IntersectionObserver((entries) => {
+          entries.forEach((entry) => {
+            if (entry.isIntersecting) {
+              entry.target.classList.add("is-visible");
+              observer.unobserve(entry.target);
+            }
+          });
+        }, { threshold: 0.14 });
+        revealItems.forEach((element) => observer.observe(element));
+      }
+    </script>
+  </body>
+</html>

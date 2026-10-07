@@ -1,0 +1,1188 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import CheckoutStepRail from "../shop/CheckoutStepRail.astro";
+import OrderTrustTimeline from "../shop/OrderTrustTimeline.astro";
+import TrustStrip from "../shop/TrustStrip.astro";
+import AuroraCanvas from "../shop/AuroraCanvas.astro";
+import { localizePath, type Locale } from "../../i18n/dictionaries";
+import { getShopCopy, shopLanguageTag } from "../../i18n/shop";
+import { trustCopyForDelivery } from "../../lib/shop/platform/trust";
+
+interface Props {
+  locale: Locale;
+}
+
+const { locale } = Astro.props;
+const copy = getShopCopy(locale);
+const flow = copy.flow;
+const account = copy.account;
+const shopHref = localizePath("/shop", locale);
+const accountLoginHref = localizePath("/shop/account/login", locale);
+const accountHref = localizePath("/shop/account", locale);
+const orderStatusPath = localizePath("/shop/order", locale);
+const crypto = copy.checkout.crypto;
+---
+
+<BaseLayout
+  title={copy.checkout.orderPage.metaTitle}
+  description={copy.checkout.orderPage.metaDescription}
+  locale={locale}
+  chrome="store"
+  noindex={true}
+  alternateLocales={[locale]}
+  rss={false}
+>
+  <article class="order-flow" data-order-root data-view="loading">
+    <AuroraCanvas class="order-flow__aurora" />
+    <div class="order-flow__inner shell">
+      <header class="order-flow__header">
+        <div class="order-flow__title">
+          <h1 data-order-heading>{flow.loading}</h1>
+          <p class="order-flow__pill" data-order-pill hidden>
+            <i aria-hidden="true"></i>
+            <span data-order-state-label>—</span>
+          </p>
+        </div>
+        <CheckoutStepRail steps={flow.steps} current={3} label={flow.pay.title} />
+      </header>
+
+      <section class="order-view" data-view-panel="loading" aria-busy="true">
+        <div class="order-center">
+          <span class="status-dot status-dot--pulse" aria-hidden="true"></span>
+          <p>{flow.loading}</p>
+        </div>
+      </section>
+
+      <!-- Pay: QR-first, centered -->
+      <section class="order-view" data-view-panel="pay" hidden>
+        <div class="pay-card">
+          <div class="pay-card__qr">
+            <div class="pay-card__qr-frame">
+              <img
+                data-order-qr-image
+                hidden
+                alt=""
+                width="360"
+                height="360"
+                decoding="async"
+                referrerpolicy="no-referrer"
+              />
+              <div class="pay-card__qr-empty" data-order-qr-empty>
+                <span data-order-qr-note>{flow.pay.noQr}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="pay-card__body">
+            <p class="pay-card__amount"><span>{flow.pay.amount}</span><strong data-order-amount>—</strong></p>
+
+            <dl class="pay-card__meta">
+              <div>
+                <dt>{copy.checkout.order}</dt>
+                <dd data-order-number>—</dd>
+              </div>
+              <div>
+                <dt>{flow.pay.content}</dt>
+                <dd>
+                  <code data-payment-description>—</code>
+                  <button type="button" data-copy-payment-description>{flow.pay.copy}</button>
+                </dd>
+              </div>
+              <div data-order-expiry-row hidden>
+                <dt>{flow.pay.expires}</dt>
+                <dd><time data-order-expiry>—</time></dd>
+              </div>
+            </dl>
+
+            <section class="crypto-payment-details" data-crypto-payment-details hidden aria-labelledby="crypto-payment-title">
+              <h2 id="crypto-payment-title">{crypto.title}</h2>
+              <div class="crypto-network-banner" data-crypto-network-banner>
+                <span class="crypto-network-mark" data-crypto-network-mark aria-hidden="true">◎</span>
+                <div><strong data-crypto-network-label>—</strong><small>{crypto.manualReviewNote}</small></div>
+              </div>
+              <div class="crypto-qr-card" data-crypto-qr hidden>
+                <img data-crypto-qr-image alt="Crypto payment QR code" loading="lazy" decoding="async" />
+                <small>Scan to send the exact amount on the selected network.</small>
+              </div>
+              <p class="crypto-payment-amount"><span>{crypto.sendExactly}</span><strong data-crypto-amount>—</strong></p>
+              <dl class="pay-card__meta crypto-payment-meta">
+                <div><dt>{crypto.provider}</dt><dd><span data-crypto-provider>—</span></dd></div>
+                <div data-crypto-network-row><dt>{crypto.network}</dt><dd><span data-crypto-network>—</span></dd></div>
+                <div><dt data-crypto-destination-label>{crypto.destination}</dt><dd><code data-crypto-destination>—</code><button type="button" data-copy-crypto-destination>{crypto.copy}</button></dd></div>
+                <div data-crypto-memo-row><dt>{crypto.memoOrTag}</dt><dd><code data-crypto-memo>—</code><button type="button" data-copy-crypto-memo>{crypto.copy}</button></dd></div>
+              </dl>
+              <form data-crypto-reference-form class="crypto-reference-form">
+                <label><span>{crypto.transactionReference}</span><input name="transactionReference" maxlength="180" autocomplete="off" spellcheck="false" placeholder={crypto.transactionPlaceholder} /></label>
+                <label><span>{crypto.proofFile}</span><input name="proof" type="file" accept="image/jpeg,image/png,image/webp,image/gif,application/pdf" data-crypto-proof-file /></label>
+                <small class="crypto-proof-hint">{crypto.proofHint}</small>
+                <button type="submit" class="flow-btn flow-btn--primary" data-crypto-reference-submit>{crypto.confirmPayment}</button>
+                <p class="crypto-reference-status" data-crypto-reference-status role="status" aria-live="polite"></p>
+              </form>
+            </section>
+
+            <div class="pay-card__actions">
+              <a class="flow-btn flow-btn--primary" data-order-checkout href="#" target="_blank" rel="noopener noreferrer" hidden>{flow.pay.openPayOs}</a>
+              <button type="button" class="flow-btn flow-btn--ghost" data-order-refresh>{flow.pay.refresh}</button>
+              <a class="flow-btn flow-btn--ghost" href={shopHref}>{flow.pay.backShop}</a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="order-view" data-view-panel="verify" hidden>
+        <div class="order-center">
+          <span class="status-dot status-dot--pulse" aria-hidden="true"></span>
+          <h2>{flow.verify.title}</h2>
+          <div class="verify-meta">
+            <div><span>{copy.checkout.order}</span><strong data-order-number-v>—</strong></div>
+            <div><span>{flow.pay.amount}</span><strong data-order-amount-v>—</strong></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="order-view" data-view-panel="deliver" hidden>
+        <div class="deliver-card">
+          <h2>{flow.deliver.title}</h2>
+          <p class="deliver-card__order"><span data-order-number-d>—</span></p>
+          <div class="deliver-list" data-order-delivery-list>
+            <p>{flow.deliver.loading}</p>
+          </div>
+          <div class="order-save" data-order-save hidden>
+            <p data-order-save-copy>{account.login.guestNote}</p>
+            <a class="flow-btn flow-btn--ghost" data-order-save-link href={accountLoginHref}>{account.nav.login}</a>
+          </div>
+          <a class="flow-btn flow-btn--primary" href={shopHref}>{flow.deliver.backShop}</a>
+        </div>
+      </section>
+
+      <section class="order-view" data-view-panel="terminal" hidden>
+        <div class="order-center">
+          <h2 data-order-terminal-title>{flow.terminal.missing}</h2>
+          <a class="flow-btn flow-btn--primary" href={shopHref}>{flow.terminal.backShop}</a>
+        </div>
+      </section>
+    </div>
+  </article>
+
+  <Fragment slot="page-scripts">
+    <script is:inline define:vars={{ flow, checkoutCopy: copy.checkout, cryptoCopy: crypto, localeTag: shopLanguageTag[locale], accountLoginHref, accountHref, orderStatusPath, accountCopy: account }}>
+      const root = document.querySelector("[data-order-root]");
+      const heading = document.querySelector("[data-order-heading]");
+      const pill = document.querySelector("[data-order-pill]");
+      const stateLabel = document.querySelector("[data-order-state-label]");
+      const panels = {
+        loading: document.querySelector('[data-view-panel="loading"]'),
+        pay: document.querySelector('[data-view-panel="pay"]'),
+        verify: document.querySelector('[data-view-panel="verify"]'),
+        deliver: document.querySelector('[data-view-panel="deliver"]'),
+        terminal: document.querySelector('[data-view-panel="terminal"]'),
+      };
+      const qrImage = document.querySelector("[data-order-qr-image]");
+      const qrEmpty = document.querySelector("[data-order-qr-empty]");
+      const qrNote = document.querySelector("[data-order-qr-note]");
+      const amountEls = [document.querySelector("[data-order-amount]"), document.querySelector("[data-order-amount-v]")];
+      const numberEls = [
+        document.querySelector("[data-order-number]"),
+        document.querySelector("[data-order-number-v]"),
+        document.querySelector("[data-order-number-d]"),
+      ];
+      const paymentDescriptionEl = document.querySelector("[data-payment-description]");
+      const expiryEl = document.querySelector("[data-order-expiry]");
+      const expiryRow = document.querySelector("[data-order-expiry-row]");
+      const refreshButton = document.querySelector("[data-order-refresh]");
+      const checkoutLink = document.querySelector("[data-order-checkout]");
+      const copyButton = document.querySelector("[data-copy-payment-description]");
+      const cryptoDetails = document.querySelector("[data-crypto-payment-details]");
+      const cryptoAmount = document.querySelector("[data-crypto-amount]");
+      const cryptoProvider = document.querySelector("[data-crypto-provider]");
+      const cryptoNetwork = document.querySelector("[data-crypto-network]");
+      const cryptoNetworkLabel = document.querySelector("[data-crypto-network-label]");
+      const cryptoNetworkMark = document.querySelector("[data-crypto-network-mark]");
+      const cryptoNetworkBanner = document.querySelector("[data-crypto-network-banner]");
+      const cryptoNetworkRow = document.querySelector("[data-crypto-network-row]");
+      const cryptoDestinationLabel = document.querySelector("[data-crypto-destination-label]");
+      const cryptoQr = document.querySelector("[data-crypto-qr]");
+      const cryptoQrImage = document.querySelector("[data-crypto-qr-image]");
+      const cryptoDestination = document.querySelector("[data-crypto-destination]");
+      const cryptoMemo = document.querySelector("[data-crypto-memo]");
+      const cryptoMemoRow = document.querySelector("[data-crypto-memo-row]");
+      const cryptoReferenceForm = document.querySelector("[data-crypto-reference-form]");
+      const cryptoReferenceStatus = document.querySelector("[data-crypto-reference-status]");
+      const cryptoReferenceSubmit = document.querySelector("[data-crypto-reference-submit]");
+      const cryptoProofFile = document.querySelector("[data-crypto-proof-file]");
+      const deliveryList = document.querySelector("[data-order-delivery-list]");
+      const terminalTitle = document.querySelector("[data-order-terminal-title]");
+      const stepItems = root?.querySelectorAll(".flow-steps li");
+
+      const orderNumber = new URL(window.location.href).searchParams.get("order") || "";
+      const fragment = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+      const fragmentToken = fragment.get("access") || "";
+      const tokenPattern = /^[A-Za-z0-9_-]{24,200}$/;
+      if (fragmentToken && tokenPattern.test(fragmentToken)) {
+        sessionStorage.setItem("tung:shop:last-order", fragmentToken);
+        if (orderNumber) sessionStorage.setItem(`tung:shop:order:${orderNumber}`, fragmentToken);
+        history.replaceState(null, "", window.location.pathname + window.location.search);
+      }
+      const accessToken = tokenPattern.test(fragmentToken)
+        ? fragmentToken
+        : (orderNumber ? sessionStorage.getItem(`tung:shop:order:${orderNumber}`) : "") || sessionStorage.getItem("tung:shop:last-order") || "";
+
+      let pollTimer = 0;
+      let expiryTimer = 0;
+      let deliveryRetryTimer = 0;
+      let currentPaymentDescription = "";
+      let deliveryLoaded = false;
+      let deliveryRetryCount = 0;
+      let qrLoadGeneration = 0;
+      let qrObjectUrl = "";
+
+      const releaseQrObjectUrl = () => {
+        if (!qrObjectUrl) return;
+        URL.revokeObjectURL(qrObjectUrl);
+        qrObjectUrl = "";
+      };
+
+      const formatMoney = (minor, currency) => {
+        const formatter = new Intl.NumberFormat(localeTag, { style: "currency", currency });
+        const digits = formatter.resolvedOptions().maximumFractionDigits || 0;
+        return formatter.format(minor / (10 ** digits));
+      };
+
+      const setRail = (step) => {
+        stepItems?.forEach((li, index) => {
+          const id = index + 1;
+          li.classList.remove("is-active", "is-done", "is-todo");
+          if (id < step) li.classList.add("is-done");
+          else if (id === step) li.classList.add("is-active");
+          else li.classList.add("is-todo");
+        });
+      };
+
+      const liveRail = root?.querySelector("[data-order-live-rail]");
+      const trustTimeline = root?.querySelector("[data-order-trust-timeline]");
+      const setLiveRail = (view) => {
+        if (!liveRail) return;
+        const map = { loading: 0, pay: 1, verify: 2, deliver: 3, terminal: 4 };
+        const active = map[view] ?? 0;
+        liveRail.querySelectorAll("li").forEach((li, index) => {
+          const id = index + 1;
+          li.classList.remove("is-active", "is-done", "is-error");
+          if (active <= 0) return;
+          if (id < active) li.classList.add("is-done");
+          else if (id === active || (view === "terminal" && id === 4)) li.classList.add(view === "terminal" && id === 4 ? "is-done" : "is-active");
+        });
+        if (view === "terminal") {
+          liveRail.querySelectorAll("li").forEach((li) => {
+            li.classList.remove("is-active");
+            li.classList.add("is-done");
+          });
+        }
+        if (trustTimeline) {
+          const trustMap = { loading: 1, pay: 2, verify: 3, deliver: 4, terminal: 4 };
+          const tActive = trustMap[view] ?? 1;
+          trustTimeline.querySelectorAll("li").forEach((li, index) => {
+            const id = index + 1;
+            li.classList.remove("is-active", "is-done", "is-todo", "is-error");
+            if (view === "terminal") li.classList.add("is-done");
+            else if (id < tActive) li.classList.add("is-done");
+            else if (id === tActive) li.classList.add("is-active");
+            else li.classList.add("is-todo");
+          });
+        }
+      };
+
+      const showView = (view) => {
+        root?.setAttribute("data-view", view);
+        Object.entries(panels).forEach(([key, el]) => {
+          if (el) el.hidden = key !== view;
+        });
+        setLiveRail(view);
+      };
+
+      const setTerminal = (title) => {
+        clearTimeout(pollTimer);
+        clearTimeout(deliveryRetryTimer);
+        clearInterval(expiryTimer);
+        showView("terminal");
+        setRail(3);
+        if (heading) heading.textContent = title;
+        if (terminalTitle) terminalTitle.textContent = title;
+        if (pill) pill.hidden = true;
+        if (checkoutLink) checkoutLink.hidden = true;
+      };
+
+      const startExpiry = (iso) => {
+        clearInterval(expiryTimer);
+        if (!expiryEl || !expiryRow || !iso) {
+          expiryRow?.setAttribute("hidden", "");
+          return;
+        }
+        expiryRow.removeAttribute("hidden");
+        expiryEl.setAttribute("datetime", iso);
+        const expiry = Date.parse(iso);
+        const update = () => {
+          const remaining = Math.max(0, expiry - Date.now());
+          if (!remaining) {
+            expiryEl.textContent = flow.pay.expired;
+            clearInterval(expiryTimer);
+            return;
+          }
+          const seconds = Math.floor(remaining / 1000);
+          const values = [Math.floor(seconds / 3600), Math.floor((seconds % 3600) / 60), seconds % 60];
+          expiryEl.textContent = values.map((value) => String(value).padStart(2, "0")).join(":");
+        };
+        update();
+        expiryTimer = window.setInterval(update, 1000);
+      };
+
+      const fillMeta = (order) => {
+        const amount = formatMoney(order.amountMinor, order.currency);
+        amountEls.forEach((el) => { if (el) el.textContent = amount; });
+        numberEls.forEach((el) => { if (el) el.textContent = order.orderNumber; });
+        const transferNote = String(order.paymentDescription || "").trim();
+        if (paymentDescriptionEl) paymentDescriptionEl.textContent = transferNote || "—";
+        currentPaymentDescription = transferNote;
+        const isCrypto = order.method === "crypto_transfer";
+        if (cryptoDetails) cryptoDetails.hidden = !isCrypto;
+        if (isCrypto) {
+          if (cryptoAmount) cryptoAmount.textContent = `${order.amountDisplay || order.amountAtomic || amount} ${order.asset || ""}`.trim();
+          if (cryptoProvider) cryptoProvider.textContent = String(order.provider || "—").toUpperCase();
+          const internalUid = order.destinationType === "uid" || order.rail === "internal_uid";
+          if (cryptoNetworkBanner) cryptoNetworkBanner.hidden = internalUid;
+          if (cryptoNetworkRow) cryptoNetworkRow.hidden = internalUid;
+          if (cryptoDestinationLabel) cryptoDestinationLabel.textContent = internalUid ? "Bybit UID" : cryptoCopy.destination;
+          if (cryptoNetwork) cryptoNetwork.textContent = internalUid ? "Internal transfer" : order.network || "—";
+          const network = String(order.network || "").toUpperCase();
+          const networkMap = {
+            ETHEREUM: { label: "Ethereum · ERC20", tone: "eth", icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2.5 6.1 9.2-6.1 3.5-6.1-3.5L12 2.5Z"/><path d="m5.9 13.1 6.1 3.5 6.1-3.5L12 21.5l-6.1-8.4Z"/></svg>' },
+            BSC: { label: "BNB Chain · BEP20", tone: "bsc", icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2.5 2.5 2.8-2.5 2.3-2.5-2.3L12 2.5Zm-4.2 5.1L10.4 10l-2.6 2.4L5.3 10l2.5-2.4Zm8.4 0 2.5 2.4-2.5 2.4-2.6-2.4 2.6-2.4ZM12 10.2l2.5 2.3-2.5 2.4-2.5-2.4 2.5-2.3Zm0 5.6 2.5 2.4-2.5 2.3-2.5-2.3 2.5-2.4Z"/></svg>' },
+            SOLANA: { label: "Solana · SOL", tone: "sol", icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6.2h12.7l1.8 2.1H6.8L5 6.2Zm1.3 4.8H19l-1.8 2.1H4.5l1.8-2.1Zm-.1 4.8h12.9L17.3 18H4.4l1.8-2.2Z"/></svg>' },
+            POLYGON: { label: "Polygon", tone: "polygon", icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7.2 5.2 4.8-2.7 4.8 2.7v5.5l-4.8 2.8-4.8-2.8V5.2Zm2 1.2v3.1l2.8 1.6 2.8-1.6V6.4L12 4.8 9.2 6.4Zm-4 7.3 2 1.2v3.1l2.8 1.6-2.2 1.2-2.6-1.5v-5.6Zm13.6 0v5.6l-2.6-1.2-2.2-1.2 2.8-1.6v-3.1l2-1.2Z"/></svg>' },
+            TRON: { label: "TRON · TRC20", tone: "tron", icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 4 16 3-5 13-3-8-8-8Zm3.6 3.4 4.2 4.2 1.6 4.8 3-7.4-8.8-1.6Z"/></svg>' },
+          };
+          const networkInfo = networkMap[network] || { label: order.network || "Network", tone: "generic", icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/></svg>' };
+          if (cryptoNetworkLabel) cryptoNetworkLabel.textContent = networkInfo.label;
+          if (cryptoNetworkMark) {
+            cryptoNetworkMark.className = `crypto-network-mark crypto-network-mark--${networkInfo.tone}`;
+            cryptoNetworkMark.innerHTML = networkInfo.icon;
+          }
+          const qrUrl = !internalUid && typeof order.qrUrl === "string" && /^\/payment-qr\/[A-Za-z0-9._/-]+\.png$/.test(order.qrUrl) ? order.qrUrl : "";
+          if (cryptoQrImage) cryptoQrImage.src = qrUrl;
+          if (cryptoQr) cryptoQr.hidden = !qrUrl;
+          if (cryptoDestination) cryptoDestination.textContent = order.destination || "—";
+          if (cryptoMemo) cryptoMemo.textContent = order.memoOrTag || "—";
+          if (cryptoMemoRow) cryptoMemoRow.hidden = !order.memoOrTag;
+          if (cryptoReferenceStatus) {
+            const hasSubmittedProof = Array.isArray(order.paymentProofs) && order.paymentProofs.some((proof) => proof.status === "submitted");
+            cryptoReferenceStatus.textContent = hasSubmittedProof || order.verificationStatus === "needs_review"
+              ? cryptoCopy.proofSubmitted
+              : order.verificationStatus === "detected" ? cryptoCopy.evidenceDetected : "";
+          }
+        }
+        if (stateLabel) stateLabel.textContent = checkoutCopy.status[order.state] || checkoutCopy.status.unknown;
+        if (pill) pill.hidden = false;
+        // Delivery copy: crypto/manual rails use manual messaging
+        const deliveryCopy = document.querySelector("[data-order-delivery-copy]");
+        if (deliveryCopy) {
+          const mode = order.method === "crypto_transfer" || order.verificationStatus === "needs_review" ? "manual" : "automatic";
+          deliveryCopy.textContent = mode === "manual"
+            ? (locale === "vi"
+              ? "Gói/thanh toán thủ công: admin kiểm tra trước khi giao. Trạng thái cập nhật trên đơn."
+              : "Manual payment/fulfillment: reviewed before delivery. Status updates on this order.")
+            : (locale === "vi"
+              ? "Gói tự động: key được cấp sau khi thanh toán được backend xác minh."
+              : "Automatic package: keys release after verified payment.");
+        }
+        // F4: drive trust timeline from real order state
+        if (trustTimeline && order.state) {
+          const stateToStep = {
+            created: 1,
+            awaiting_payment: 2,
+            confirming: 3,
+            paid: 3,
+            fulfilled: 4,
+            expired: -1,
+            failed: -1,
+            cancelled: -1,
+          };
+          const active = stateToStep[order.state] ?? 1;
+          trustTimeline.querySelectorAll("li").forEach((li, index) => {
+            const id = index + 1;
+            li.classList.remove("is-active", "is-done", "is-todo", "is-error");
+            if (active < 0) {
+              li.classList.add(id === 1 ? "is-done" : id === 2 ? "is-error" : "is-todo");
+            } else if (id < active) li.classList.add("is-done");
+            else if (id === active) li.classList.add(active >= 4 ? "is-done" : "is-active");
+            else li.classList.add("is-todo");
+            if (active >= 4) li.classList.add("is-done");
+          });
+        }
+      };
+
+      const loadDelivery = async () => {
+        if (!tokenPattern.test(accessToken) || deliveryLoaded) return;
+        deliveryLoaded = true;
+        if (deliveryList) deliveryList.textContent = flow.deliver.loading;
+        try {
+          const response = await fetch("/api/shop/delivery", {
+            method: "POST",
+            headers: { authorization: `Bearer ${accessToken}` },
+            credentials: "same-origin",
+            cache: "no-store",
+          });
+          const result = await response.json();
+          if (!response.ok || !result.ok || !Array.isArray(result.deliveries)) throw new Error(result.code || "delivery_unavailable");
+          if (deliveryList) {
+            deliveryList.textContent = "";
+            result.deliveries.forEach((delivery) => {
+              const item = document.createElement("article");
+              item.className = "deliver-item";
+              const headingEl = document.createElement("strong");
+              headingEl.textContent = `${delivery.title || delivery.sku || flow.deliver.itemFallback}${delivery.quantity > 1 ? ` × ${delivery.quantity}` : ""}`;
+              item.append(headingEl);
+              (Array.isArray(delivery.keys) ? delivery.keys : []).forEach((key) => {
+                const row = document.createElement("div");
+                row.className = "deliver-key";
+                const value = document.createElement("code");
+                value.textContent = String(key);
+                const button = document.createElement("button");
+                button.type = "button";
+                button.textContent = flow.deliver.copyKey;
+                button.addEventListener("click", async () => {
+                  try {
+                    await navigator.clipboard.writeText(String(key));
+                    button.textContent = flow.deliver.copiedKey;
+                  } catch {
+                    button.textContent = cryptoCopy.copyFailed;
+                  }
+                  window.setTimeout(() => { button.textContent = flow.deliver.copyKey; }, 1800);
+                });
+                row.append(value, button);
+                item.append(row);
+              });
+              deliveryList.append(item);
+            });
+          }
+          deliveryRetryCount = 0;
+          const saveBox = document.querySelector("[data-order-save]");
+          const saveLink = document.querySelector("[data-order-save-link]");
+          const saveCopy = document.querySelector("[data-order-save-copy]");
+          if (saveBox) {
+            try {
+              const me = await fetch("/api/shop/me", { credentials: "same-origin" });
+              if (me.ok) {
+                await fetch("/api/shop/me/orders/claim", {
+                  method: "POST",
+                  credentials: "same-origin",
+                  headers: { "content-type": "application/json" },
+                  body: JSON.stringify({ accessToken }),
+                }).catch(() => null);
+                if (saveCopy) saveCopy.textContent = accountCopy.dashboard.viewOrders;
+                if (saveLink) {
+                  saveLink.href = accountHref;
+                  saveLink.textContent = accountCopy.dashboard.viewOrders;
+                }
+                saveBox.hidden = false;
+              } else {
+                if (saveCopy) saveCopy.textContent = accountCopy.login.guestNote;
+                if (saveLink) {
+                  saveLink.href = `${accountLoginHref}?return=${encodeURIComponent(orderStatusPath)}`;
+                  saveLink.textContent = accountCopy.nav.login;
+                }
+                saveBox.hidden = false;
+              }
+            } catch {
+              saveBox.hidden = false;
+            }
+          }
+        } catch (error) {
+          deliveryLoaded = false;
+          if (deliveryList) deliveryList.textContent = flow.deliver.unavailable;
+          const errorCode = error instanceof Error ? error.message : "";
+          if (errorCode === "order_delivery_in_progress" && deliveryRetryCount < 5) {
+            deliveryRetryCount += 1;
+            deliveryRetryTimer = window.setTimeout(loadOrder, Math.min(8_000, deliveryRetryCount * 1_000));
+          }
+        }
+      };
+
+      const renderOrder = (order) => {
+        fillMeta(order);
+        clearTimeout(pollTimer);
+
+        if (order.state === "created" || order.state === "awaiting_payment") {
+          showView("pay");
+          setRail(3);
+          if (heading) heading.textContent = flow.pay.title;
+          if (qrImage && qrEmpty) {
+            const generation = ++qrLoadGeneration;
+            const showEmpty = () => {
+              if (generation !== qrLoadGeneration) return;
+              qrImage.onload = null;
+              qrImage.onerror = null;
+              qrImage.removeAttribute("src");
+              releaseQrObjectUrl();
+              qrImage.hidden = true;
+              qrEmpty.hidden = false;
+              if (qrNote) qrNote.textContent = flow.pay.noQr;
+            };
+            const showLoaded = () => {
+              if (generation !== qrLoadGeneration) return;
+              qrImage.hidden = false;
+              qrEmpty.hidden = true;
+            };
+            const loadThroughProxy = async () => {
+              if (generation !== qrLoadGeneration) return;
+              qrImage.onerror = null;
+              qrImage.hidden = true;
+              qrEmpty.hidden = false;
+              if (qrNote) qrNote.textContent = flow.pay.qrPreparing || flow.pay.refreshing || flow.pay.noQr;
+              try {
+                const response = await fetch("/api/shop/order-qr", {
+                  headers: { authorization: `Bearer ${accessToken}` },
+                  credentials: "same-origin",
+                  cache: "no-store",
+                });
+                if (!response.ok) throw new Error("qr_proxy_unavailable");
+                const blob = await response.blob();
+                if (!blob.type.startsWith("image/") || blob.size < 64 || blob.size > 512_000) {
+                  throw new Error("qr_proxy_invalid");
+                }
+                if (generation !== qrLoadGeneration) return;
+                releaseQrObjectUrl();
+                qrObjectUrl = URL.createObjectURL(blob);
+                qrImage.onload = showLoaded;
+                qrImage.onerror = showEmpty;
+                qrImage.src = qrObjectUrl;
+              } catch {
+                showEmpty();
+              }
+            };
+            const qrUrl = order.destinationType === "uid" || order.rail === "internal_uid" ? "" : typeof order.qrUrl === "string" ? order.qrUrl.trim() : "";
+            if (/^https:\/\//i.test(qrUrl)) {
+              releaseQrObjectUrl();
+              qrImage.alt = checkoutCopy.qrAlt.replace("{order}", order.orderNumber);
+              qrImage.onload = showLoaded;
+              qrImage.onerror = loadThroughProxy;
+              if (qrImage.getAttribute("src") === qrUrl && !qrImage.hidden) {
+                qrEmpty.hidden = true;
+              } else {
+                // Keep empty state visible until the image actually loads.
+                qrImage.hidden = true;
+                qrEmpty.hidden = false;
+                if (qrNote) qrNote.textContent = flow.pay.qrPreparing || flow.pay.refreshing || flow.pay.noQr;
+                qrImage.src = qrUrl;
+              }
+            } else {
+              showEmpty();
+            }
+          }
+          if (checkoutLink) {
+            if (order.checkoutUrl) {
+              checkoutLink.href = order.checkoutUrl;
+              checkoutLink.hidden = false;
+            } else {
+              checkoutLink.hidden = true;
+              checkoutLink.removeAttribute("href");
+            }
+          }
+          startExpiry(order.expiresAt);
+        } else if (order.state === "confirming") {
+          qrLoadGeneration += 1;
+          releaseQrObjectUrl();
+          showView(order.method === "crypto_transfer" ? "pay" : "verify");
+          setRail(3);
+          if (heading) heading.textContent = order.method === "crypto_transfer" ? crypto.manualReviewTitle : flow.verify.title;
+          if (qrImage) {
+            qrImage.removeAttribute("src");
+            qrImage.hidden = true;
+          }
+          if (checkoutLink) checkoutLink.hidden = true;
+          startExpiry(order.expiresAt);
+        } else if (order.state === "paid" || order.state === "fulfilled") {
+          qrLoadGeneration += 1;
+          releaseQrObjectUrl();
+          showView("deliver");
+          setRail(4);
+          if (heading) heading.textContent = flow.deliver.title;
+          if (checkoutLink) checkoutLink.hidden = true;
+          clearInterval(expiryTimer);
+          if (!deliveryLoaded) loadDelivery();
+        } else if (order.state === "expired") {
+          setTerminal(flow.terminal.expired);
+        } else if (order.state === "failed") {
+          setTerminal(flow.terminal.failed);
+        } else if (order.state === "cancelled") {
+          setTerminal(flow.terminal.cancelled);
+        } else {
+          setTerminal(flow.terminal.unavailable);
+        }
+
+        if (order.pollingAfterSeconds) {
+          pollTimer = window.setTimeout(loadOrder, Math.max(3, order.pollingAfterSeconds || 3) * 1000);
+        }
+      };
+
+      const loadOrder = async () => {
+        if (refreshButton) {
+          refreshButton.disabled = true;
+          refreshButton.textContent = flow.pay.refreshing;
+        }
+        try {
+          const headers = {};
+          if (accessToken && tokenPattern.test(accessToken)) {
+            headers["authorization"] = `Bearer ${accessToken}`;
+          }
+          const query = orderNumber ? `?order=${encodeURIComponent(orderNumber)}` : "";
+          const response = await fetch(`/api/shop/order${query}`, {
+            headers,
+            credentials: "same-origin",
+            cache: "no-store",
+          });
+          const result = await response.json();
+          if (!response.ok || !result.ok || !result.order) throw new Error(result.code || "unavailable");
+          renderOrder(result.order);
+        } catch (error) {
+          if (error instanceof Error && (error.message === "order_not_found" || error.message === "order_access_required")) {
+            setTerminal(flow.terminal.missing);
+          } else if (root?.getAttribute("data-view") === "loading") {
+            setTerminal(flow.terminal.unavailable);
+          }
+        } finally {
+          if (refreshButton) {
+            refreshButton.disabled = false;
+            refreshButton.textContent = flow.pay.refresh;
+          }
+        }
+      };
+
+      refreshButton?.addEventListener("click", loadOrder);
+      copyButton?.addEventListener("click", async () => {
+        if (!currentPaymentDescription) return;
+        try {
+          await navigator.clipboard.writeText(currentPaymentDescription);
+          copyButton.textContent = flow.pay.copied;
+        } catch {
+          copyButton.textContent = flow.pay.copyFailed;
+        }
+        window.setTimeout(() => { copyButton.textContent = flow.pay.copy; }, 1800);
+      });
+      const copyValue = (element, button) => {
+        button?.addEventListener("click", async () => {
+          const value = String(element?.textContent || "").trim();
+          if (!value || value === "—") return;
+          try { await navigator.clipboard.writeText(value); button.textContent = cryptoCopy.copied; } catch { button.textContent = cryptoCopy.copyFailed; }
+          window.setTimeout(() => { button.textContent = cryptoCopy.copy; }, 1800);
+        });
+      };
+      copyValue(cryptoDestination, document.querySelector("[data-copy-crypto-destination]"));
+      copyValue(cryptoMemo, document.querySelector("[data-copy-crypto-memo]"));
+      cryptoReferenceForm?.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const input = cryptoReferenceForm.querySelector("input[name=transactionReference]");
+        const reference = String(input?.value || "").trim();
+        const file = cryptoProofFile?.files?.[0] || null;
+        if (!reference && !file) { if (cryptoReferenceStatus) cryptoReferenceStatus.textContent = cryptoCopy.proofRequired; return; }
+        if (cryptoReferenceSubmit) { cryptoReferenceSubmit.disabled = true; cryptoReferenceSubmit.textContent = cryptoCopy.submittingReference; }
+        try {
+          const form = new FormData(cryptoReferenceForm);
+          const response = await fetch("/api/shop/payment-proof", { method: "POST", headers: { authorization: `Bearer ${accessToken}` }, credentials: "same-origin", body: form });
+          const result = await response.json();
+          if (!response.ok || !result.ok) throw new Error(result.code || "reference_submit_failed");
+          if (cryptoReferenceStatus) cryptoReferenceStatus.textContent = cryptoCopy.proofSubmitted;
+          loadOrder();
+        } catch { if (cryptoReferenceStatus) cryptoReferenceStatus.textContent = cryptoCopy.referenceError; }
+        finally { if (cryptoReferenceSubmit) { cryptoReferenceSubmit.disabled = false; cryptoReferenceSubmit.textContent = cryptoCopy.confirmPayment; } }
+      });
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") loadOrder();
+      });
+      loadOrder();
+    </script>
+  </Fragment>
+</BaseLayout>
+
+<style>
+  .order-flow {
+    position: relative;
+    min-height: 80vh;
+    padding: clamp(5rem, 9vw, 7rem) 0 clamp(3.5rem, 7vw, 6rem);
+    background: var(--ink);
+    overflow: hidden;
+  }
+  .order-flow__aurora {
+    inset: 0 0 auto 0;
+    height: 28rem;
+    mask-image: linear-gradient(180deg, #000 40%, transparent);
+    -webkit-mask-image: linear-gradient(180deg, #000 40%, transparent);
+  }
+  .order-flow__inner { position: relative; z-index: 1; max-width: 40rem; }
+  .order-flow__header {
+    display: grid;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+  .order-flow__title {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .75rem 1rem;
+  }
+  .order-flow__header h1 {
+    margin: 0;
+    font: 800 clamp(1.6rem, 3.5vw, 2.1rem)/1.1 var(--font-sans);
+    letter-spacing: -.04em;
+  }
+  .order-flow__pill {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    margin: 0;
+    padding: .35rem .65rem;
+    border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+    font: 600 .62rem/1 var(--font-mono);
+    letter-spacing: .05em;
+    text-transform: uppercase;
+  }
+  .order-flow__pill i {
+    width: .4rem;
+    height: .4rem;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+  .order-live-rail {
+    margin-top: 0.15rem;
+    padding: 0.85rem 0.5rem 0.55rem;
+    border: 1px solid var(--shop-line, var(--line));
+    border-radius: var(--shop-radius-lg, 1rem);
+    background: var(--shop-surface, #fff);
+    box-shadow: var(--shop-shadow-soft, none);
+  }
+  .order-live-rail span {
+    display: block;
+    max-width: 12ch;
+  }
+
+  .order-view { min-height: 18rem; }
+  .order-center {
+    display: grid;
+    place-items: center;
+    gap: 1rem;
+    min-height: 16rem;
+    padding: 2rem 1.25rem;
+    text-align: center;
+    border: 1px solid var(--line);
+    border-radius: .6rem;
+    background: var(--ink-soft);
+  }
+  .order-center h2 {
+    margin: 0;
+    font: 800 clamp(1.35rem, 2.8vw, 1.8rem)/1.15 var(--font-sans);
+  }
+  .order-center p { margin: 0; color: var(--paper-soft); }
+  .status-dot--pulse {
+    width: .65rem;
+    height: .65rem;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 0 .2rem color-mix(in srgb, var(--accent) 12%, transparent);
+    animation: pulse 1.4s var(--ease) infinite;
+  }
+  @keyframes pulse { 50% { transform: scale(1.12); opacity: .8; } }
+  @media (prefers-reduced-motion: reduce) {
+    .status-dot--pulse { animation: none; }
+  }
+
+  /* —— Pay card: QR centered —— */
+  .pay-card {
+    border: 1px solid var(--line);
+    border-radius: var(--shop-radius-lg, 1.25rem);
+    overflow: hidden;
+    background: var(--ink-soft);
+    box-shadow: var(--shop-shadow-soft, 0 1px 2px rgba(16, 24, 40, 0.04));
+  }
+  .pay-card__qr {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: clamp(1.5rem, 5vw, 2.25rem) 1.25rem 1.25rem;
+    background: var(--ink-soft);
+  }
+  .pay-card__qr-frame {
+    position: relative;
+    width: min(15rem, 100%);
+    aspect-ratio: 1;
+    overflow: hidden;
+    border: 1px solid var(--shop-line, #e9ecf1);
+    border-radius: var(--shop-radius, 0.5rem);
+    background: #ffffff;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  }
+  .pay-card__qr-frame img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    padding: .65rem;
+    background: #fff;
+  }
+  .pay-card__qr-frame img[hidden],
+  .pay-card__qr-empty[hidden] {
+    display: none !important;
+  }
+  .pay-card__qr-empty {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding: 1rem;
+    background: var(--shop-surface-alt, #fafbfc);
+    color: var(--shop-ink-muted, #9aa3b2);
+    font-size: .82rem;
+    text-align: center;
+  }
+  .pay-card__body {
+    display: grid;
+    gap: 0;
+    border-top: 1px solid var(--shop-line, #e9ecf1);
+  }
+  .pay-card__amount {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: .35rem;
+    margin: 0;
+    padding: 1.25rem 1.25rem 1rem;
+    text-align: center;
+  }
+  .pay-card__amount span {
+    color: var(--shop-ink-muted, #9aa3b2);
+    font: 600 .68rem/1 var(--font-sans);
+    letter-spacing: .04em;
+    text-transform: uppercase;
+  }
+  .pay-card__amount strong {
+    color: var(--shop-ink, #0b0f1a);
+    font: 700 clamp(1.75rem, 4vw, 2.35rem)/1 var(--font-sans);
+    letter-spacing: -.03em;
+  }
+  .pay-card__meta {
+    margin: 0;
+    border-top: 1px solid var(--shop-line, #e9ecf1);
+  }
+  .pay-card__meta > div {
+    display: grid;
+    grid-template-columns: 7.5rem 1fr;
+    gap: .75rem;
+    align-items: center;
+    padding: .85rem 1.15rem;
+    border-bottom: 1px solid var(--shop-line, #e9ecf1);
+  }
+  .pay-card__meta > div:last-child { border-bottom: 0; }
+  .pay-card__meta dt {
+    margin: 0;
+    color: var(--shop-ink-muted, #9aa3b2);
+    font: 600 .68rem/1.2 var(--font-sans);
+    letter-spacing: .04em;
+    text-transform: uppercase;
+  }
+  .pay-card__meta dd {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: .5rem;
+    margin: 0;
+    font: 600 .9rem/1.3 var(--font-sans);
+    color: var(--shop-ink, #0b0f1a);
+    text-align: right;
+    overflow-wrap: anywhere;
+  }
+  .pay-card__meta code {
+    color: var(--shop-ink, #0b0f1a);
+    font: 600 .88rem/1.2 var(--font-mono);
+    background: var(--shop-surface-alt, #fafbfc);
+    border: 1px solid var(--shop-line, #e9ecf1);
+    padding: 0.15rem 0.4rem;
+    border-radius: 0.25rem;
+  }
+  .pay-card__meta button {
+    min-height: 1.85rem;
+    padding: .25rem .6rem;
+    border: 1px solid var(--shop-line-strong, #d4dae3);
+    border-radius: var(--shop-radius-sm, 0.25rem);
+    background: var(--shop-surface, #ffffff);
+    color: var(--shop-ink-soft, #4b5565);
+    font: 600 .68rem/1 var(--font-sans);
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .pay-card__meta button:hover {
+    border-color: var(--shop-ink, #0b0f1a);
+    color: var(--shop-ink, #0b0f1a);
+    background: var(--shop-surface-alt, #fafbfc);
+  }
+  .pay-card__meta time { color: var(--shop-ink, #0b0f1a); font-weight: 650; }
+  .pay-card__actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: .55rem;
+    padding: 1rem 1.15rem 1.25rem;
+    border-top: 1px solid var(--shop-line, #e9ecf1);
+  }
+  @media (min-width: 480px) {
+    .pay-card__actions {
+      grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+    }
+  }
+
+  .flow-btn {
+    display: inline-flex;
+    min-height: 2.65rem;
+    align-items: center;
+    justify-content: center;
+    padding: .6rem .9rem;
+    border: 1px solid var(--shop-line-strong, #d4dae3);
+    border-radius: var(--shop-radius-btn, 0.5rem);
+    background: var(--shop-surface, #ffffff);
+    color: var(--shop-ink, #0b0f1a);
+    font: 650 .82rem/1 var(--font-sans);
+    cursor: pointer;
+    text-decoration: none;
+    transition: all 0.15s ease;
+  }
+  .flow-btn:hover:not(:disabled) {
+    border-color: var(--shop-ink, #0b0f1a);
+    background: var(--shop-surface-alt, #fafbfc);
+  }
+  .flow-btn--primary {
+    border-color: var(--shop-ink, #0b0f1a);
+    background: var(--shop-ink, #0b0f1a);
+    color: #ffffff;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  }
+  .flow-btn--primary:hover {
+    background: var(--shop-accent-hover, #252e42);
+    border-color: var(--shop-accent-hover, #252e42);
+    color: #ffffff;
+  }
+  .flow-btn--ghost:hover { border-color: var(--shop-ink, #0b0f1a); color: var(--shop-ink, #0b0f1a); }
+  .flow-btn:disabled { opacity: .45; cursor: progress; }
+
+  .crypto-network-banner {
+    display: flex;
+    align-items: center;
+    gap: .7rem;
+    margin: 0 1.15rem 1rem;
+    padding: .7rem .8rem;
+    border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+    background: color-mix(in srgb, var(--accent) 6%, transparent);
+  }
+  .crypto-network-mark {
+    display: grid;
+    width: 2rem;
+    height: 2rem;
+    flex: 0 0 auto;
+    place-items: center;
+    border: 1px solid var(--accent);
+    border-radius: 50%;
+    color: var(--accent);
+    font: 700 1rem/1 var(--font-sans);
+  }
+  .crypto-network-mark svg { width: 1.15rem; height: 1.15rem; fill: currentColor; stroke: currentColor; stroke-width: .65; }
+  .crypto-network-mark--eth { border-color: #8c9df0; color: #aebcff; }
+  .crypto-network-mark--bsc { border-color: #f0b90b; color: #f0b90b; }
+  .crypto-network-mark--sol { border-color: #8f6bff; color: #72efbc; }
+  .crypto-network-mark--polygon { border-color: #9a73ed; color: #b395ff; }
+  .crypto-network-mark--tron { border-color: #e34c5e; color: #ff8190; }
+  .crypto-network-mark--generic { border-color: var(--line-strong); color: var(--paper-soft); }
+  .crypto-network-banner strong { display: block; font: 700 .74rem/1.2 var(--font-mono); text-transform: uppercase; }
+  .crypto-network-banner small { display: block; margin-top: .25rem; color: var(--paper-soft); font-size: .72rem; line-height: 1.35; }
+
+  .crypto-qr-card {
+    display: grid;
+    justify-items: center;
+    gap: .55rem;
+    margin: 0 1.15rem 1rem;
+    padding: .85rem;
+    border: 1px solid var(--line);
+    background: #fff;
+    color: #20221f;
+  }
+  .crypto-qr-card img { display: block; width: min(16rem, 100%); aspect-ratio: 1; object-fit: contain; }
+  .crypto-qr-card small { color: #5e615a; font-size: .65rem; line-height: 1.35; text-align: center; }
+
+  .verify-meta {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1px;
+    width: min(22rem, 100%);
+    margin-top: .5rem;
+    border: 1px solid var(--line);
+    background: var(--line);
+  }
+  .verify-meta > div {
+    display: grid;
+    gap: .3rem;
+    padding: .85rem;
+    background: var(--ink);
+    text-align: left;
+  }
+  .verify-meta span {
+    color: var(--paper-soft);
+    font: 600 .58rem/1 var(--font-mono);
+    letter-spacing: .06em;
+    text-transform: uppercase;
+  }
+  .verify-meta strong { font: 600 .88rem/1.2 var(--font-mono); overflow-wrap: anywhere; }
+
+  .crypto-reference-form {
+    display: grid;
+    gap: .7rem;
+    padding: 1rem 1.15rem 0;
+    border-top: 1px solid var(--line);
+  }
+  .crypto-reference-form label { display: grid; gap: .35rem; color: var(--paper-soft); font: 600 .62rem/1.2 var(--font-mono); letter-spacing: .06em; text-transform: uppercase; }
+  .crypto-reference-form input[type="text"],
+  .crypto-reference-form input[type="file"] {
+    width: 100%;
+    min-height: 2.7rem;
+    border: 1px solid var(--line-strong);
+    border-radius: .3rem;
+    background: var(--ink);
+    color: var(--paper);
+    padding: .55rem .65rem;
+    font: 600 .78rem/1.3 var(--font-mono);
+  }
+  .crypto-reference-form input[type="file"] { padding: .4rem .5rem; font-size: .68rem; }
+  .crypto-proof-hint { color: var(--paper-soft); font-size: .68rem; line-height: 1.35; }
+
+  .deliver-card {
+    display: grid;
+    gap: 1.15rem;
+    max-width: 28rem;
+    margin: 0 auto;
+  }
+  .deliver-card h2 {
+    margin: 0;
+    font: 800 clamp(1.45rem, 3vw, 1.9rem)/1.1 var(--font-sans);
+    letter-spacing: -.03em;
+    text-align: center;
+  }
+  .deliver-card__order {
+    margin: 0;
+    text-align: center;
+    color: var(--paper-soft);
+    font: 600 .8rem/1 var(--font-mono);
+  }
+  .deliver-list { display: grid; gap: .65rem; }
+  :global(.deliver-item) {
+    display: grid;
+    gap: .6rem;
+    padding: .95rem 1rem;
+    border: 1px solid var(--line);
+    border-radius: .45rem;
+    background: var(--ink-soft);
+  }
+  :global(.deliver-item > strong) { font-size: .9rem; }
+  :global(.deliver-key) {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: .55rem;
+    align-items: center;
+    padding-top: .55rem;
+    border-top: 1px solid var(--line);
+  }
+  :global(.deliver-key code) {
+    overflow-wrap: anywhere;
+    color: var(--accent);
+    font: 600 .82rem/1.4 var(--font-mono);
+  }
+  :global(.deliver-key button) {
+    min-height: 2.2rem;
+    padding: .4rem .6rem;
+    border: 1px solid var(--accent);
+    border-radius: .3rem;
+    background: transparent;
+    color: var(--accent);
+    font: 600 .55rem/1 var(--font-mono);
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+  :global(.deliver-key button:hover) {
+    background: var(--accent);
+    color: var(--accent-ink);
+  }
+  .deliver-card > .flow-btn { justify-self: center; min-width: 10rem; }
+  .order-save {
+    margin-top: 1rem;
+    padding: 1rem;
+    border: 1px solid var(--line);
+    border-radius: .85rem;
+    background: color-mix(in srgb, var(--accent) 6%, transparent);
+    display: grid;
+    gap: .75rem;
+    justify-items: center;
+    text-align: center;
+  }
+  .order-save p { margin: 0; color: var(--paper-soft); font-size: .9rem; line-height: 1.5; }
+  .flow-btn--ghost {
+    display: inline-flex;
+    min-height: 2.5rem;
+    align-items: center;
+    padding: .55rem 1rem;
+    border: 1px solid var(--line-strong);
+    border-radius: 999px;
+    color: var(--paper);
+    text-decoration: none;
+    font: 600 .68rem/1 var(--font-mono);
+    letter-spacing: .05em;
+    text-transform: uppercase;
+  }
+
+  @media (max-width: 520px) {
+    .pay-card {
+      border-radius: 0.75rem;
+    }
+    .pay-card__qr {
+      padding: 1.25rem 1rem;
+    }
+    .pay-card__qr-frame {
+      width: min(14rem, 80vw);
+    }
+    .pay-card__meta > div {
+      grid-template-columns: 1fr;
+      gap: 0.35rem;
+      padding: 0.75rem 1rem;
+    }
+    .pay-card__meta dd {
+      display: flex;
+      justify-content: space-between;
+      width: 100%;
+      text-align: left;
+      align-items: center;
+    }
+    .pay-card__meta button {
+      min-height: 2.1rem;
+      padding: 0.35rem 0.75rem;
+      font-size: 0.75rem;
+    }
+    .order-status__container {
+      padding-inline: 0.75rem;
+    }
+    .deliver-card {
+      padding: 1rem 0.75rem;
+    }
+    .deliver-key {
+      grid-template-columns: 1fr;
+      gap: 0.5rem;
+    }
+    .deliver-key button {
+      min-height: 2.4rem;
+      width: 100%;
+      font-size: 0.75rem;
+    }
+  }
+</style>

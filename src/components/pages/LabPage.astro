@@ -1,0 +1,97 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { getTranslation, localizePath, type Locale } from "../../i18n/dictionaries";
+import { getBlogCopy } from "../../i18n/blog";
+import { estimateReadingMinutes } from "../../lib/blog";
+import type { PublicPost } from "../../lib/public-content";
+
+type Copy = ReturnType<typeof getTranslation>;
+interface Props { locale: Locale; labContent?: Copy["lab"]; posts?: PublicPost[]; }
+
+const { locale, labContent, posts } = Astro.props;
+const t = getTranslation(locale);
+const l = labContent ?? t.lab;
+const blog = getBlogCopy(locale);
+const entries = Object.entries(l.entries);
+const dateLocale = locale === "zh" ? "zh-CN" : locale;
+const noteCount = posts?.length ?? entries.length;
+const formatDate = (value: string | null) => {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.valueOf()) ? null : new Intl.DateTimeFormat(dateLocale, { dateStyle: "medium" }).format(date);
+};
+const noteCountLabel = locale === "vi" ? `${noteCount} mục khám phá` : locale === "en" ? `${noteCount} explorations` : locale === "ja" ? `探索 ${noteCount}件` : `探索 ${noteCount} 项`;
+---
+
+<BaseLayout title={l.metaTitle} description={l.metaDescription} locale={locale}>
+  <article class="content-page publication-page">
+    <header class="page-hero publication-hero shell">
+      <div class="publication-hero__top reveal">
+        <p class="section-label"><span class="status-dot"></span>{l.label}</p>
+        <a class="text-link publication-rss" href={localizePath("/blog", locale)}>{t.common.navigation.blog} <span aria-hidden="true">↗</span></a>
+      </div>
+      <h1 class="page-title reveal" style="--reveal-delay: 80ms">{l.heading}</h1>
+      <div class="page-hero__meta reveal" style="--reveal-delay: 150ms">
+        <span class="mono-label">{noteCountLabel}</span>
+        <p class="lead">{l.intro}</p>
+      </div>
+    </header>
+
+    {posts && posts.length === 0 ? (
+      <section class="shell publication-empty reveal" aria-labelledby="publication-empty-title">
+        <p class="mono-label">00 / {l.label}</p>
+        <div>
+          <h2 id="publication-empty-title">{l.heading}</h2>
+          <p>{l.intro}</p>
+          <a class="button-link primary" href={localizePath("/work", locale)}>{l.readCaseStudy} <span aria-hidden="true">↗</span></a>
+        </div>
+      </section>
+    ) : (
+      <section class="shell publication-grid" aria-labelledby="publication-list-heading">
+        <h2 class="sr-only" id="publication-list-heading">{l.label}</h2>
+        {posts ? posts.map((post, index) => {
+          const dateLabel = formatDate(post.publishedAt);
+          const readingTime = estimateReadingMinutes(post.body);
+          return (
+            <article class:list={["publication-card", "reveal", { "publication-card--featured": index === 0 }]} style={`--reveal-delay: ${index * 70}ms`}>
+              <a class="publication-card__link" href={localizePath(`/lab/${post.slug}`, locale)}>
+                <div class="publication-card__visual">
+                  {post.image ? <img src={post.image} alt={post.imageAlt} loading="lazy" decoding="async" /> : <div class="publication-card__signal" aria-hidden="true"><span>{String(index + 1).padStart(2, "0")}</span><i></i><i></i><i></i></div>}
+                </div>
+                <div class="publication-card__body">
+                  <div class="publication-card__meta">
+                    <span>{String(index + 1).padStart(2, "0")}</span>
+                    <span>{post.category || l.label}</span>
+                    {dateLabel && <time datetime={post.publishedAt ?? undefined}>{dateLabel}</time>}
+                  </div>
+                  <h2>{post.title}</h2>
+                  <p>{post.excerpt}</p>
+                  <div class="publication-card__footer">
+                    <span>{blog.readingTime(readingTime)}</span>
+                    <strong>{blog.readArticle} <span aria-hidden="true">↗</span></strong>
+                  </div>
+                </div>
+              </a>
+            </article>
+          );
+        }) : entries.map(([, entry], index) => (
+          <article class="publication-card publication-card--note reveal" style={`--reveal-delay: ${index * 70}ms`}>
+            <div class="publication-card__link">
+              <div class="publication-card__visual"><div class="publication-card__signal" aria-hidden="true"><span>{String(index + 1).padStart(2, "0")}</span><i></i><i></i><i></i></div></div>
+              <div class="publication-card__body">
+                <div class="publication-card__meta"><span>{String(index + 1).padStart(2, "0")}</span><span>{entry.category}</span></div>
+                <h2>{entry.topic}</h2>
+                <p><strong>{l.questionLabel}.</strong> {entry.question}</p>
+                <p><strong>{l.whyItMattersLabel}.</strong> {entry.whyItMatters}</p>
+                <p><strong>{l.currentConclusionLabel}.</strong> {entry.currentConclusion}</p>
+                <div class="publication-card__footer">
+                  <span>{l.label}</span>
+                </div>
+              </div>
+            </div>
+          </article>
+        ))}
+      </section>
+    )}
+  </article>
+</BaseLayout>

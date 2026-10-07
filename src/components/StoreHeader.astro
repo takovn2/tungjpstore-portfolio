@@ -1,0 +1,411 @@
+---
+import { localeNames, locales, localizePath, type Locale } from "../i18n/dictionaries";
+import { currencyForLocale } from "../i18n/locale-preference";
+import { getShopCopy } from "../i18n/shop";
+
+interface Props { locale: Locale; cartDrawer?: boolean; }
+const { locale, cartDrawer = false } = Astro.props;
+const copy = ({
+  vi: { shop: "Cửa hàng", catalog: "Sản phẩm", cart: "Giỏ", support: "Hỗ trợ" },
+  en: { shop: "Shop", catalog: "Products", cart: "Cart", support: "Support" },
+  ja: { shop: "ショップ", catalog: "商品", cart: "カート", support: "サポート" },
+  zh: { shop: "商店", catalog: "商品", cart: "购物车", support: "支持" },
+} as const)[locale];
+const accountNav = getShopCopy(locale).account.nav;
+const currentLocation = `${Astro.url.pathname}${Astro.url.search}`;
+// The market's currency wins over the locale's. This is what resolves the old
+// contradiction where the header showed USD for Japanese visitors while the
+// product page showed an indicative "≈¥" conversion.
+const resolution = Astro.locals.market ?? null;
+const markets = Astro.locals.markets ?? [];
+const market = resolution?.market ?? null;
+const currency = market?.currency ?? currencyForLocale(locale);
+const marketCopy = ({
+  vi: { market: "Thị trường", switcher: "Đổi thị trường" },
+  en: { market: "Market", switcher: "Change market" },
+  ja: { market: "地域", switcher: "地域を変更" },
+  zh: { market: "地区", switcher: "切换地区" },
+} as const)[locale];
+---
+
+<header class="store-header" data-store-header>
+  <div class="store-header__inner shell">
+    <a class="store-header__brand" href={localizePath("/shop", locale)} aria-label={copy.shop}>
+      <span class="store-header__mark" aria-hidden="true">T</span>
+      <span class="store-header__brand-text">
+        <strong>TUNG Shop</strong>
+        <small>{copy.shop}</small>
+      </span>
+    </a>
+
+    <nav class="store-header__nav" aria-label={copy.shop}>
+      <a href={localizePath("/shop", locale)}>{copy.catalog}</a>
+      <a href={localizePath("/contact", locale)}>{copy.support}</a>
+      <a href={localizePath("/shop/account", locale)} data-shop-account-link>{accountNav.account}</a>
+    </nav>
+
+    <div class="store-header__tools">
+      {markets.length > 1 && market && (
+        <label class="store-header__market" aria-label={marketCopy.switcher}>
+          <span class="store-header__market-label">{marketCopy.market}</span>
+          <select class="store-header__market-select" data-market-select>
+            {markets.filter((item) => item.enabled).map((item) => (
+              <option value={item.code} selected={item.code === market.code}>
+                {item.code} · {item.currency}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      <div class="store-header__locale" aria-label={`${localeNames[locale]} / ${currency}`}>
+        <span class="store-header__currency">{currency}</span>
+        {locales.map((item) => (
+          <a
+            href={localizePath(currentLocation, item)}
+            data-store-locale-link
+            data-locale-choice={item}
+            aria-label={locale === item ? localeNames[item] : `${localeNames[item]} — ${currencyForLocale(item)}`}
+            aria-current={locale === item ? "true" : undefined}
+          >{item.toUpperCase()}</a>
+        ))}
+      </div>
+
+      <div class="store-header__actions">
+        <a
+          class="store-header__account"
+          href={localizePath("/shop/account", locale)}
+          data-shop-account-mobile
+          aria-label={accountNav.login}
+        >
+          <svg class="store-header__account-icon" aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          <span class="store-header__account-label">{accountNav.login}</span>
+        </a>
+        <a
+          class="store-header__cart"
+          href={localizePath("/shop/cart", locale)}
+          data-shop-cart-toggle={cartDrawer ? "true" : undefined}
+          aria-controls={cartDrawer ? "shop-cart-drawer" : undefined}
+          aria-expanded={cartDrawer ? "false" : undefined}
+          aria-label={copy.cart}
+        >
+          <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+          <span class="store-header__cart-label">{copy.cart}</span>
+          <b data-shop-cart-count aria-live="polite">0</b>
+        </a>
+      </div>
+    </div>
+  </div>
+</header>
+
+<script is:inline>
+  // Changing market changes prices, which are rendered on the server, so the
+  // page has to come back. Set the cookie first, then reload without the
+  // ?market= override so the cookie is what drives subsequent visits.
+  const storeMarketCookieName = "tung_market";
+  document.querySelectorAll("[data-market-select]").forEach((select) => {
+    select.addEventListener("change", () => {
+      const code = select.value;
+      if (!code) return;
+      document.cookie = `${storeMarketCookieName}=${encodeURIComponent(code)}; Path=/; Max-Age=31536000; SameSite=Lax`;
+      const url = new URL(window.location.href);
+      url.searchParams.delete("market");
+      window.location.assign(url.toString());
+    });
+  });
+  const storeLocaleCookieName = "tung_locale";
+  document.querySelectorAll("[data-store-locale-link]").forEach((link) => {
+    link.addEventListener("click", () => {
+      const locale = link.getAttribute("data-locale-choice");
+      if (locale) document.cookie = `${storeLocaleCookieName}=${encodeURIComponent(locale)}; Path=/; Max-Age=31536000; SameSite=Lax`;
+    });
+  });
+  const storeCartStorageKey = "tung:shop:cart:v1";
+  const updateStoreCartCount = () => {
+    const badges = document.querySelectorAll("[data-shop-cart-count]");
+    if (!badges.length) return;
+    let count = 0;
+    try {
+      const value = JSON.parse(localStorage.getItem(storeCartStorageKey) || "[]");
+      if (Array.isArray(value)) count = value.reduce((sum, item) => sum + Math.max(0, Number(item?.quantity) || 0), 0);
+    } catch {}
+    badges.forEach((badge) => { badge.textContent = String(count); });
+  };
+  updateStoreCartCount();
+  window.addEventListener("storage", updateStoreCartCount);
+  window.addEventListener("tung:shop-cart", updateStoreCartCount);
+  window.addEventListener("pageshow", updateStoreCartCount);
+</script>
+
+<style>
+  .store-header {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    border-bottom: 1px solid var(--shop-line, #e9ecf1);
+    background: rgba(255, 255, 255, 0.78);
+    backdrop-filter: blur(20px) saturate(1.4);
+    -webkit-backdrop-filter: blur(20px) saturate(1.4);
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.6) inset, 0 8px 24px -18px rgba(16, 24, 40, 0.18);
+  }
+
+  .store-header__inner {
+    display: flex;
+    min-height: 3.5rem;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: nowrap;
+  }
+
+  /* ── Brand ─────────────────────────────────────────────── */
+  .store-header__brand {
+    display: inline-flex;
+    min-width: 0;
+    flex: 0 1 auto;
+    align-items: center;
+    gap: 0.55rem;
+    text-decoration: none;
+  }
+  .store-header__mark {
+    display: grid;
+    width: 1.85rem;
+    height: 1.85rem;
+    flex: 0 0 auto;
+    place-items: center;
+    border-radius: var(--shop-radius-sm, 0.625rem);
+    background: linear-gradient(145deg, #1d2637, var(--shop-ink, #0b0f1a));
+    color: #ffffff;
+    font: 700 0.88rem/1 var(--font-sans);
+    box-shadow: 0 2px 6px -1px rgba(11, 15, 26, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  }
+  .store-header__brand-text {
+    display: grid;
+    min-width: 0;
+    gap: 0.05rem;
+  }
+  .store-header__brand strong {
+    overflow: hidden;
+    color: var(--shop-ink, #0f172a);
+    font: 700 0.92rem/1.1 var(--font-sans);
+    letter-spacing: -0.02em;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .store-header__brand small {
+    color: var(--shop-ink-muted, #94a3b8);
+    font: 500 0.65rem/1 var(--font-sans);
+    white-space: nowrap;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  /* ── Desktop nav ───────────────────────────────────────── */
+  .store-header__nav {
+    display: none;
+    flex: 1 1 auto;
+    justify-content: center;
+    gap: 1.25rem;
+    min-width: 0;
+  }
+  .store-header__nav a {
+    color: var(--shop-ink-soft, #475569);
+    font: 500 0.85rem/1 var(--font-sans);
+    text-decoration: none;
+    white-space: nowrap;
+    transition: color 0.15s ease;
+  }
+  .store-header__nav a:hover,
+  .store-header__nav a:focus-visible { color: var(--shop-ink, #0f172a); }
+
+  /* ── Tools ─────────────────────────────────────────────── */
+  .store-header__tools {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 0.45rem;
+    margin-left: auto;
+  }
+
+  .store-header__locale {
+    display: none;
+    align-items: center;
+    gap: 0.1rem;
+    padding: 0.15rem;
+    border: 1px solid var(--shop-line, #e2e8f0);
+    border-radius: 999px;
+    background: var(--shop-surface, #ffffff);
+    font: 600 0.65rem/1 var(--font-sans);
+  }
+  .store-header__locale a {
+    display: inline-grid;
+    min-width: 1.6rem;
+    min-height: 1.6rem;
+    place-items: center;
+    border-radius: 999px;
+    color: var(--shop-ink-soft, #64748b);
+    text-decoration: none;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  .store-header__locale a:hover,
+  .store-header__locale a:focus-visible,
+  .store-header__locale a[aria-current="true"] {
+    color: #ffffff;
+    background: var(--shop-ink, #0f172a);
+  }
+  .store-header__currency {
+    margin: 0 0.2rem 0 0.35rem;
+    color: var(--shop-ink, #0f172a);
+    font-weight: 600;
+  }
+
+  .store-header__market {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 0.3rem;
+  }
+  .store-header__market-label {
+    color: var(--shop-ink-soft, #64748b);
+    font: 600 0.65rem/1 var(--font-sans);
+  }
+  .store-header__market-select {
+    max-width: 8.5rem;
+    padding: 0.3rem 0.45rem;
+    border: 1px solid var(--shop-line, #e2e8f0);
+    border-radius: 999px;
+    background: var(--shop-surface, #ffffff);
+    color: var(--shop-ink, #0f172a);
+    font: 600 0.7rem/1 var(--font-sans);
+    cursor: pointer;
+  }
+  .store-header__market-select:focus-visible {
+    outline: 2px solid var(--shop-ink, #0f172a);
+    outline-offset: 1px;
+  }
+  @media (max-width: 720px) {
+    .store-header__market-label { display: none; }
+  }
+
+  .store-header__actions {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 0.35rem;
+  }
+
+  .store-header__account {
+    display: inline-flex;
+    min-width: 2.25rem;
+    min-height: 2.25rem;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    padding: 0 0.65rem;
+    border: 1px solid var(--shop-line, #e2e8f0);
+    border-radius: var(--shop-radius-btn, 0.5rem);
+    background: var(--shop-surface, #ffffff);
+    color: var(--shop-ink, #0f172a);
+    font: 600 0.78rem/1 var(--font-sans);
+    text-decoration: none;
+    transition: border-color 0.15s ease, background 0.15s ease;
+  }
+  .store-header__account:hover,
+  .store-header__account:focus-visible {
+    border-color: var(--shop-line-strong, #cbd5e1);
+    background: var(--shop-surface-alt, #f8fafc);
+  }
+  .store-header__account-icon { display: block; flex: 0 0 auto; }
+  .store-header__account-label { display: none; }
+
+  .store-header__cart {
+    display: inline-flex;
+    min-width: 2.25rem;
+    min-height: 2.25rem;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    padding: 0 0.75rem;
+    border: 1px solid var(--shop-ink, #0f172a);
+    border-radius: var(--shop-radius-btn, 0.5rem);
+    background: var(--shop-ink, #0f172a);
+    color: #ffffff;
+    font: 600 0.78rem/1 var(--font-sans);
+    text-decoration: none;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    transition: background 0.15s ease, border-color 0.15s ease;
+  }
+  .store-header__cart:hover,
+  .store-header__cart:focus-visible {
+    background: var(--shop-accent-hover, #1e293b);
+    border-color: var(--shop-accent-hover, #1e293b);
+  }
+  .store-header__cart svg { flex: 0 0 auto; color: #ffffff; }
+  .store-header__cart-label { display: none; }
+  .store-header__cart b {
+    display: inline-grid;
+    min-width: 1.15rem;
+    min-height: 1.15rem;
+    place-items: center;
+    border-radius: 999px;
+    background: #ffffff;
+    color: var(--shop-ink, #0f172a);
+    font-size: 0.65rem;
+    font-weight: 700;
+    margin-left: 0.15rem;
+  }
+
+  /* ── ≥640px: show labels ───────────────────────────────── */
+  @media (min-width: 640px) {
+    .store-header__inner { min-height: 3.75rem; gap: 1rem; }
+    .store-header__mark { width: 2rem; height: 2rem; }
+    .store-header__locale { display: inline-flex; }
+    .store-header__account {
+      min-width: 0;
+      padding: 0 0.85rem;
+    }
+    .store-header__account-label { display: inline; }
+    .store-header__account-icon { display: none; }
+    .store-header__cart {
+      min-width: 0;
+      padding: 0 0.85rem;
+    }
+    .store-header__cart-label { display: inline; }
+  }
+
+  /* ── ≥900px: full desktop nav ──────────────────────────── */
+  @media (min-width: 900px) {
+    .store-header__inner { min-height: 4rem; gap: 1.25rem; }
+    .store-header__nav { display: flex; }
+    .store-header__brand small { display: block; }
+    .store-header__tools { gap: 0.65rem; }
+    .store-header__actions { gap: 0.5rem; }
+  }
+
+  /* ── ≤639px: compact ───────────────────────────────────── */
+  @media (max-width: 639px) {
+    .store-header__inner {
+      min-height: 3.25rem;
+      gap: 0.5rem;
+    }
+    .store-header__brand small { display: none; }
+    .store-header__brand strong { font-size: 0.88rem; }
+    .store-header__brand-text { min-width: 0; }
+    .store-header__tools { gap: 0.3rem; }
+    .store-header__account,
+    .store-header__cart {
+      min-width: 2.25rem;
+      min-height: 2.25rem;
+      padding: 0 0.45rem;
+    }
+  }
+
+  /* ── ≤380px: brand text optional, keep cart/account ────── */
+  @media (max-width: 380px) {
+    .store-header__brand-text { display: none; }
+    .store-header__mark { width: 2.25rem; height: 2.25rem; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .store-header__cart:hover,
+    .store-header__cart:focus-visible { transform: none; }
+  }
+</style>

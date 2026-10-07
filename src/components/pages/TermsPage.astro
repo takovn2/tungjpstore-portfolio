@@ -1,0 +1,9 @@
+---
+import LegalPage from "./LegalPage.astro";
+import type { Locale } from "../../i18n/dictionaries";
+
+interface Props { locale: Locale; }
+const { locale } = Astro.props;
+---
+
+<LegalPage locale={locale} kind="terms" />

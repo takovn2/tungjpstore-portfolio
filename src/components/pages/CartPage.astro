@@ -1,0 +1,1453 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import CheckoutStepRail from "../shop/CheckoutStepRail.astro";
+import AuroraCanvas from "../shop/AuroraCanvas.astro";
+import { localizePath, type Locale } from "../../i18n/dictionaries";
+import { getShopCopy, shopLanguageTag } from "../../i18n/shop";
+import { SHOP_IMAGE_REVISION } from "../../lib/shop/media";
+
+interface Props {
+  locale: Locale;
+  checkoutReady?: boolean;
+  turnstileSiteKey?: string;
+  authenticated?: boolean;
+  customerDisplayName?: string;
+  customerEmail?: string;
+}
+
+const {
+  locale,
+  checkoutReady = false,
+  turnstileSiteKey = "",
+  authenticated = false,
+  customerDisplayName = "",
+  customerEmail = "",
+} = Astro.props;
+const copy = getShopCopy(locale);
+const flow = copy.flow;
+const shopHref = localizePath("/shop", locale);
+const orderStatusPath = localizePath("/shop/order", locale);
+const termsHref = localizePath("/terms-of-service", locale);
+const privacyHref = localizePath("/privacy", locale);
+const refundHref = localizePath("/refund-policy", locale);
+const legalNote = copy.checkout.legal;
+const checkoutReturnPath = `${localizePath("/shop/cart", locale)}?step=checkout`;
+const loginHref = `${localizePath("/shop/account/login", locale)}?return=${encodeURIComponent(checkoutReturnPath)}`;
+const stepParam = Astro.url.searchParams.get("step");
+const initialStep: 1 | 2 = stepParam === "checkout" && authenticated ? 2 : 1;
+---
+
+<BaseLayout
+  title={flow.cart.metaTitle}
+  description={flow.cart.intro}
+  locale={locale}
+  chrome="store"
+  noindex={true}
+  alternateLocales={[locale]}
+  rss={false}
+>
+  <article class="flow-page" data-cart-root data-step={String(initialStep)} data-checkout-ready={checkoutReady ? "true" : "false"}>
+    <AuroraCanvas class="flow-page__aurora" />
+    <div class="flow-page__inner shell">
+      <a class="flow-page__back" href={shopHref} data-cart-back-shop>
+        <span aria-hidden="true">↙</span>
+        {flow.cart.continueShop}
+      </a>
+
+      <header class="flow-page__header">
+        <div>
+          <h1 data-cart-title>{initialStep === 2 ? flow.details.title : flow.cart.title}</h1>
+        </div>
+        <CheckoutStepRail steps={flow.steps} current={initialStep === 2 ? 2 : 1} label={flow.cart.title} />
+      </header>
+
+      <p class="flow-banner" data-cart-banner role="status" aria-live="polite" hidden></p>
+
+      <!-- STAGE 1: cart review only -->
+      <section class="flow-stage" data-stage="1" aria-labelledby="cart-stage-title" hidden={initialStep !== 1}>
+        <h2 id="cart-stage-title" class="visually-hidden">{flow.cart.title}</h2>
+        <div class="flow-card">
+          <div class="flow-card__body" data-cart-items>
+            <p class="flow-empty">{flow.cart.empty}</p>
+          </div>
+          <div class="flow-trust" aria-hidden="false">
+            <span>{locale === "vi" ? "Thanh toán an toàn" : locale === "ja" ? "安全な支払い" : locale === "zh" ? "安全支付" : "Secure payment"}</span>
+            <span>{locale === "vi" ? "Giao sản phẩm số có trạng thái" : locale === "ja" ? "状態付きデジタル納品" : locale === "zh" ? "可追踪数字交付" : "Traceable digital delivery"}</span>
+          </div>
+          <footer class="flow-card__footer">
+            <div class="flow-total">
+              <span>{flow.cart.total}</span>
+              <strong data-cart-total>—</strong>
+            </div>
+            {!authenticated ? <p class="flow-auth-note">{flow.cart.authRequired}</p> : null}
+            <div class="flow-actions">
+              <a class="flow-btn flow-btn--ghost" href={shopHref}>{flow.cart.continueShop}</a>
+              <button class="flow-btn flow-btn--primary" type="button" data-cart-continue disabled>
+                {flow.cart.continueCheckout}
+              </button>
+            </div>
+          </footer>
+        </div>
+      </section>
+
+      <!-- STAGE 2: customer details only -->
+      <section class="flow-stage" data-stage="2" aria-labelledby="details-stage-title" hidden={initialStep !== 2}>
+        <h2 id="details-stage-title" class="visually-hidden">{flow.details.title}</h2>
+        <div class="flow-layout">
+          <aside class="flow-card flow-summary" aria-label={flow.details.summary}>
+            <p class="flow-summary__label">{flow.details.summary}</p>
+            <p class="flow-summary__count" data-cart-summary-count>—</p>
+            <dl class="flow-summary__rows">
+              <div class="flow-summary__row">
+                <dt>{flow.details.subtotal}</dt>
+                <dd data-cart-summary-subtotal>—</dd>
+              </div>
+              <div class="flow-summary__row flow-summary__row--discount" data-cart-summary-discount-row hidden>
+                <dt>
+                  <span>{flow.details.discount}</span>
+                  <code data-cart-summary-discount-code></code>
+                </dt>
+                <dd data-cart-summary-discount>—</dd>
+              </div>
+              <div class="flow-summary__row flow-summary__row--total">
+                <dt>{flow.details.totalDue}</dt>
+                <dd data-cart-summary-total>—</dd>
+              </div>
+            </dl>
+            <p class="flow-summary__saved" data-cart-summary-saved hidden></p>
+            <button class="flow-link" type="button" data-cart-back-stage>{flow.details.backCart}</button>
+          </aside>
+          <div class="flow-card">
+            <form class="flow-form" data-cart-checkout-form>
+              <label>
+                <span>{flow.details.name}</span>
+                <input name="displayName" autocomplete="name" required minlength="1" maxlength="180" value={customerDisplayName} readonly />
+              </label>
+              <label>
+                <span>{flow.details.email}</span>
+                <input name="email" type="email" autocomplete="email" required maxlength="320" value={customerEmail} readonly />
+              </label>
+              <label>
+                <span>{flow.details.phone}</span>
+                <input name="phone" type="tel" autocomplete="tel" maxlength="40" placeholder={copy.checkout.form.phonePlaceholder} />
+              </label>
+              <label>
+                <span>{flow.details.paymentMethod}</span>
+                <select name="paymentMethodId" data-payment-method required disabled>
+                  <option value="">{flow.details.paymentMethodLoading}</option>
+                </select>
+                <div class="payment-rails" data-payment-rails hidden aria-label={flow.details.paymentMethod}></div>
+                <div class="payment-method-preview" data-payment-method-preview hidden>
+                  <span class="payment-method-mark" data-payment-method-mark aria-hidden="true">◎</span>
+                  <div><strong data-payment-method-name>—</strong><small data-payment-method-network>—</small></div>
+                </div>
+                <small data-payment-method-help>{flow.details.paymentMethodHelp}</small>
+              </label>
+              <div class="cart-bridge-row" style="display:grid;gap:.45rem;margin:.25rem 0 .75rem">
+                <button class="flow-btn flow-btn--ghost" type="button" data-cart-share-bridge>
+                  {locale === "vi" ? "Tạo link giỏ (chuyển thiết bị / miniapp)" : "Share cart link (device / miniapp)"}
+                </button>
+                <p class="flow-status" data-cart-bridge-status role="status" aria-live="polite" hidden></p>
+              </div>
+              <div class="flow-discount" data-cart-discount>
+                <span class="flow-discount__label">{flow.details.discount}</span>
+                <div class="flow-discount__row" data-cart-discount-input-row>
+                  <input
+                    name="discountCode"
+                    type="text"
+                    autocomplete="off"
+                    maxlength="100"
+                    spellcheck="false"
+                    autocapitalize="characters"
+                    placeholder={copy.checkout.form.discountPlaceholder}
+                    data-cart-discount-input
+                  />
+                  <button class="flow-btn flow-btn--secondary" type="button" data-cart-discount-apply disabled>
+                    {flow.details.discountApply}
+                  </button>
+                </div>
+                <div class="flow-discount__chip" data-cart-discount-chip hidden>
+                  <span class="flow-discount__check" aria-hidden="true">✓</span>
+                  <span class="flow-discount__copy">
+                    <strong data-cart-discount-chip-label></strong>
+                    <small data-cart-discount-benefit></small>
+                    <small data-cart-discount-terms></small>
+                  </span>
+                  <button class="flow-link flow-link--inline" type="button" data-cart-discount-clear>
+                    {flow.details.discountClear}
+                  </button>
+                </div>
+                <p class="flow-discount__status" data-cart-discount-status role="status" aria-live="polite" hidden></p>
+              </div>
+              {turnstileSiteKey && checkoutReady && authenticated && (
+                <div class="cf-turnstile" data-sitekey={turnstileSiteKey} data-theme="light" data-size="flexible" data-refresh-expired="auto" data-refresh-timeout="auto"></div>
+              )}
+              <p class="flow-legal-note">{legalNote.before} <a href={termsHref}>{legalNote.terms}</a>, <a href={privacyHref}>{legalNote.privacy}</a> {legalNote.join} <a href={refundHref}>{legalNote.refund}</a>.</p>
+              {!authenticated ? (
+                <a class="flow-btn flow-btn--primary flow-btn--block" href={loginHref} style="display: flex; align-items: center; justify-content: center; text-decoration: none;">
+                  <span>{locale === "vi" ? "🔐 Đăng nhập để đặt hàng" : locale === "ja" ? "ログインして注文する" : locale === "zh" ? "登录以提交订单" : "Sign in to complete order"}</span>
+                </a>
+              ) : (
+                <button class="flow-btn flow-btn--primary flow-btn--block" type="submit" data-cart-submit disabled={!checkoutReady}>
+                  <span>{flow.details.submit}</span>
+                </button>
+              )}
+              <p class="flow-status" data-cart-status role="status" aria-live="polite">
+                {checkoutReady ? "" : flow.details.unavailable}
+              </p>
+            </form>
+          </div>
+        </div>
+      </section>
+    </div>
+  </article>
+
+  <Fragment slot="page-scripts">
+    {turnstileSiteKey && checkoutReady && <script is:inline async defer src="https://challenges.cloudflare.com/turnstile/v0/api.js"></script>}
+    <script is:inline define:vars={{ flow, locale, localeTag: shopLanguageTag[locale], defaultCurrency: locale === "vi" ? "VND" : "USD", orderStatusPath, shopHref, checkoutReady, authenticated, loginHref, shopImageRevision: SHOP_IMAGE_REVISION }}>
+      const cartStorageKey = "tung:shop:cart:v1";
+      const draftStorageKey = "tung:shop:cart-checkout:v1";
+      const discountStorageKey = "tung:shop:cart-discount:v1";
+      const root = document.querySelector("[data-cart-root]");
+      const stage1 = document.querySelector('[data-stage="1"]');
+      const stage2 = document.querySelector('[data-stage="2"]');
+      const itemHost = document.querySelector("[data-cart-items]");
+      const totalEl = document.querySelector("[data-cart-total]");
+      const summaryCount = document.querySelector("[data-cart-summary-count]");
+      const summarySubtotal = document.querySelector("[data-cart-summary-subtotal]");
+      const summaryTotal = document.querySelector("[data-cart-summary-total]");
+      const summaryDiscountRow = document.querySelector("[data-cart-summary-discount-row]");
+      const summaryDiscount = document.querySelector("[data-cart-summary-discount]");
+      const summaryDiscountCode = document.querySelector("[data-cart-summary-discount-code]");
+      const summarySaved = document.querySelector("[data-cart-summary-saved]");
+      const continueBtn = document.querySelector("[data-cart-continue]");
+      const form = document.querySelector("[data-cart-checkout-form]");
+      const submit = document.querySelector("[data-cart-submit]");
+      const status = document.querySelector("[data-cart-status]");
+      const banner = document.querySelector("[data-cart-banner]");
+      const titleEl = document.querySelector("[data-cart-title]");
+      const discountInput = document.querySelector("[data-cart-discount-input]");
+      const discountApplyBtn = document.querySelector("[data-cart-discount-apply]");
+      const discountClearBtn = document.querySelector("[data-cart-discount-clear]");
+      const discountInputRow = document.querySelector("[data-cart-discount-input-row]");
+      const discountChip = document.querySelector("[data-cart-discount-chip]");
+      const discountChipLabel = document.querySelector("[data-cart-discount-chip-label]");
+      const discountBenefit = document.querySelector("[data-cart-discount-benefit]");
+      const discountTerms = document.querySelector("[data-cart-discount-terms]");
+      const discountStatus = document.querySelector("[data-cart-discount-status]");
+      const paymentMethodSelect = document.querySelector("[data-payment-method]");
+      const paymentMethodHelp = document.querySelector("[data-payment-method-help]");
+      const paymentMethodPreview = document.querySelector("[data-payment-method-preview]");
+      const paymentMethodMark = document.querySelector("[data-payment-method-mark]");
+      const paymentMethodName = document.querySelector("[data-payment-method-name]");
+      const paymentMethodNetwork = document.querySelector("[data-payment-method-network]");
+      const turnstileHost = form?.querySelector(".cf-turnstile");
+      const steps = root?.querySelectorAll(".flow-steps li");
+
+      /** @type {{ code: string, currency: string, subtotalMinor: number, discountMinor: number, totalMinor: number, type: "percentage" | "fixed_amount", value: number, scope: "order" | "eligible_items", minimumSubtotalMinor: number, maximumDiscountMinor: number | null, _cartFingerprint?: string } | null} */
+      let appliedDiscount = null;
+      let discountBusy = false;
+      let discountRequestVersion = 0;
+      let discountRequestController = null;
+      let paymentMethods = [];
+
+      const networkInfo = (value) => ({
+        ETHEREUM: { label: "Ethereum · ERC20", tone: "eth", icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2.5 6.1 9.2-6.1 3.5-6.1-3.5L12 2.5Z"/><path d="m5.9 13.1 6.1 3.5 6.1-3.5L12 21.5l-6.1-8.4Z"/></svg>' },
+        BSC: { label: "BNB Chain · BEP20", tone: "bsc", icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2.5 2.5 2.8-2.5 2.3-2.5-2.3L12 2.5Zm-4.2 5.1L10.4 10l-2.6 2.4L5.3 10l2.5-2.4Zm8.4 0 2.5 2.4-2.5 2.4-2.6-2.4 2.6-2.4ZM12 10.2l2.5 2.3-2.5 2.4-2.5-2.4 2.5-2.3Zm0 5.6 2.5 2.4-2.5 2.3-2.5-2.3 2.5-2.4Z"/></svg>' },
+        SOLANA: { label: "Solana · SOL", tone: "sol", icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6.2h12.7l1.8 2.1H6.8L5 6.2Zm1.3 4.8H19l-1.8 2.1H4.5l1.8-2.1Zm-.1 4.8h12.9L17.3 18H4.4l1.8-2.2Z"/></svg>' },
+        POLYGON: { label: "Polygon", tone: "polygon", icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7.2 5.2 4.8-2.7 4.8 2.7v5.5l-4.8 2.8-4.8-2.8V5.2Zm2 1.2v3.1l2.8 1.6 2.8-1.6V6.4L12 4.8 9.2 6.4Zm-4 7.3 2 1.2v3.1l2.8 1.6-2.2 1.2-2.6-1.5v-5.6Zm13.6 0v5.6l-2.6-1.2-2.2-1.2 2.8-1.6v-3.1l2-1.2Z"/></svg>' },
+        TRON: { label: "TRON · TRC20", tone: "tron", icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 4 16 3-5 13-3-8-8-8Zm3.6 3.4 4.2 4.2 1.6 4.8 3-7.4-8.8-1.6Z"/></svg>' },
+      }[String(value || "").toUpperCase()] || { label: String(value || "Network"), tone: "generic", icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/></svg>' });
+      const renderPaymentMethodPreview = () => {
+        const method = paymentMethods.find((item) => item.id === paymentMethodSelect?.value);
+        if (!method || !paymentMethodPreview) return;
+        const info = networkInfo(method.network);
+        paymentMethodPreview.hidden = false;
+        if (paymentMethodMark) {
+          paymentMethodMark.className = `payment-method-mark payment-method-mark--${info.tone}`;
+          paymentMethodMark.innerHTML = info.icon;
+        }
+        if (paymentMethodName) paymentMethodName.textContent = method.displayName || "PayOS · VietQR";
+        if (paymentMethodNetwork) paymentMethodNetwork.textContent = info.label;
+      };
+
+      const read = () => {
+        try {
+          const value = JSON.parse(localStorage.getItem(cartStorageKey) || "[]");
+          return Array.isArray(value) ? value.filter((item) => item && typeof item.variantId === "string") : [];
+        } catch {
+          return [];
+        }
+      };
+      const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
+      const versionImageUrl = (value) => { const url = String(value || ""); return url.startsWith("/images/shop/") && !/[?&]v=/.test(url) ? `${url}${url.includes("?") ? "&" : "?"}v=${shopImageRevision}` : url; };
+      const money = (minor, currency) => new Intl.NumberFormat(
+        localeTag,
+        { style: "currency", currency, maximumFractionDigits: currency === "VND" ? 0 : 2 },
+      ).format(Number(minor || 0) / (currency === "VND" ? 1 : 100));
+      const currencies = (items) => [...new Set(items.map((item) => item.currency || defaultCurrency))];
+      const cartSubtotal = (items) => items.reduce((sum, item) => sum + (Number(item.priceMinor) || 0) * (Number(item.quantity) || 0), 0);
+      const cartQuantity = (items) => items.reduce((sum, item) => sum + Math.max(1, Number(item.quantity) || 1), 0);
+      const number = (value) => new Intl.NumberFormat(localeTag).format(Number(value) || 0);
+      const percent = (basisPoints) => new Intl.NumberFormat(
+        localeTag,
+        { maximumFractionDigits: 2 },
+      ).format((Number(basisPoints) || 0) / 100);
+      const showBanner = (message, state) => {
+        if (!banner) return;
+        if (!message) {
+          banner.hidden = true;
+          banner.textContent = "";
+          banner.dataset.state = "";
+          return;
+        }
+        banner.hidden = false;
+        banner.textContent = message;
+        banner.dataset.state = state || "";
+      };
+      const showStatus = (message, state) => {
+        if (!status) return;
+        status.textContent = message;
+        status.dataset.state = state || "";
+      };
+      const showDiscountStatus = (message, state) => {
+        if (!discountStatus) return;
+        if (!message) {
+          discountStatus.hidden = true;
+          discountStatus.textContent = "";
+          discountStatus.dataset.state = "";
+          return;
+        }
+        discountStatus.hidden = false;
+        discountStatus.textContent = message;
+        discountStatus.dataset.state = state || "";
+      };
+      const discountErrorMessage = (code) => {
+        if (code === "discount_quote_rate_limited") return flow.details.discountRateLimited;
+        if (code === "discount_minimum_not_met") return flow.details.discountMinimum;
+        if (code === "discount_limit_reached" || code === "discount_customer_limit_reached") return flow.details.discountLimit;
+        if (code === "discount_outside_window") return flow.details.discountExpired;
+        if (code === "discount_not_applicable") return flow.details.discountNotApplicable;
+        if (code === "zero_total_checkout_not_supported") return flow.details.discountZeroTotal;
+        if (code === "discount_invalid" || code === "discount_currency_mismatch") return flow.details.discountInvalid;
+        if (code === "validation_failed") return flow.details.discountEmpty;
+        return flow.details.discountError;
+      };
+      const setDiscountBusy = (busy) => {
+        discountBusy = busy;
+        const hasCode = Boolean(String(discountInput?.value || "").trim());
+        if (discountApplyBtn) {
+          discountApplyBtn.disabled = busy || !hasCode;
+          discountApplyBtn.textContent = busy ? flow.details.discountApplying : flow.details.discountApply;
+          discountApplyBtn.dataset.loading = busy ? "true" : "false";
+        }
+        discountInput?.setAttribute("aria-busy", busy ? "true" : "false");
+      };
+      const cancelDiscountRequest = () => {
+        discountRequestVersion += 1;
+        discountRequestController?.abort?.();
+        discountRequestController = null;
+        setDiscountBusy(false);
+      };
+      const discountBenefitText = (discount) => {
+        if (!discount) return "";
+        const scope = discount.scope === "eligible_items"
+          ? flow.details.discountScopeEligible
+          : flow.details.discountScopeOrder;
+        return discount.type === "percentage"
+          ? flow.details.discountPercent.replace("{value}", percent(discount.value)).replace("{scope}", scope)
+          : flow.details.discountFixed.replace("{amount}", money(discount.discountMinor, discount.currency)).replace("{scope}", scope);
+      };
+      const discountTermsText = (discount) => {
+        if (!discount) return "";
+        const terms = [];
+        if (discount.minimumSubtotalMinor > 0) {
+          terms.push(flow.details.discountMinimumInfo.replace("{amount}", money(discount.minimumSubtotalMinor, discount.currency)));
+        }
+        if (discount.maximumDiscountMinor !== null && discount.maximumDiscountMinor > 0) {
+          terms.push(flow.details.discountMaximumInfo.replace("{amount}", money(discount.maximumDiscountMinor, discount.currency)));
+        }
+        terms.push(flow.details.discountRecheck);
+        return terms.join(" · ");
+      };
+      const persistDiscount = () => {
+        try {
+          if (appliedDiscount?.code) sessionStorage.setItem(discountStorageKey, JSON.stringify({ code: appliedDiscount.code }));
+          else sessionStorage.removeItem(discountStorageKey);
+        } catch { /* private mode */ }
+      };
+      const restoreDiscountDraft = () => {
+        try {
+          const saved = JSON.parse(sessionStorage.getItem(discountStorageKey) || "null");
+          if (saved?.code && typeof saved.code === "string" && discountInput) {
+            discountInput.value = String(saved.code).toUpperCase();
+            setDiscountBusy(false);
+          }
+        } catch { /* ignore */ }
+      };
+      const paintDiscountUi = () => {
+        const has = Boolean(appliedDiscount?.code && appliedDiscount.discountMinor > 0);
+        if (discountInputRow) discountInputRow.hidden = has;
+        if (discountChip) discountChip.hidden = !has;
+        if (discountChipLabel && has) {
+          discountChipLabel.textContent = flow.details.discountApplied.replace("{code}", appliedDiscount.code);
+        }
+        if (discountBenefit) discountBenefit.textContent = has ? discountBenefitText(appliedDiscount) : "";
+        if (discountTerms) discountTerms.textContent = has ? discountTermsText(appliedDiscount) : "";
+        if (discountInput && has) discountInput.value = appliedDiscount.code;
+        setDiscountBusy(discountBusy);
+      };
+      const paintSummary = (items) => {
+        const currency = items[0]?.currency || appliedDiscount?.currency || defaultCurrency;
+        const subtotal = appliedDiscount?.subtotalMinor ?? cartSubtotal(items);
+        const discountMinor = appliedDiscount?.discountMinor || 0;
+        const total = appliedDiscount && appliedDiscount.discountMinor > 0
+          ? appliedDiscount.totalMinor
+          : subtotal;
+        if (summaryCount) summaryCount.textContent = flow.details.items.replace("{count}", number(cartQuantity(items)));
+        if (summarySubtotal) summarySubtotal.textContent = items.length ? money(subtotal, currency) : "—";
+        if (summaryTotal) summaryTotal.textContent = items.length ? money(total, currency) : "—";
+        if (summaryDiscountRow && summaryDiscount && summaryDiscountCode) {
+          if (discountMinor > 0 && appliedDiscount?.code) {
+            summaryDiscountRow.hidden = false;
+            summaryDiscountCode.textContent = appliedDiscount.code;
+            summaryDiscount.textContent = `−${money(discountMinor, currency)}`;
+          } else {
+            summaryDiscountRow.hidden = true;
+            summaryDiscountCode.textContent = "";
+            summaryDiscount.textContent = "—";
+          }
+        }
+        if (summarySaved) {
+          if (discountMinor > 0) {
+            summarySaved.hidden = false;
+            summarySaved.textContent = flow.details.discountSaved.replace("{amount}", money(discountMinor, currency));
+          } else {
+            summarySaved.hidden = true;
+            summarySaved.textContent = "";
+          }
+        }
+        paintDiscountUi();
+      };
+      const clearAppliedDiscount = (options = {}) => {
+        appliedDiscount = null;
+        if (!options.keepInput && discountInput) discountInput.value = "";
+        persistDiscount();
+        paintSummary(read());
+        if (!options.silent) showDiscountStatus("", "");
+      };
+      const quoteCart = async (discountCode, signal) => {
+        const items = read();
+        if (!items.length) throw new Error("empty_cart");
+        const response = await fetch("/api/shop/quote", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          credentials: "same-origin",
+          signal,
+          body: JSON.stringify({
+            locale,
+            items: items.map((item) => ({
+              variantId: item.variantId,
+              quantity: Math.max(1, Math.min(Number(item.maxQuantity) || 10, Number(item.quantity) || 1)),
+            })),
+            ...(discountCode ? { discountCode } : {}),
+          }),
+        });
+        let result = {};
+        try { result = await response.json(); } catch { result = {}; }
+        if (!response.ok || !result.ok) {
+          const error = new Error(String(result?.code || "quote_unavailable"));
+          error.code = String(result?.code || "quote_unavailable");
+          throw error;
+        }
+        return result;
+      };
+      const applyDiscountCode = async (rawCode, options = {}) => {
+        const code = String(rawCode || "").trim().toUpperCase();
+        if (!code) {
+          showDiscountStatus(flow.details.discountEmpty, "error");
+          return false;
+        }
+        if (!/^[A-Z0-9][A-Z0-9_-]{1,99}$/.test(code)) {
+          showDiscountStatus(flow.details.discountInvalid, "error");
+          return false;
+        }
+        const requestVersion = ++discountRequestVersion;
+        discountRequestController?.abort?.();
+        discountRequestController = new AbortController();
+        setDiscountBusy(true);
+        showDiscountStatus(flow.details.discountApplying, "loading");
+        try {
+          const result = await quoteCart(code, discountRequestController.signal);
+          if (requestVersion !== discountRequestVersion) return false;
+          if (!result.discountCode || !Number(result.discountMinor) || !result.discount) {
+            appliedDiscount = null;
+            persistDiscount();
+            paintSummary(read());
+            showDiscountStatus(flow.details.discountInvalid, "error");
+            return false;
+          }
+          const items = read();
+          appliedDiscount = {
+            code: String(result.discountCode).toUpperCase(),
+            currency: result.currency || defaultCurrency,
+            subtotalMinor: Number(result.subtotalMinor) || 0,
+            discountMinor: Number(result.discountMinor) || 0,
+            totalMinor: Number(result.totalMinor) || 0,
+            type: result.discount.type === "percentage" ? "percentage" : "fixed_amount",
+            value: Number(result.discount.value) || 0,
+            scope: result.discount.scope === "eligible_items" ? "eligible_items" : "order",
+            minimumSubtotalMinor: Number(result.discount.minimumSubtotalMinor) || 0,
+            maximumDiscountMinor: result.discount.maximumDiscountMinor === null
+              ? null
+              : Number(result.discount.maximumDiscountMinor) || 0,
+            _cartFingerprint: items.map((item) => `${item.variantId}:${item.quantity}`).join("|"),
+          };
+          persistDiscount();
+          paintSummary(items);
+          showDiscountStatus(
+            flow.details.discountSaved.replace("{amount}", money(appliedDiscount.discountMinor, appliedDiscount.currency)),
+            "success",
+          );
+          return true;
+        } catch (error) {
+          if (error?.name === "AbortError" || requestVersion !== discountRequestVersion) return false;
+          if (error?.code === "customer_auth_required") {
+            window.location.assign(loginHref);
+            return false;
+          }
+          if (!options.keepOnError) {
+            appliedDiscount = null;
+            persistDiscount();
+            paintSummary(read());
+          }
+          showDiscountStatus(discountErrorMessage(error?.code || error?.message), "error");
+          return false;
+        } finally {
+          if (requestVersion === discountRequestVersion) {
+            discountRequestController = null;
+            setDiscountBusy(false);
+          }
+        }
+      };
+      const revalidateDiscountIfNeeded = async () => {
+        const fingerprint = read().map((item) => `${item.variantId}:${item.quantity}`).join("|");
+        if (appliedDiscount?.code && appliedDiscount._cartFingerprint === fingerprint) return;
+        const code = appliedDiscount?.code || String(discountInput?.value || "").trim();
+        if (code) await applyDiscountCode(code, { keepOnError: true });
+      };
+      const resetTurnstile = () => {
+        try { if (turnstileHost) window.turnstile?.reset?.(turnstileHost); } catch { /* ready later */ }
+      };
+      const turnstileToken = (data) => {
+        const fromField = String(data.get("cf-turnstile-response") || "").trim();
+        if (fromField) return fromField;
+        try { return String(window.turnstile?.getResponse?.(turnstileHost) || "").trim(); } catch { return ""; }
+      };
+      const setStep = (step) => {
+        if (!root) return;
+        root.dataset.step = String(step);
+        if (stage1) stage1.hidden = step !== 1;
+        if (stage2) stage2.hidden = step !== 2;
+        if (titleEl) titleEl.textContent = step === 2 ? flow.details.title : flow.cart.title;
+        steps?.forEach((li, index) => {
+          const id = index + 1;
+          li.classList.remove("is-active", "is-done", "is-todo");
+          if (id < step) li.classList.add("is-done");
+          else if (id === step) li.classList.add("is-active");
+          else li.classList.add("is-todo");
+          if (id === step) li.setAttribute("aria-current", "step");
+          else li.removeAttribute("aria-current");
+        });
+        const url = new URL(window.location.href);
+        if (step === 2) url.searchParams.set("step", "checkout");
+        else url.searchParams.delete("step");
+        history.replaceState(null, "", url.pathname + url.search);
+        if (step === 2) {
+          paintSummary(read());
+          void revalidateDiscountIfNeeded();
+        }
+      };
+      const paymentRails = document.querySelector("[data-payment-rails]");
+      const renderPaymentRails = () => {
+        if (!paymentRails || !paymentMethods.length) {
+          if (paymentRails) paymentRails.hidden = true;
+          return;
+        }
+        paymentRails.hidden = false;
+        const selected = paymentMethodSelect?.value;
+        paymentRails.innerHTML = paymentMethods.map((method) => {
+          const detail = [method.provider, method.asset, method.network].filter(Boolean).join(" · ");
+          const active = method.id === selected;
+          return `<button type="button" class="payment-rail-card${active ? " is-selected" : ""}" data-payment-rail="${method.id}">
+            <strong>${method.displayName || method.provider || "Payment"}</strong>
+            <small>${detail || ""}</small>
+          </button>`;
+        }).join("");
+        paymentRails.querySelectorAll("[data-payment-rail]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            if (!paymentMethodSelect) return;
+            paymentMethodSelect.value = btn.getAttribute("data-payment-rail") || "";
+            paymentMethodSelect.dispatchEvent(new Event("change"));
+            renderPaymentRails();
+          });
+        });
+      };
+      const loadPaymentMethods = async () => {
+        if (!paymentMethodSelect) return;
+        try {
+          const response = await fetch(`/api/shop/payment-methods?locale=${encodeURIComponent(locale)}`, { credentials: "same-origin", cache: "no-store" });
+          const result = await response.json();
+          paymentMethods = Array.isArray(result?.methods) ? result.methods : [];
+          paymentMethodSelect.replaceChildren();
+          if (!paymentMethods.length) {
+            paymentMethodSelect.append(new Option(flow.details.paymentMethodEmpty, ""));
+            paymentMethodSelect.disabled = true;
+            if (paymentMethodHelp) paymentMethodHelp.textContent = flow.details.paymentMethodUnavailable;
+            if (submit) submit.disabled = true;
+            if (paymentRails) paymentRails.hidden = true;
+            return;
+          }
+          paymentMethods.forEach((method) => {
+            const detail = [method.provider, method.asset, method.network || flow.details.paymentMethodAccount].filter(Boolean).join(" · ");
+            paymentMethodSelect.append(new Option(`${method.displayName || method.provider} — ${detail}`, method.id));
+          });
+          if (!paymentMethodSelect.value && paymentMethods[0]) {
+            paymentMethodSelect.value = paymentMethods[0].id;
+          }
+          paymentMethodSelect.disabled = false;
+          if (paymentMethodHelp) paymentMethodHelp.textContent = flow.details.paymentMethodHelpAfter;
+          renderPaymentMethodPreview();
+          renderPaymentRails();
+          render();
+        } catch {
+          paymentMethods = [];
+          paymentMethodSelect.replaceChildren(new Option(flow.details.paymentMethodUnavailable, ""));
+          paymentMethodSelect.disabled = true;
+          if (paymentMethodPreview) paymentMethodPreview.hidden = true;
+          if (paymentRails) paymentRails.hidden = true;
+          if (submit) submit.disabled = true;
+        }
+      };
+      paymentMethodSelect?.addEventListener("change", () => {
+        renderPaymentMethodPreview();
+        renderPaymentRails();
+      });
+
+      // F1: server cart bridge share link
+      const bridgeBtn = document.querySelector("[data-cart-share-bridge]");
+      const bridgeStatus = document.querySelector("[data-cart-bridge-status]");
+      bridgeBtn?.addEventListener("click", async () => {
+        const items = read();
+        if (!items.length) {
+          if (bridgeStatus) {
+            bridgeStatus.hidden = false;
+            bridgeStatus.textContent = locale === "vi" ? "Giỏ đang trống." : "Cart is empty.";
+          }
+          return;
+        }
+        bridgeBtn.disabled = true;
+        try {
+          const attr = typeof window.__tungShopAttribution === "function" ? window.__tungShopAttribution() : null;
+          const response = await fetch("/api/shop/bridge", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            credentials: "same-origin",
+            body: JSON.stringify({ items, attribution: attr, channel: "web" }),
+          });
+          const data = await response.json();
+          if (!response.ok || !data?.url) throw new Error(data?.code || "failed");
+          if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(data.url);
+          if (bridgeStatus) {
+            bridgeStatus.hidden = false;
+            bridgeStatus.textContent = (locale === "vi" ? "Đã copy link giỏ · hết hạn " : "Cart link copied · expires ")
+              + (data.expiresAt ? new Date(data.expiresAt).toLocaleString() : "");
+          }
+        } catch (error) {
+          if (bridgeStatus) {
+            bridgeStatus.hidden = false;
+            bridgeStatus.textContent = locale === "vi"
+              ? "Chưa tạo được link (cần migration 0049 hoặc thử lại)."
+              : "Could not create link (apply migration 0049 or retry).";
+          }
+        } finally {
+          bridgeBtn.disabled = false;
+        }
+      });
+      const canCheckout = (items) => {
+        if (!items.length || currencies(items).length > 1) return false;
+        return items.every((item) => item.availability !== "out_of_stock" && Number(item.maxQuantity) >= 1);
+      };
+      const render = () => {
+        const items = read();
+        if (!itemHost) return;
+        if (!items.length) {
+          itemHost.innerHTML = `<p class="flow-empty">${escapeHtml(flow.cart.empty)} <a href="${escapeHtml(shopHref)}">${escapeHtml(flow.cart.emptyCta)}</a></p>`;
+          if (totalEl) totalEl.textContent = "—";
+          if (continueBtn) continueBtn.disabled = true;
+          if (appliedDiscount) clearAppliedDiscount({ silent: true });
+          else paintSummary([]);
+          return;
+        }
+        const multi = currencies(items).length > 1;
+        const total = cartSubtotal(items);
+        const currency = items[0]?.currency || defaultCurrency;
+        if (totalEl) totalEl.textContent = money(total, currency);
+        if (continueBtn) continueBtn.disabled = !canCheckout(items) || !checkoutReady;
+        if (multi) showBanner(flow.cart.multiCurrency, "error");
+        // Cart line edits invalidate a previously quoted discount until re-applied.
+        if (appliedDiscount) {
+          const fingerprint = items.map((item) => `${item.variantId}:${item.quantity}`).join("|");
+          if (appliedDiscount._cartFingerprint && appliedDiscount._cartFingerprint !== fingerprint) {
+            appliedDiscount = null;
+            persistDiscount();
+            showDiscountStatus("", "");
+          }
+        }
+        paintSummary(items);
+        itemHost.innerHTML = items.map((item) => {
+          const id = escapeHtml(item.variantId);
+          const quantity = Math.max(1, Number(item.quantity) || 1);
+          const max = Math.max(1, Number(item.maxQuantity) || 10);
+          const oos = item.availability === "out_of_stock" || max < 1;
+          return `<article class="flow-line${oos ? " is-oos" : ""}">
+            <div class="flow-line__thumb">${item.imageUrl ? `<img src="${escapeHtml(versionImageUrl(item.imageUrl))}" alt="" loading="lazy" width="72" height="72">` : ""}</div>
+            <div class="flow-line__meta">
+              <strong>${escapeHtml(item.title)}</strong>
+              <small>${escapeHtml(item.variantTitle || "")}${oos ? ` · ${escapeHtml(flow.cart.stockUnavailable)}` : ""}</small>
+              <span>${money(item.priceMinor, item.currency || defaultCurrency)}</span>
+              <div class="flow-line__qty">
+                <button type="button" data-dec="${id}" aria-label="${escapeHtml(flow.cart.decrease)}">−</button>
+                <b>${quantity}</b>
+                <button type="button" data-inc="${id}" data-max="${max}" aria-label="${escapeHtml(flow.cart.increase)}" ${oos ? "disabled" : ""}>+</button>
+              </div>
+            </div>
+            <button type="button" class="flow-line__remove" data-remove="${id}" aria-label="${escapeHtml(flow.cart.remove)}">×</button>
+          </article>`;
+        }).join("");
+      };
+      const notify = () => window.dispatchEvent(new CustomEvent("tung:shop-cart"));
+      const write = (items) => {
+        localStorage.setItem(cartStorageKey, JSON.stringify(items.slice(0, 30)));
+        notify();
+        render();
+      };
+      const syncStock = async () => {
+        const items = read();
+        if (!items.length) return { items, removed: 0, adjusted: 0 };
+        try {
+          const response = await fetch("/api/shop/stock", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            credentials: "same-origin",
+            body: JSON.stringify({ locale, variantIds: items.map((item) => item.variantId) }),
+          });
+          const result = await response.json();
+          if (!response.ok || !result.ok || !Array.isArray(result.variants)) return { items, removed: 0, adjusted: 0 };
+          const byId = new Map(result.variants.map((row) => [row.variantId, row]));
+          let removed = 0;
+          let adjusted = 0;
+          const next = [];
+          for (const item of items) {
+            const stock = byId.get(item.variantId);
+            if (!stock || !stock.purchasable || Number(stock.maxQuantity) < 1) {
+              removed += 1;
+              continue;
+            }
+            const maxQuantity = Math.max(1, Number(stock.maxQuantity) || 1);
+            const quantity = Math.max(1, Math.min(maxQuantity, Number(item.quantity) || 1));
+            if (quantity !== Number(item.quantity) || maxQuantity !== Number(item.maxQuantity)) adjusted += 1;
+            next.push({
+              ...item,
+              quantity,
+              maxQuantity,
+              availability: stock.availability,
+              priceMinor: typeof stock.priceMinor === "number" ? stock.priceMinor : item.priceMinor,
+              currency: stock.currency || item.currency || defaultCurrency,
+            });
+          }
+          if (removed || adjusted) write(next);
+          else render();
+          return { items: next, removed, adjusted };
+        } catch {
+          return { items, removed: 0, adjusted: 0 };
+        }
+      };
+
+      itemHost?.addEventListener("click", (event) => {
+        const target = event.target instanceof Element ? event.target : null;
+        const remove = target?.closest("[data-remove]");
+        const inc = target?.closest("[data-inc]");
+        const dec = target?.closest("[data-dec]");
+        if (!remove && !inc && !dec) return;
+        const items = read();
+        if (remove) {
+          write(items.filter((item) => item.variantId !== remove.getAttribute("data-remove")));
+          return;
+        }
+        const id = (inc || dec).getAttribute(inc ? "data-inc" : "data-dec");
+        const item = items.find((entry) => entry.variantId === id);
+        if (!item) return;
+        const max = Math.max(1, Number(item.maxQuantity) || 10);
+        item.quantity = inc ? Math.min(max, Number(item.quantity || 1) + 1) : Number(item.quantity || 1) - 1;
+        write(item.quantity > 0 ? items : items.filter((entry) => entry.variantId !== id));
+      });
+
+      continueBtn?.addEventListener("click", async () => {
+        showBanner(flow.cart.stockSync, "loading");
+        const synced = await syncStock();
+        if (synced.removed) showBanner(flow.cart.stockRemoved, "error");
+        else if (synced.adjusted) showBanner(flow.cart.stockAdjusted, "loading");
+        else showBanner("", "");
+        if (!canCheckout(synced.items)) {
+          showBanner(synced.items.length ? (currencies(synced.items).length > 1 ? flow.cart.multiCurrency : flow.cart.oosBlock) : flow.cart.empty, "error");
+          return;
+        }
+        if (!authenticated) {
+          window.location.assign(loginHref);
+          return;
+        }
+        setStep(2);
+      });
+
+      document.querySelector("[data-cart-back-stage]")?.addEventListener("click", () => {
+        showStatus("", "");
+        setStep(1);
+      });
+
+      discountApplyBtn?.addEventListener("click", () => {
+        void applyDiscountCode(discountInput?.value || "");
+      });
+      discountClearBtn?.addEventListener("click", () => {
+        cancelDiscountRequest();
+        clearAppliedDiscount();
+        discountInput?.focus();
+      });
+      discountInput?.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          if (discountBusy) return;
+          void applyDiscountCode(discountInput.value || "");
+        }
+      });
+      discountInput?.addEventListener("input", () => {
+        if (discountBusy) cancelDiscountRequest();
+        if (discountInput.value) discountInput.value = discountInput.value.toUpperCase();
+        if (appliedDiscount) {
+          // Editing after apply means the code is no longer confirmed.
+          appliedDiscount = null;
+          persistDiscount();
+          paintSummary(read());
+          paintDiscountUi();
+        }
+        showDiscountStatus("", "");
+        setDiscountBusy(false);
+      });
+
+      form?.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        if (!submit || !checkoutReady) {
+          showStatus(flow.details.unavailable, "error");
+          return;
+        }
+        if (discountBusy) {
+          showStatus(flow.details.discountApplying, "loading");
+          return;
+        }
+        showStatus(flow.cart.stockSync, "loading");
+        const synced = await syncStock();
+        const items = synced.items;
+        if (!canCheckout(items)) {
+          showStatus(flow.details.conflict, "error");
+          setStep(1);
+          return;
+        }
+        const data = new FormData(form);
+        const displayName = String(data.get("displayName") || "").trim();
+        const email = String(data.get("email") || "").trim().toLowerCase();
+        const phone = String(data.get("phone") || "").trim();
+        const paymentMethodId = String(data.get("paymentMethodId") || "").trim();
+        // Prefer confirmed apply; if user typed a code without clicking Apply, quote it first.
+        let discountCode = appliedDiscount?.code || String(data.get("discountCode") || "").trim().toUpperCase();
+        if (discountCode && (!appliedDiscount || appliedDiscount.code !== discountCode)) {
+          const ok = await applyDiscountCode(discountCode);
+          if (!ok) {
+            showStatus(discountStatus?.textContent || flow.details.discountInvalid, "error");
+            return;
+          }
+          discountCode = appliedDiscount?.code || discountCode;
+        }
+        if (!displayName || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          showStatus(flow.details.validation, "error");
+          return;
+        }
+        if (!paymentMethodId || !paymentMethods.some((method) => method.id === paymentMethodId)) {
+          showStatus(flow.details.paymentMethodSelect, "error");
+          return;
+        }
+        // Prefer deep-link promo when user didn't enter a discount manually.
+        if (!discountCode) {
+          try {
+            const attr = typeof window.__tungShopAttribution === "function" ? window.__tungShopAttribution() : null;
+            if (attr?.discountCode) discountCode = String(attr.discountCode).toUpperCase();
+          } catch { /* ignore */ }
+        }
+        // Unique per order — avoids UNIQUE(source_channel, external_reference) collisions.
+        let attributionRef = null;
+        try {
+          const attr = typeof window.__tungShopAttribution === "function" ? window.__tungShopAttribution() : null;
+          const nonce = crypto.randomUUID().replace(/-/g, "").slice(0, 12);
+          const base = typeof window.__tungShopEncodeRef === "function" ? window.__tungShopEncodeRef() : null;
+          attributionRef = base ? `${base}|n=${nonce}`.slice(0, 180) : (attr ? `ch=web|n=${nonce}` : null);
+        } catch { /* ignore */ }
+        const payload = {
+          customer: { email, displayName, ...(phone ? { phone } : {}) },
+          items: items.map((item) => ({
+            variantId: item.variantId,
+            quantity: Math.max(1, Math.min(Number(item.maxQuantity) || 10, Number(item.quantity) || 1)),
+          })),
+          locale,
+          ...(discountCode ? { discountCode } : {}),
+          ...(attributionRef ? { externalReference: attributionRef } : {}),
+          paymentMethodId,
+        };
+        const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(payload)));
+        const fingerprint = Array.from(new Uint8Array(hash), (byte) => byte.toString(16).padStart(2, "0")).join("");
+        let idempotencyKey = "";
+        try {
+          const saved = JSON.parse(sessionStorage.getItem(draftStorageKey) || "null");
+          if (saved?.hash === fingerprint && /^[A-Za-z0-9_-]{20,200}$/.test(saved.key)) idempotencyKey = saved.key;
+        } catch { /* fresh key */ }
+        if (!idempotencyKey) {
+          idempotencyKey = crypto.randomUUID();
+          sessionStorage.setItem(draftStorageKey, JSON.stringify({ key: idempotencyKey, hash: fingerprint }));
+        }
+        submit.disabled = true;
+        const label = submit.querySelector("span");
+        if (label) label.textContent = flow.details.loading;
+        showStatus(flow.details.loading, "loading");
+        try {
+          const response = await fetch("/api/shop/checkout", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            credentials: "same-origin",
+            body: JSON.stringify({
+              ...payload,
+              idempotencyKey,
+              turnstileToken: turnstileToken(data),
+            }),
+          });
+          let result = {};
+          try { result = await response.json(); } catch { result = {}; }
+          if (response.status === 401 || result?.code === "customer_auth_required") {
+            window.location.assign(loginHref);
+            return;
+          }
+          if (!response.ok || !result.ok || !result.orderAccessToken) {
+            const code = String(result?.code || "");
+            const isDiscountError = code.startsWith("discount_") || code === "zero_total_checkout_not_supported";
+            const message = code.startsWith("challenge_") ? flow.details.challenge
+              : (code === "checkout_rate_limited" || response.status === 429) ? flow.details.rateLimited
+                : isDiscountError ? discountErrorMessage(code)
+                : (response.status === 409 || code === "insufficient_inventory" || code === "variant_not_available" || code === "variant_not_found" || code === "quantity_limit_exceeded" || code === "checkout_active_order_limit") ? flow.details.conflict
+                  : (code === "validation_failed" || code === "invalid_payload") ? flow.details.validation
+                    : (code === "payment_configuration_unavailable") ? flow.details.unavailable
+                      : flow.details.error;
+            showStatus(message, "error");
+            if (isDiscountError) {
+              showDiscountStatus(message, "error");
+              clearAppliedDiscount({ keepInput: true, silent: true });
+            }
+            submit.disabled = false;
+            if (label) label.textContent = flow.details.submit;
+            resetTurnstile();
+            return;
+          }
+          localStorage.removeItem(cartStorageKey);
+          notify();
+          sessionStorage.removeItem(draftStorageKey);
+          sessionStorage.removeItem(discountStorageKey);
+          sessionStorage.setItem(`tung:shop:order:${result.order.number}`, result.orderAccessToken);
+          sessionStorage.setItem("tung:shop:last-order", result.orderAccessToken);
+          const target = new URL(result.statusUrl || orderStatusPath, window.location.origin);
+          target.hash = `access=${encodeURIComponent(result.orderAccessToken)}`;
+          window.location.assign(target.pathname + target.search + target.hash);
+        } catch {
+          showStatus(flow.details.error, "error");
+          submit.disabled = false;
+          if (label) label.textContent = flow.details.submit;
+          resetTurnstile();
+        }
+      });
+
+      restoreDiscountDraft();
+      void loadPaymentMethods();
+      render();
+      void (async () => {
+        if (!read().length) return;
+        showBanner(flow.cart.stockSync, "loading");
+        const synced = await syncStock();
+        if (synced.removed) showBanner(flow.cart.stockRemoved, "error");
+        else if (synced.adjusted) showBanner(flow.cart.stockAdjusted, "loading");
+        else showBanner("", "");
+        // If user lands directly on checkout step with a saved code, re-quote it.
+        if (root?.dataset.step === "2") await revalidateDiscountIfNeeded();
+      })();
+    </script>
+  </Fragment>
+</BaseLayout>
+
+<style>
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+  .flow-stage[hidden],
+  .flow-banner[hidden],
+  .flow-summary__row[hidden],
+  .flow-summary__saved[hidden],
+  .flow-discount__row[hidden],
+  .flow-discount__chip[hidden],
+  .flow-discount__status[hidden] { display: none !important; }
+  .flow-page {
+    position: relative;
+    min-height: 80vh;
+    padding: clamp(2.5rem, 6vw, 4.5rem) 0 clamp(3.5rem, 7vw, 6rem);
+    background: transparent;
+    overflow: hidden;
+  }
+  .flow-page__aurora {
+    inset: 0 0 auto 0;
+    height: 30rem;
+    mask-image: linear-gradient(180deg, #000 40%, transparent);
+    -webkit-mask-image: linear-gradient(180deg, #000 40%, transparent);
+  }
+  .flow-page__inner { position: relative; z-index: 1; }
+  .flow-page__back {
+    display: inline-flex;
+    align-items: center;
+    gap: .45rem;
+    color: var(--paper-soft);
+    font: 650 .82rem/1 var(--font-sans);
+  }
+  .flow-page__back:hover { color: var(--accent); }
+  .flow-page__header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1.35rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--line);
+  }
+  .flow-page__header h1 {
+    margin: 0;
+    font: 800 clamp(1.7rem, 3.5vw, 2.2rem)/1.1 var(--font-sans);
+    letter-spacing: -.04em;
+  }
+  .flow-banner {
+    margin: 0 0 1rem;
+    padding: .75rem 1rem;
+    border: 1px solid var(--line);
+    border-radius: var(--shop-radius, 1rem);
+    background: var(--shop-surface, #fff);
+    box-shadow: var(--shop-shadow-soft, none);
+    color: var(--paper-soft);
+    font-size: .84rem;
+  }
+  .flow-banner[data-state="error"] {
+    border-color: color-mix(in srgb, var(--danger) 45%, var(--line));
+    color: var(--danger);
+  }
+  .flow-banner[data-state="loading"] { color: var(--accent); }
+  .payment-method-preview {
+    display: flex;
+    align-items: center;
+    gap: .65rem;
+    margin-top: .55rem;
+    padding: .65rem .7rem;
+    border: 1px solid var(--line);
+    background: var(--ink);
+  }
+  .payment-method-mark {
+    display: grid;
+    width: 1.9rem;
+    height: 1.9rem;
+    flex: 0 0 auto;
+    place-items: center;
+    border: 1px solid var(--accent);
+    border-radius: 50%;
+    color: var(--accent);
+    font: 700 1rem/1 var(--font-sans);
+  }
+  .payment-method-mark svg { width: 1.1rem; height: 1.1rem; fill: currentColor; stroke: currentColor; stroke-width: .65; }
+  .payment-method-mark--eth { border-color: #8c9df0; color: #aebcff; }
+  .payment-method-mark--bsc { border-color: #f0b90b; color: #f0b90b; }
+  .payment-method-mark--sol { border-color: #8f6bff; color: #72efbc; }
+  .payment-method-mark--polygon { border-color: #9a73ed; color: #b395ff; }
+  .payment-method-mark--tron { border-color: #e34c5e; color: #ff8190; }
+  .payment-method-mark--generic { border-color: var(--line-strong); color: var(--paper-soft); }
+  .payment-method-preview strong { display: block; color: var(--paper); font: 700 .7rem/1.2 var(--font-mono); text-transform: uppercase; }
+  .payment-method-preview small { display: block; margin-top: .2rem; color: var(--paper-soft); font-size: .68rem; }
+  .flow-card {
+    border: 1px solid var(--shop-line, #e9ecf1);
+    border-radius: var(--shop-radius-lg, 1.25rem);
+    background: var(--shop-surface, #ffffff);
+    overflow: hidden;
+    box-shadow: var(--shop-shadow-soft, 0 1px 2px rgba(16, 24, 40, 0.04));
+  }
+  .flow-card__body { padding: 0.25rem 1.15rem 1rem; min-height: 12rem; }
+  .flow-trust {
+    display: flex; flex-wrap: wrap; gap: 0.45rem 0.85rem;
+    padding: 0.65rem 1.15rem; border-top: 1px solid var(--shop-line, #e9ecf1);
+    background: var(--shop-surface-alt, #fafbfc);
+    color: var(--shop-ink-soft, #4b5565);
+    font: 600 0.75rem/1.3 var(--font-sans);
+  }
+  .flow-trust span::before { content: "✓ "; color: var(--shop-ink, #0b0f1a); font-weight: 700; }
+  .flow-card__footer {
+    display: grid;
+    gap: 1rem;
+    padding: 1.1rem 1.15rem 1.25rem;
+    border-top: 1px solid var(--shop-line, #e9ecf1);
+    background: var(--shop-surface-alt, #fafbfc);
+  }
+  .flow-auth-note {
+    margin: 0;
+    color: var(--shop-ink-soft, #4b5565);
+    font-size: .82rem;
+    line-height: 1.5;
+  }
+  .flow-total {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 1rem;
+    color: var(--shop-ink-muted, #9aa3b2);
+    font: 600 .68rem/1 var(--font-sans);
+    letter-spacing: .04em;
+    text-transform: uppercase;
+  }
+  .flow-total strong {
+    color: var(--shop-ink, #0b0f1a);
+    font: 700 clamp(1.25rem, 2.5vw, 1.6rem)/1 var(--font-sans);
+    letter-spacing: -.02em;
+  }
+  .flow-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: .65rem;
+  }
+  .flow-btn {
+    display: inline-flex;
+    min-height: 2.65rem;
+    align-items: center;
+    justify-content: center;
+    gap: .5rem;
+    padding: .6rem 1rem;
+    border: 1px solid var(--shop-line-strong, #d4dae3);
+    border-radius: var(--shop-radius-btn, 0.5rem);
+    background: var(--shop-surface, #ffffff);
+    color: var(--shop-ink, #0b0f1a);
+    font: 650 .84rem/1 var(--font-sans);
+    cursor: pointer;
+    text-align: center;
+    text-decoration: none;
+    transition: background 0.15s ease, border-color 0.15s ease;
+  }
+  .flow-btn:hover:not(:disabled) {
+    border-color: var(--shop-ink, #0b0f1a);
+    background: var(--shop-surface-alt, #fafbfc);
+  }
+  .flow-btn--primary {
+    border-color: var(--shop-ink, #0b0f1a);
+    background: var(--shop-ink, #0b0f1a);
+    color: #ffffff;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  }
+  .flow-btn--primary:hover:not(:disabled) {
+    background: var(--shop-accent-hover, #252e42);
+    border-color: var(--shop-accent-hover, #252e42);
+    color: #ffffff;
+  }
+  .flow-btn--primary:disabled,
+  .flow-btn:disabled {
+    cursor: not-allowed;
+    opacity: .35;
+  }
+  .flow-btn--ghost:hover { border-color: var(--shop-ink, #0b0f1a); color: var(--shop-ink, #0b0f1a); }
+  .flow-btn--block { width: 100%; }
+  .flow-empty {
+    padding: 2.5rem 1rem;
+    text-align: center;
+    color: var(--shop-ink-soft, #4b5565);
+  }
+  .flow-empty a { color: var(--shop-ink, #0b0f1a); font-weight: 600; margin-left: .35rem; }
+  :global(.flow-line) {
+    display: grid;
+    grid-template-columns: 4.5rem minmax(0, 1fr) auto;
+    gap: .9rem;
+    align-items: center;
+    padding: 1rem 0;
+    border-bottom: 1px solid var(--shop-line, #e9ecf1);
+  }
+  :global(.flow-line.is-oos) { opacity: .6; }
+  :global(.flow-line__thumb) {
+    width: 4.5rem;
+    aspect-ratio: 1;
+    overflow: hidden;
+    border-radius: var(--shop-radius-sm, 0.375rem);
+    border: 1px solid var(--shop-line, #e9ecf1);
+    background: var(--shop-surface-alt, #fafbfc);
+  }
+  :global(.flow-line__thumb img) { width: 100%; height: 100%; object-fit: cover; }
+  :global(.flow-line__meta) { display: grid; gap: .25rem; min-width: 0; }
+  :global(.flow-line__meta strong) { font-size: .92rem; font-weight: 650; color: var(--shop-ink, #0b0f1a); overflow-wrap: anywhere; }
+  :global(.flow-line__meta small) { color: var(--shop-ink-soft, #4b5565); font-size: .74rem; }
+  :global(.flow-line__meta > span) { color: var(--shop-ink, #0b0f1a); font: 700 .82rem/1 var(--font-sans); }
+  :global(.flow-line__qty) { display: inline-flex; align-items: center; gap: .35rem; margin-top: .35rem; }
+  :global(.flow-line__qty button) {
+    width: 1.75rem;
+    height: 1.75rem;
+    border: 1px solid var(--shop-line-strong, #d4dae3);
+    border-radius: var(--shop-radius-sm, 0.25rem);
+    background: transparent;
+    color: var(--shop-ink, #0b0f1a);
+    cursor: pointer;
+    font: 600 .85rem/1 var(--font-sans);
+  }
+  :global(.flow-line__qty button:hover:not(:disabled)) { border-color: var(--shop-ink, #0b0f1a); }
+  :global(.flow-line__qty b) { min-width: 1.2rem; text-align: center; font: 600 .82rem/1 var(--font-sans); }
+  :global(.flow-line__remove) {
+    width: 1.85rem;
+    height: 1.85rem;
+    border: 1px solid var(--shop-line, #e9ecf1);
+    border-radius: var(--shop-radius-sm, 0.25rem);
+    background: transparent;
+    color: var(--shop-ink-muted, #9aa3b2);
+    cursor: pointer;
+    font-size: 1.1rem;
+    line-height: 1;
+  }
+  :global(.flow-line__remove:hover) { border-color: var(--shop-danger, #e0483f); color: var(--shop-danger, #e0483f); }
+  .flow-layout {
+    display: grid;
+    grid-template-columns: minmax(12rem, .38fr) minmax(0, 1fr);
+    gap: 1.25rem;
+    align-items: start;
+  }
+  .flow-summary { padding: 1.2rem 1.15rem; display: grid; gap: .55rem; }
+  .flow-summary__label {
+    margin: 0;
+    color: var(--shop-ink-muted, #9aa3b2);
+    font: 600 .68rem/1 var(--font-sans);
+    letter-spacing: .04em;
+    text-transform: uppercase;
+  }
+  .flow-summary__count { margin: 0; color: var(--shop-ink-soft, #4b5565); font-size: .84rem; }
+  .flow-summary__rows {
+    margin: .35rem 0 0;
+    display: grid;
+    gap: .45rem;
+  }
+  .flow-summary__row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: .75rem;
+    margin: 0;
+    color: var(--shop-ink-soft, #4b5565);
+    font-size: .86rem;
+  }
+  .flow-summary__row dt {
+    margin: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    font: 600 .68rem/1 var(--font-sans);
+    letter-spacing: .04em;
+    text-transform: uppercase;
+  }
+  .flow-summary__row dd {
+    margin: 0;
+    font: 600 .9rem/1 var(--font-sans);
+    color: var(--shop-ink, #0b0f1a);
+  }
+  .flow-summary__row--discount dd { color: var(--shop-mint, #0da678); }
+  .flow-summary__row--discount code {
+    font: 600 .68rem/1 var(--font-sans);
+    letter-spacing: .04em;
+    color: var(--shop-mint, #0da678);
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    border-radius: .25rem;
+    padding: .15rem .35rem;
+  }
+  .flow-summary__row--total {
+    padding-top: .55rem;
+    margin-top: .15rem;
+    border-top: 1px solid var(--shop-line, #e9ecf1);
+  }
+  .flow-summary__row--total dt { color: var(--shop-ink, #0b0f1a); }
+  .flow-summary__row--total dd {
+    font: 700 1.25rem/1 var(--font-sans);
+    letter-spacing: -.02em;
+  }
+  .flow-summary__saved {
+    margin: 0;
+    color: var(--shop-mint, #0da678);
+    font: 600 .75rem/1.3 var(--font-sans);
+  }
+  .flow-link {
+    margin-top: .5rem;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--shop-ink, #0b0f1a);
+    font: 600 .68rem/1 var(--font-sans);
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    cursor: pointer;
+    text-align: left;
+  }
+  .flow-link--inline {
+    margin: 0;
+    letter-spacing: .04em;
+  }
+  .flow-form {
+    display: grid;
+    gap: .9rem;
+    padding: 1.25rem 1.2rem 1.35rem;
+  }
+  .flow-legal-note { margin: 0; color: var(--shop-ink-soft, #4b5565); font-size: .72rem; line-height: 1.55; }
+  .flow-legal-note a { border-bottom: 1px solid var(--shop-line-strong, #d4dae3); color: var(--shop-ink, #0b0f1a); }
+  .flow-legal-note a:hover, .flow-legal-note a:focus-visible { border-color: var(--shop-ink, #0b0f1a); color: var(--shop-ink, #0b0f1a); }
+  .flow-form label { display: grid; gap: .35rem; }
+  .flow-form label span,
+  .flow-discount__label {
+    color: var(--shop-ink-muted, #9aa3b2);
+    font: 600 .68rem/1 var(--font-sans);
+    letter-spacing: .04em;
+    text-transform: uppercase;
+  }
+  .flow-form input,
+  .flow-discount input {
+    min-height: 2.65rem;
+    padding: .6rem .8rem;
+    border: 1px solid var(--shop-line, #e9ecf1);
+    border-radius: var(--shop-radius-sm, 0.375rem);
+    background: var(--shop-surface, #ffffff);
+    color: var(--shop-ink, #0b0f1a);
+    font: 500 .88rem/1 var(--font-sans);
+  }
+  .flow-discount input {
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    font: 600 .84rem/1 var(--font-sans);
+  }
+  .flow-form input[readonly] {
+    color: var(--shop-ink-muted, #9aa3b2);
+    cursor: not-allowed;
+    background: var(--shop-surface-alt, #fafbfc);
+  }
+  .flow-form input:focus,
+  .flow-discount input:focus {
+    border-color: var(--shop-ink, #0b0f1a);
+    outline: 0;
+  }
+  .flow-discount { display: grid; gap: .45rem; }
+  .flow-discount__row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: .5rem;
+    align-items: stretch;
+  }
+  .flow-btn--secondary {
+    min-height: 2.9rem;
+    padding-inline: 1rem;
+    white-space: nowrap;
+    border-color: var(--line-strong);
+    background: transparent;
+    color: var(--paper);
+  }
+  .flow-btn--secondary:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .flow-btn--secondary[data-loading="true"]::before {
+    content: "";
+    width: .8rem;
+    height: .8rem;
+    border: 1px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    animation: discount-spin .65s linear infinite;
+  }
+  .flow-discount__chip {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: .65rem;
+    min-height: 3.5rem;
+    padding: .75rem .85rem;
+    border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
+    border-radius: .35rem;
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+    color: var(--paper);
+    font: 600 .82rem/1.3 var(--font-sans);
+  }
+  .flow-discount__check {
+    display: inline-grid;
+    width: 1.6rem;
+    height: 1.6rem;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--accent);
+    color: var(--accent-ink);
+    font: 800 .75rem/1 var(--font-mono);
+  }
+  .flow-discount__copy { display: grid; gap: .2rem; min-width: 0; }
+  .flow-discount__copy strong { color: var(--paper); overflow-wrap: anywhere; }
+  .flow-discount__copy small { color: var(--accent); font-size: .76rem; line-height: 1.35; }
+  .flow-discount__copy small:last-child { color: var(--paper-soft); font-size: .7rem; }
+  .flow-discount__status {
+    min-height: 1.1rem;
+    margin: 0;
+    color: var(--paper-soft);
+    font-size: .78rem;
+  }
+  .flow-discount__status[data-state="error"] { color: var(--danger); }
+  .flow-discount__status[data-state="loading"] { color: var(--accent); }
+  .flow-discount__status[data-state="success"] { color: var(--accent); }
+  .flow-status {
+    min-height: 1.2rem;
+    margin: 0;
+    color: var(--paper-soft);
+    font-size: .8rem;
+  }
+  .flow-status[data-state="error"] { color: var(--danger); }
+  .flow-status[data-state="loading"] { color: var(--accent); }
+  @keyframes discount-spin { to { transform: rotate(360deg); } }
+  @media (max-width: 860px) {
+    .flow-page__header { grid-template-columns: 1fr; }
+    .flow-layout { grid-template-columns: 1fr; }
+    .flow-actions { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 520px) {
+    .flow-discount__row { grid-template-columns: 1fr; }
+    .flow-btn--secondary { width: 100%; }
+    .flow-discount__chip { grid-template-columns: auto minmax(0, 1fr); }
+    .flow-discount__chip .flow-link { grid-column: 2; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .flow-btn--secondary[data-loading="true"]::before { animation: none; }
+  }
+</style>

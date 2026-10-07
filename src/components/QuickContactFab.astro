@@ -1,0 +1,132 @@
+---
+import type { QuickContactMenu } from "../lib/quick-contact";
+
+interface Props { menu: QuickContactMenu; }
+
+const { menu } = Astro.props;
+const glyphs = { messenger: "M", zalo: "Z", telegram: "T" } as const;
+---
+
+<aside class="quick-contact" data-quick-contact>
+  <nav class="quick-contact__panel" id="quick-contact-panel" aria-label={menu.heading} data-quick-contact-panel hidden>
+    <p>{menu.heading}</p>
+    <ul>
+      {menu.channels.map((channel) => (
+        <li>
+          <a href={channel.href} target="_blank" rel="nofollow noopener noreferrer">
+            <span class:list={["quick-contact__glyph", `quick-contact__glyph--${channel.id}`]} aria-hidden="true">{glyphs[channel.id]}</span>
+            <span>{channel.label}</span>
+            <i aria-hidden="true">↗</i>
+          </a>
+        </li>
+      ))}
+    </ul>
+  </nav>
+  <button
+    class="quick-contact__toggle"
+    type="button"
+    aria-controls="quick-contact-panel"
+    aria-expanded="false"
+    aria-label={menu.buttonLabel}
+    data-open-label={menu.buttonLabel}
+    data-close-label={menu.closeLabel}
+    data-quick-contact-toggle
+  >
+    <span class="quick-contact__bubble" aria-hidden="true"><i></i><i></i><i></i></span>
+    <span class="quick-contact__toggle-label">{menu.heading}</span>
+  </button>
+</aside>
+
+<style>
+  .quick-contact {
+    position: fixed;
+    right: max(1rem, env(safe-area-inset-right));
+    bottom: max(1rem, env(safe-area-inset-bottom));
+    z-index: 45;
+    display: grid;
+    justify-items: end;
+    gap: .65rem;
+    font-family: var(--font-sans);
+  }
+
+  .quick-contact__panel {
+    width: min(20rem, calc(100vw - 2rem));
+    border: 1px solid var(--line-strong);
+    background: rgba(10, 11, 11, .97);
+    box-shadow: 0 1rem 2.5rem rgba(0, 0, 0, .3);
+  }
+
+  .quick-contact__panel[hidden] { display: none; }
+  .quick-contact__panel > p { margin: 0; padding: .85rem 1rem; border-bottom: 1px solid var(--line); color: var(--paper-soft); font: 600 .62rem/1.3 var(--font-mono); letter-spacing: .1em; text-transform: uppercase; }
+  .quick-contact__panel ul { margin: 0; padding: 0; list-style: none; }
+  .quick-contact__panel li + li { border-top: 1px solid var(--line); }
+  .quick-contact__panel a { display: grid; min-height: 3.5rem; grid-template-columns: 2rem minmax(0, 1fr) auto; gap: .75rem; align-items: center; padding: .6rem .8rem; }
+  .quick-contact__panel a:hover, .quick-contact__panel a:focus-visible { background: var(--ink-soft); color: var(--accent); }
+  .quick-contact__panel a > span:nth-child(2) { overflow-wrap: anywhere; font-size: .88rem; font-weight: 600; }
+  .quick-contact__panel a > i { color: var(--paper-soft); font-style: normal; }
+  .quick-contact__glyph { display: grid; width: 2rem; height: 2rem; place-items: center; border: 1px solid var(--line-strong); color: var(--paper); font: 700 .67rem/1 var(--font-mono); }
+
+  .quick-contact__toggle {
+    display: inline-flex;
+    min-height: 3.25rem;
+    align-items: center;
+    gap: .65rem;
+    cursor: pointer;
+    padding: .7rem 1rem;
+    border: 1px solid var(--accent);
+    background: var(--accent);
+    color: var(--accent-ink);
+    box-shadow: 0 .7rem 1.7rem rgba(0, 0, 0, .24);
+    font: 700 .66rem/1 var(--font-mono);
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    transition: transform 200ms var(--ease), background-color 200ms ease, border-color 200ms ease;
+  }
+
+  .quick-contact__toggle:hover, .quick-contact__toggle:focus-visible { border-color: var(--paper); background: var(--paper); transform: translateY(-2px); }
+  .quick-contact__toggle[aria-expanded="true"] { border-color: var(--line-strong); background: var(--ink-soft); color: var(--paper); }
+  .quick-contact__bubble { display: flex; align-items: center; gap: .16rem; }
+  .quick-contact__bubble i { display: block; width: .22rem; height: .22rem; border-radius: 50%; background: currentColor; }
+
+  @media (max-width: 520px) {
+    .quick-contact { right: max(.75rem, env(safe-area-inset-right)); bottom: max(.75rem, env(safe-area-inset-bottom)); }
+    .quick-contact__toggle { width: 3.25rem; justify-content: center; padding-inline: 0; }
+    .quick-contact__toggle-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .quick-contact__toggle { transition: none; }
+    .quick-contact__toggle:hover, .quick-contact__toggle:focus-visible { transform: none; }
+  }
+</style>
+
+<script>
+  document.querySelectorAll<HTMLElement>("[data-quick-contact]").forEach((root) => {
+    const toggle = root.querySelector<HTMLButtonElement>("[data-quick-contact-toggle]");
+    const panel = root.querySelector<HTMLElement>("[data-quick-contact-panel]");
+    if (!toggle || !panel) return;
+
+    const close = (restoreFocus = false) => {
+      toggle.setAttribute("aria-expanded", "false");
+      toggle.setAttribute("aria-label", toggle.dataset.openLabel ?? "");
+      panel.hidden = true;
+      if (restoreFocus) toggle.focus({ preventScroll: true });
+    };
+    const open = () => {
+      toggle.setAttribute("aria-expanded", "true");
+      toggle.setAttribute("aria-label", toggle.dataset.closeLabel ?? "");
+      panel.hidden = false;
+      panel.querySelector<HTMLElement>("a")?.focus({ preventScroll: true });
+    };
+
+    close();
+    toggle.addEventListener("click", () => toggle.getAttribute("aria-expanded") === "true" ? close() : open());
+    document.addEventListener("click", (event) => {
+      if (toggle.getAttribute("aria-expanded") === "true" && event.target instanceof Node && !root.contains(event.target)) close();
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && toggle.getAttribute("aria-expanded") === "true") close(true);
+    });
+  });
+</script>
+

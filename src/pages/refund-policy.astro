@@ -1,0 +1,10 @@
+---
+import RefundPolicyPage from "../components/pages/RefundPolicyPage.astro";
+import { type Locale } from "../i18n/dictionaries";
+import { resolveRequestLocale } from "../i18n/locale-preference";
+
+export const prerender = false;
+const pageLocale: Locale = resolveRequestLocale(Astro.request);
+---
+
+<RefundPolicyPage locale={pageLocale} />

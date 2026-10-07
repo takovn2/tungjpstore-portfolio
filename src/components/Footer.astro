@@ -1,0 +1,61 @@
+---
+import { defaultLocale, getTranslation, localizePath, type Locale } from "../i18n/dictionaries";
+import { getLegalNav } from "../i18n/legal";
+interface Props { locale?: Locale; }
+const { locale = defaultLocale } = Astro.props;
+const t = getTranslation(locale);
+const footerNav = [
+  ["/work", t.common.navigation.work],
+  ["/pricing", t.common.navigation.pricing],
+  ["/lab", t.common.navigation.lab],
+  ["/blog", t.common.navigation.blog],
+  ["/about", t.common.navigation.about],
+  ["/contact", t.common.navigation.contact],
+] as const;
+const legalNav = getLegalNav(locale);
+const footerLabels = ({ vi: { explore: "Khám phá", legal: "Điều khoản & policy" }, en: { explore: "Explore", legal: "Terms & policies" }, ja: { explore: "見る", legal: "規約・ポリシー" }, zh: { explore: "浏览", legal: "条款与政策" } } as const)[locale];
+---
+
+<footer class="site-footer section-rule">
+  <div class="shell footer-grid">
+    <div>
+      <a class="footer-mark" href={localizePath("/", locale)} aria-label={`TUNG — ${t.common.navigation.home}`}>
+        <img src="/brand/tung-horizontal-lockup-on-dark.png" alt="" width="513" height="173" loading="lazy" decoding="async" />
+      </a>
+      <p class="footer-domain">tung.codes</p>
+      <p>{t.home.supporting}</p>
+      <a class="footer-availability" href={localizePath("/contact", locale)}><span class="status-dot" aria-hidden="true"></span>{t.common.footer.availability} <span aria-hidden="true">↗</span></a>
+    </div>
+    <nav aria-label={footerLabels.explore}>
+      <p class="footer-label">{footerLabels.explore}</p>
+      {footerNav.map(([href, label]) => <a href={localizePath(href, locale)}>{label}</a>)}
+    </nav>
+    <nav aria-label={footerLabels.legal}>
+      <p class="footer-label">{footerLabels.legal}</p>
+      {legalNav.map((item) => <a href={localizePath(item.kind === "privacy" ? "/privacy" : item.href, locale)}>{item.label}</a>)}
+    </nav>
+    <div class="footer-meta">
+      <p>{t.common.footer.location}</p>
+      <p>{t.common.footer.copyright.replace("{year}", String(new Date().getFullYear()))}</p>
+    </div>
+  </div>
+</footer>
+
+<style>
+  .site-footer { padding-block: 4rem 2rem; background: var(--ink-soft); }
+  .footer-grid { display: grid; grid-template-columns: 1.35fr .55fr .65fr .65fr; gap: 3rem; }
+  .footer-mark { display: inline-block; width: min(100%, 15.5rem); margin-bottom: 1.2rem; }
+  .footer-mark img { width: 100%; height: auto; }
+  p { max-width: 28rem; margin-bottom: 0; color: var(--paper-soft); }
+  .footer-domain { margin: -.55rem 0 1rem; color: var(--accent); font: 600 .62rem/1 var(--font-mono); letter-spacing: .12em; text-transform: uppercase; }
+  nav { display: grid; align-content: start; gap: 0.6rem; }
+  .footer-label { margin: 0 0 .6rem; color: var(--paper-soft); font: 600 .61rem/1.3 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; }
+  nav a:hover { color: var(--accent); }
+  .footer-meta { text-align: right; }
+  .footer-meta p + p { margin-top: 0.4rem; }
+  @media (max-width: 720px) {
+    .footer-grid { grid-template-columns: 1fr 1fr; }
+    .footer-meta { text-align: left; }
+    .footer-grid > div:first-child { grid-column: 1 / -1; }
+  }
+</style>

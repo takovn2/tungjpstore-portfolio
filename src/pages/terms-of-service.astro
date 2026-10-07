@@ -1,0 +1,10 @@
+---
+import TermsPage from "../components/pages/TermsPage.astro";
+import { type Locale } from "../i18n/dictionaries";
+import { resolveRequestLocale } from "../i18n/locale-preference";
+
+export const prerender = false;
+const pageLocale: Locale = resolveRequestLocale(Astro.request);
+---
+
+<TermsPage locale={pageLocale} />

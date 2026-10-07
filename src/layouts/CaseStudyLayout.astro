@@ -1,0 +1,231 @@
+---
+import { getProject, type Project } from "../content/projects";
+import BaseLayout from "./BaseLayout.astro";
+
+type Props = {
+	project: Project;
+};
+
+const { project } = Astro.props;
+const nextProject = getProject(project.nextSlug);
+const title = `${project.name} — ${project.category}`;
+const architectureHeadingId = `${project.slug}-architecture-heading`;
+---
+
+<BaseLayout title={title} description={project.summary}>
+	<article class="case-study" data-project={project.slug}>
+		<header class="case-study__hero page-shell section-shell">
+			<div class="case-study__eyebrow cluster" aria-label="Project information">
+				<span class="index-label">{project.number}</span>
+				<span>{project.category}</span>
+				<span class:list={["status-label", `status-label--${project.status}`]}>{project.statusLabel}</span>
+			</div>
+
+			<h1>{project.name}</h1>
+			<p class="case-study__thesis text-balance">{project.thesis}</p>
+
+			{(project.date || project.role || project.links.length > 0) && (
+				<dl class="case-study__meta">
+					{project.date && (
+						<div>
+							<dt>Date</dt>
+							<dd>{project.date}</dd>
+						</div>
+					)}
+					{project.role && (
+						<div>
+							<dt>Role</dt>
+							<dd>{project.role}</dd>
+						</div>
+					)}
+					{project.links.map((link) => (
+						<div>
+							<dt>Link</dt>
+							<dd>
+								<a
+									href={link.href}
+									target={link.external ? "_blank" : undefined}
+									rel={link.external ? "noreferrer" : undefined}
+								>
+									{link.label}<span aria-hidden="true"> ↗</span>
+								</a>
+							</dd>
+						</div>
+					))}
+				</dl>
+			)}
+
+			<ul class="tag-list" aria-label="Project domains">
+				{project.tags.map((tag) => <li>{tag}</li>)}
+			</ul>
+		</header>
+
+		<div class="case-study__body page-shell">
+			<section class="case-study__section prose-section" aria-labelledby={`${project.slug}-thesis`}>
+				<p class="section-label">Project thesis</p>
+				<h2 id={`${project.slug}-thesis`}>{project.summary}</h2>
+			</section>
+
+			<section class="case-study__section split-section" aria-labelledby={`${project.slug}-context`}>
+				<div>
+					<p class="section-label">Context</p>
+					<h2 id={`${project.slug}-context`}>Start with the operating reality.</h2>
+				</div>
+				<div class="prose">
+					{project.context.map((paragraph) => <p>{paragraph}</p>)}
+					<blockquote>
+						<p>{project.problem}</p>
+					</blockquote>
+				</div>
+			</section>
+
+			<section class="case-study__section split-section" aria-labelledby={`${project.slug}-scope`}>
+				<div>
+					<p class="section-label">Scope</p>
+					<h2 id={`${project.slug}-scope`}>Role, responsibilities and constraints.</h2>
+				</div>
+				<div class="case-study__scope">
+					<div>
+						<h3>Responsibilities</h3>
+						{project.responsibilities.length > 0 ? (
+							<ul class="line-list">
+								{project.responsibilities.map((item) => <li>{item}</li>)}
+							</ul>
+						) : (
+							<p class="muted-copy">Detailed role scope is being verified before publication.</p>
+						)}
+					</div>
+					<div>
+						<h3>Constraints</h3>
+						<ul class="line-list">
+							{project.constraints.map((item) => <li>{item}</li>)}
+						</ul>
+					</div>
+				</div>
+			</section>
+
+			<section class="case-study__section split-section" aria-labelledby={`${project.slug}-principles`}>
+				<div>
+					<p class="section-label">Product principles</p>
+					<h2 id={`${project.slug}-principles`}>Stable rules before surface area.</h2>
+				</div>
+				<ol class="numbered-list">
+					{project.principles.map((principle) => <li>{principle}</li>)}
+				</ol>
+			</section>
+
+			<section class="case-study__section" aria-labelledby={`${project.slug}-domains`}>
+				<div class="section-heading-row">
+					<div>
+						<p class="section-label">System domains</p>
+						<h2 id={`${project.slug}-domains`}>The product as a set of explicit boundaries.</h2>
+					</div>
+					<p>Statuses are conservative and do not imply production completeness.</p>
+				</div>
+				<ul class="domain-list">
+					{project.domains.map((domain) => (
+						<li>
+							<span>{domain.name}</span>
+							<span class:list={["status-label", `status-label--${domain.status}`]}>
+								{domain.status.replace("-", " ")}
+							</span>
+						</li>
+					))}
+				</ul>
+			</section>
+
+			<section class="case-study__section architecture-section" aria-labelledby={architectureHeadingId}>
+				<div class="section-heading-row">
+					<div>
+						<p class="section-label">System architecture</p>
+						<h2 id={architectureHeadingId}>A readable model of the important layers.</h2>
+					</div>
+					<p>{project.architectureIntro}</p>
+				</div>
+
+				<ol class="architecture-flow" aria-describedby={`${project.slug}-architecture-description`}>
+					{project.architectureNodes.map((node) => (
+						<li data-node-kind={node.kind}>
+							<span class="architecture-flow__kind">{node.kind}</span>
+							<h3>{node.name}</h3>
+							<p>{node.description}</p>
+						</li>
+					))}
+				</ol>
+				<p id={`${project.slug}-architecture-description`} class="architecture-description">
+					<span class="sr-only">Architecture description: </span>
+					{project.architectureDescription}
+				</p>
+			</section>
+
+			<section class="case-study__section split-section" aria-labelledby={`${project.slug}-flows`}>
+				<div>
+					<p class="section-label">Selected flows</p>
+					<h2 id={`${project.slug}-flows`}>Where the system creates useful state.</h2>
+				</div>
+				<ol class="numbered-list numbered-list--large">
+					{project.selectedFlows.map((flow) => <li>{flow}</li>)}
+				</ol>
+			</section>
+
+			<section class="case-study__section decision-section" aria-labelledby={`${project.slug}-decisions`}>
+				<p class="section-label">Decisions</p>
+				<h2 id={`${project.slug}-decisions`}>Product clarity and technical reliability reinforce each other.</h2>
+				<div class="decision-columns">
+					<div>
+						<h3>Design decisions</h3>
+						<ul class="line-list">
+							{project.designDecisions.map((decision) => <li>{decision}</li>)}
+						</ul>
+					</div>
+					<div>
+						<h3>Technical decisions</h3>
+						{project.technicalDecisions.length > 0 ? (
+							<ul class="line-list">
+								{project.technicalDecisions.map((decision) => <li>{decision}</li>)}
+							</ul>
+						) : (
+							<p class="muted-copy">Implementation details are withheld until they can be verified.</p>
+						)}
+					</div>
+				</div>
+			</section>
+
+			<section class="case-study__section split-section" aria-labelledby={`${project.slug}-outcomes`}>
+				<div>
+					<p class="section-label">Outcome and current state</p>
+					<h2 id={`${project.slug}-outcomes`}>Evidence without invented metrics.</h2>
+				</div>
+				<div>
+					<ul class="line-list">
+						{project.outcomes.map((outcome) => <li>{outcome}</li>)}
+					</ul>
+					<p class="state-note"><strong>Current state.</strong> {project.currentState}</p>
+				</div>
+			</section>
+
+			<section class="case-study__section reflection-section" aria-labelledby={`${project.slug}-reflection`}>
+				<div>
+					<p class="section-label">What changed</p>
+					<p>{project.whatChanged}</p>
+				</div>
+				<div>
+					<p class="section-label">Reflection</p>
+					<h2 id={`${project.slug}-reflection`}>{project.reflection}</h2>
+				</div>
+			</section>
+		</div>
+
+		<nav class="next-project page-shell section-shell" aria-label="Next project">
+			<p class="section-label">Next project</p>
+			<a href={`/work/${nextProject.slug}`}>
+				<span>
+					<small>{nextProject.number} · {nextProject.category}</small>
+					<strong>{nextProject.name}</strong>
+				</span>
+				<span aria-hidden="true">→</span>
+			</a>
+		</nav>
+	</article>
+</BaseLayout>
+
