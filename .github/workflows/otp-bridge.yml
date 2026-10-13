@@ -35,11 +35,15 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: takovn2/mailvault
-          ref: f8af0fb0b801e79479b4102bd48cfd4ce300aaa6
+          ref: 04f8f751cb8b0ba4236714b7257b452f352ef40a
           path: mailvault-contract
           persist-credentials: false
       - name: Install companion dependencies
         run: pnpm --dir mailvault-contract install --frozen-lockfile
+      - name: Verify companion SHA against review receipt
+        env:
+          MAILVAULT_REPO_PATH: ${{ github.workspace }}/mailvault-contract
+        run: node scripts/assert-otp-companion.mjs
       - name: Native named-RPC integration
         env:
           MAILVAULT_REPO_PATH: ${{ github.workspace }}/mailvault-contract

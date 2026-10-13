@@ -1,8 +1,8 @@
 # TUNG OTP BRIDGE V1: preflight
 
 Repository ID: `1409362372`; canonical `takovn2/tungjpstore-portfolio`.
-Main base SHA: `3edeed73f45a3dba1a15cae057035e5aa51ed242`. Implementation HEAD SHA: `e56bb6f7ed24b61e755ef11157e56e44d178a68f`.
-Branch: `codex/otp-bridge-v1`; code worktree clean after implementation commit. Reports and CI are documented successors; final review HEAD, PR URL and CI run URLs are recorded in the PR receipt/final agent output (avoids a self-referential commit hash inside its own tree).
+Main base SHA: `3edeed73f45a3dba1a15cae057035e5aa51ed242`. Prior-reviewed HEAD SHA: `14e45e68517a638ff08624fb02fc48c91c4d1a35`. Remediation HEAD is recorded in the external acceptance/PR receipt.
+Branch: `codex/otp-bridge-v1`; remediation starts from the clean prior-reviewed HEAD. Final clean worktree and exact heads are verified in the acceptance/PR receipt; final review HEAD, PR URL and CI run URLs are recorded in the PR receipt/final agent output (avoids a self-referential commit hash inside its own tree).
 Author review only; independent reviewer not assigned/approved. Flags OFF; production mutations NONE.
 
 ## Verified preflight (P0)
@@ -69,3 +69,7 @@ PR receipts: MailVault https://github.com/takovn2/mailvault/pull/13 and Portfoli
 The exact file manifest is [00-preflight.md](00-preflight.md); RPC/auth decisions are [01-architecture-contract.md](01-architecture-contract.md), schema/state details are reports 02/03, commands/counts/security negatives and CI receipts are [04-security-test-matrix.md](04-security-test-matrix.md), remaining runtime prerequisites are [05-staging-certification.md](05-staging-certification.md), and operator-only recovery is [06-release-and-rollback.md](06-release-and-rollback.md). These references apply to this deliverable.
 
 PRs: [MailVault #13](https://github.com/takovn2/mailvault/pull/13), [Portfolio #1](https://github.com/takovn2/tungjpstore-portfolio/pull/1). Independent reviewer: unassigned, not approved; drafts await separate P5 review. Initial exact-head CI: [MailVault](https://github.com/takovn2/mailvault/actions/runs/38433814625), [Portfolio](https://github.com/takovn2/tungjpstore-portfolio/actions/runs/38434002462). Final head receipts are attached to the PRs; flags OFF and production mutations NONE.
+
+## Independent review remediation
+
+The exact additional file manifest, F-01 through F-04 implementation changes and current evidence are documented in [07-review-remediation.md](07-review-remediation.md). Companion provenance is pinned in [mailvault-companion.json](mailvault-companion.json) and enforced by the native test gate. These remediation sections supersede earlier descriptions/counts. External P5 review remains required; production flags stay OFF.

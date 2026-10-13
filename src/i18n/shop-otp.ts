@@ -1,6 +1,6 @@
 import type { Locale } from "./dictionaries";
 export interface OtpCopy {
-  title: string; instruction: string; get: string; copy: string; copied: string; copyFailed: string;
+  title: string; instruction: string; refreshSetup: string; get: string; copy: string; copied: string; copyFailed: string;
   received: string; caveat: string; reauthGoogle: string; reauthEmail: string; emailSent: string;
   idle: string; checking: string; pending: string; found: string; setup_pending: string;
   reauth_required: string; untrusted: string; ambiguous: string; rate_limited: string;
@@ -9,7 +9,7 @@ export interface OtpCopy {
 const copy: Record<Locale, OtpCopy> = {
   vi: {
     title: "Mã xác minh email", instruction: "Trước tiên, yêu cầu nhà cung cấp gửi mã đăng nhập mới, rồi chọn Lấy OTP.",
-    get: "Lấy OTP", copy: "Sao chép mã", copied: "Đã sao chép", copyFailed: "Không thể sao chép. Bạn có thể chọn mã để sao chép thủ công.",
+    refreshSetup: "Kiểm tra trạng thái thiết lập", get: "Lấy OTP", copy: "Sao chép mã", copied: "Đã sao chép", copyFailed: "Không thể sao chép. Bạn có thể chọn mã để sao chép thủ công.",
     received: "Nhận lúc", caveat: "Mã có thể hết hạn theo quy định của nhà cung cấp. Giữ mã riêng tư.",
     reauthGoogle: "Xác thực lại bằng Google", reauthEmail: "Xác thực lại bằng email", emailSent: "Kiểm tra email và mở liên kết trong trình duyệt này.",
     idle: "Sẵn sàng kiểm tra mã mới.", checking: "Đang kiểm tra...", pending: "Chưa nhận mã. Đang chờ tối đa 2 phút.", found: "Đã nhận mã đăng nhập.",
@@ -19,7 +19,7 @@ const copy: Record<Locale, OtpCopy> = {
   },
   en: {
     title: "Email verification code", instruction: "First ask the provider to send a new login code, then select Get OTP.",
-    get: "Get OTP", copy: "Copy code", copied: "Copied", copyFailed: "Copy failed. Select the code to copy it manually.",
+    refreshSetup: "Check setup status", get: "Get OTP", copy: "Copy code", copied: "Copied", copyFailed: "Copy failed. Select the code to copy it manually.",
     received: "Received", caveat: "The provider may expire this code. Keep it private.",
     reauthGoogle: "Verify again with Google", reauthEmail: "Verify again by email", emailSent: "Check your email and open the link in this browser.",
     idle: "Ready to check for a new code.", checking: "Checking...", pending: "No code yet. Waiting for up to 2 minutes.", found: "Login code received.",
@@ -29,7 +29,7 @@ const copy: Record<Locale, OtpCopy> = {
   },
   ja: {
     title: "メール認証コード", instruction: "提供元に新しいログインコードの送信を依頼し、「OTPを取得」を押してください。",
-    get: "OTPを取得", copy: "コードをコピー", copied: "コピーしました", copyFailed: "コピーできませんでした。コードを選択して手動でコピーしてください。",
+    refreshSetup: "設定状況を確認", get: "OTPを取得", copy: "コードをコピー", copied: "コピーしました", copyFailed: "コピーできませんでした。コードを選択して手動でコピーしてください。",
     received: "受信日時", caveat: "提供元の規定によりコードが失効する場合があります。第三者に共有しないでください。",
     reauthGoogle: "Googleで再認証", reauthEmail: "メールで再認証", emailSent: "メールを確認し、このブラウザーでリンクを開いてください。",
     idle: "新しいコードを確認できます。", checking: "確認中...", pending: "コード未受信です。最大2分間待機します。", found: "ログインコードを受信しました。",
@@ -39,7 +39,7 @@ const copy: Record<Locale, OtpCopy> = {
   },
   zh: {
     title: "邮件验证码", instruction: "先要求服务商发送新的登录验证码，再选择获取 OTP。",
-    get: "获取 OTP", copy: "复制验证码", copied: "已复制", copyFailed: "复制失败。请选择验证码并手动复制。",
+    refreshSetup: "检查设置状态", get: "获取 OTP", copy: "复制验证码", copied: "已复制", copyFailed: "复制失败。请选择验证码并手动复制。",
     received: "接收时间", caveat: "验证码可能按服务商规定失效。请勿分享。",
     reauthGoogle: "通过 Google 重新验证", reauthEmail: "通过邮件重新验证", emailSent: "请检查邮件，并在此浏览器中打开链接。",
     idle: "可以检查新验证码。", checking: "正在检查...", pending: "尚未收到验证码，最多等待2分钟。", found: "已收到登录验证码。",

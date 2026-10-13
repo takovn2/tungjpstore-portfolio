@@ -54,6 +54,8 @@ function createD1() {
     "0045_shop_crypto_storefront_scope.sql",
     "0046_manual_crypto_payment_proofs.sql",
     "0062_shop_otp_bridge.sql",
+    "0063_shop_otp_entitlement_policy.sql",
+    "0064_shop_otp_validation_recovery.sql",
   ]) sqlite.exec(read(`content-migrations/${migration}`));
 
   const db = {
@@ -138,6 +140,10 @@ test("GLB checkout supports manual proof review and encrypted key delivery", asy
       version, created_at, updated_at)
     VALUES (?, ?, 'GLB-E2E-001', 'active', 'license_key', 'automatic', 'tracked', 255000,
       NULL, 'VND', 1, 1, '{}', '{}', 1, ?, ?)`).run(variantId, productId, now, now);
+  // Explicit terms are approved before checkout; the sold snapshot stays fixed.
+  sqlite.prepare(`INSERT INTO shop_otp_variant_policies
+    (variant_id,kind,duration_seconds,expires_at,policy_version,configured_by,reason,configured_at,updated_at)
+    VALUES (?,'duration',31536000,NULL,1,'test','synthetic_twelve_months',?,?)`).run(variantId,now,now);
   sqlite.prepare(`INSERT INTO shop_variant_localizations (variant_id, locale, title, option_summary)
     VALUES (?, 'en', '12 months', '1 device')`).run(variantId);
   sqlite.prepare(`INSERT INTO shop_crypto_payment_methods

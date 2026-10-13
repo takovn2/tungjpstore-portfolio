@@ -27,10 +27,11 @@ before(async () => {
   browsers.chromium = await chromium.launch(); browsers.webkit = await webkit.launch();
 }, { timeout: 30000 });
 after(async () => { await Promise.all(Object.values(browsers).map(browser => browser.close())); await new Promise(resolve => server?.close(resolve)); });
-async function pageFor(engine, locale = "en", state = "active") {
+async function pageFor(engine, locale = "en", state = "active", configure) {
   const context = await browsers[engine].newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   const page = await context.newPage();
   await page.addInitScript(() => { Object.defineProperty(navigator, "clipboard", { value: { writeText: async text => { window.copiedSynthetic = text; } }, configurable: true }); });
+  if (configure) await configure(page);
   await page.goto(`${origin}/?locale=${locale}&state=${state}`); await page.locator("article.customer-otp").waitFor();
   return { page, context, labels: getOtpCopy(locale) };
 }
@@ -90,4 +91,35 @@ for (const engine of ["chromium", "webkit"]) {
       }
     } finally { await context.close(); }
   }, { timeout: 30000 });
+}
+for (const engine of ["chromium", "webkit"]) {
+ test(`${engine}: pending setup refreshes bounded status, activates without reload, and first fresh code copies`,async()=>{
+  let ready=false,statusCalls=0,lookups=0;
+  const {page,context,labels}=await pageFor(engine,"en","pending",async page=>{
+   await page.clock.install();
+   await page.route("**/otp-status",async route=>{statusCalls++;assert.deepEqual(route.request().postDataJSON(),{allocationId:"allocation-a"});await route.fulfill({json:{ok:true,state:ready?"active":"pending"}});});
+   await page.route("**/order-a/otp",async route=>{lookups++;await route.fulfill({json:{ok:true,state:"found",code:"593821",receivedAt:new Date().toISOString()}});});
+  });
+  try{
+   await page.getByText(labels.setup_pending,{exact:true}).waitFor();assert.equal(lookups,0);
+   ready=true;await page.clock.runFor(5000);await page.getByText(labels.idle,{exact:true}).waitFor();assert.equal(statusCalls,2);
+   await page.getByRole("button",{name:labels.get,exact:true}).click();await page.locator("output").waitFor();
+   await page.getByRole("button",{name:labels.copy,exact:true}).click();assert.equal(await page.evaluate(()=>window.copiedSynthetic),"593821");
+   assert.equal(lookups,1);
+  }finally{await context.close();}
+ },{timeout:20000});
+ test(`${engine}: pending setup stops after 120 seconds, supports explicit retry, and stops on logout`,async()=>{
+  let calls=0;
+  const {page,context,labels}=await pageFor(engine,"en","pending",async page=>{
+   await page.clock.install();await page.route("**/otp-status",async route=>{calls++;await route.fulfill({json:{ok:true,state:"pending"}});});
+  });
+  try{
+   await page.getByText(labels.setup_pending,{exact:true}).waitFor();await page.clock.fastForward(120000);
+   await page.getByText(labels.timedOut,{exact:true}).waitFor();const stopped=calls;
+   await page.clock.runFor(10000);assert.equal(calls,stopped);
+   await page.getByRole("button",{name:labels.refreshSetup,exact:true}).click();await page.getByText(labels.setup_pending,{exact:true}).waitFor();assert.equal(calls,stopped+1);
+   await page.evaluate(()=>window.dispatchEvent(new Event("shop:logout")));await page.getByRole("button",{name:labels.reauthEmail,exact:true}).waitFor();
+   const loggedOut=calls;await page.clock.runFor(10000);assert.equal(calls,loggedOut);assert.equal(await page.locator("output").count(),0);
+  }finally{await context.close();}
+ },{timeout:20000});
 }

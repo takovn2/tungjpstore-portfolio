@@ -39,7 +39,7 @@ for (const [name, sql] of [
  ["cancelled","UPDATE shop_orders SET status = 'cancelled' WHERE id = 'order-a'"], ["revoked unit","UPDATE shop_inventory_units SET status = 'revoked' WHERE id = 'unit-a'"],
  ["disabled mapping","UPDATE shop_otp_inventory_aliases SET state = 'disabled' WHERE id = 'binding-a'"], ["blocked customer","UPDATE shop_customers SET status = 'blocked' WHERE id = 'customer-a'"],
  ["deleted customer","UPDATE shop_customers SET deleted_at = '2026-01-01T00:00:00.000Z' WHERE id = 'customer-a'"], ["pending allocation","UPDATE shop_inventory_allocations SET status = 'held' WHERE id = 'allocation-a'"],
- ["wrong variant","UPDATE shop_order_items SET variant_id = NULL WHERE id = 'item-a'"], ["expired grant","UPDATE shop_otp_grants SET expires_at = '2026-01-01T00:00:00.000Z' WHERE id = 'otp_allocation-a'"],
+ ["wrong variant","UPDATE shop_order_items SET variant_id = NULL WHERE id = 'item-a'"],
  ["expired proof","UPDATE shop_otp_session_proofs SET expires_at = '2026-01-01T00:00:00.000Z'"], ["guest token cannot establish OTP ownership","UPDATE shop_customer_identities SET verified_at = NULL"],
  ]) test(`denies ${name} before RPC`,async()=>{const f=await fixture();try{f.sqlite.exec(sql);assert.ok([401,403,404].includes((await endpoint.handleCustomerOtp(f.request(),"order-a",f.env)).status));assert.equal(f.calls(),0);}finally{f.close();}});
 test("pending setup returns 409 without OTP lookup",async()=>{const f=await fixture({active:false});try{assert.equal((await endpoint.handleCustomerOtp(f.request(),"order-a",f.env)).status,409);assert.equal(f.calls(),0);}finally{f.close();}});
@@ -159,5 +159,23 @@ test("two delivered allocations in one order keep aliases and codes isolated",as
   f.env.MAILVAULT_OTP.lookupLoginOtp=async request=>({state:"found",code:request.aliasId==="alias-a"?"593821":"482716",receivedAt:new Date().toISOString(),messageRef:"private"});
   assert.equal((await(await endpoint.handleCustomerOtp(f.request(),"order-a",f.env)).json()).code,"593821");
   assert.equal((await(await endpoint.handleCustomerOtp(f.request({allocationId:"allocation-b"}),"order-a",f.env)).json()).code,"482716");
+ }finally{f.close();}
+});
+
+test("expired sold term denies before RPC without mutating the immutable expiry snapshot",async()=>{
+ const f=await fixture({entitlement:{kind:"until",expiresAt:"2026-01-01T00:00:00.000Z"}});try{
+  assert.equal((await endpoint.handleCustomerOtp(f.request(),"order-a",f.env)).status,404);assert.equal(f.calls(),0);
+ }finally{f.close();}
+});
+test("authorized term extension during OTP RPC changes the version and fences the response",async()=>{
+ const terms=await otpModule("src/lib/shop/otp/entitlement-policy.ts"),f=await fixture({entitlement:{kind:"duration",durationSeconds:86400}});
+ try{
+  f.env.MAILVAULT_OTP.lookupLoginOtp=async()=>{
+   const grant=f.sqlite.prepare("SELECT * FROM shop_otp_grants").get();
+   await terms.extendOtpEntitlement(f.db,{inventoryUnitId:"unit-a",expectedVersion:grant.version,expiresAt:new Date(Date.now()+2*86400000).toISOString(),actor:"synthetic-owner",reason:"verified_renewal"});
+   return {state:"found",code:"593821",receivedAt:new Date().toISOString(),messageRef:"private"};
+  };
+  const response=await endpoint.handleCustomerOtp(f.request(),"order-a",f.env);
+  assert.equal(response.status,404);assert.doesNotMatch(await response.text(),/593821/);
  }finally{f.close();}
 });

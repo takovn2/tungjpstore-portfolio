@@ -10,7 +10,7 @@ export default function CustomerOtpCard({ orderId, allocationId, title, locale, 
   const [state, setState] = useState<State>(grantState === "pending" ? "setup_pending" : grantState === "active" ? "idle" : "revoked");
   const [value, setValue] = useState<{ code: string; receivedAt: string } | null>(null);
   const [copyStatus, setCopyStatus] = useState("");
-  const initialState: State = grantState === "pending" ? "setup_pending" : grantState === "active" ? "idle" : "revoked";
+  const initialState = useRef<State>(grantState === "pending" ? "setup_pending" : grantState === "active" ? "idle" : "revoked");
   const limitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const controller = useRef<AbortController | null>(null);
@@ -23,8 +23,8 @@ export default function CustomerOtpCard({ orderId, allocationId, title, locale, 
     setValue(null); setCopyStatus("");
   };
   useEffect(() => {
-    const hidden = () => { if (document.hidden) { clear(); setState(initialState); } };
-    const leave = () => { clear(); setState(initialState); };
+    const hidden = () => { if (document.hidden) { clear(); setState(initialState.current); } };
+    const leave = () => { clear(); setState(initialState.current); };
     document.addEventListener("visibilitychange", hidden);
     window.addEventListener("pagehide", leave);
     document.addEventListener("astro:before-swap", leave);
@@ -55,7 +55,7 @@ export default function CustomerOtpCard({ orderId, allocationId, title, locale, 
         if (limitTimer.current) clearTimeout(limitTimer.current);
         limitTimer.current = null;
         setValue({ code: result.code, receivedAt: result.receivedAt }); setState("found"); running.current = false;
-        timer.current = setTimeout(() => { clear(); setState(initialState); }, Math.max(0, Math.min(120000, Date.parse(result.receivedAt!) + 120000 - Date.now())));
+        timer.current = setTimeout(() => { clear(); setState(initialState.current); }, Math.max(0, Math.min(120000, Date.parse(result.receivedAt!) + 120000 - Date.now())));
       } else if (response.ok && result.ok && result.state === "pending") {
         setState("pending"); timer.current = setTimeout(() => void check(token), 5000);
       } else {
@@ -63,12 +63,44 @@ export default function CustomerOtpCard({ orderId, allocationId, title, locale, 
         const errors: Record<string, State> = { reauth_required: "reauth_required", customer_auth_required: "reauth_required",
           otp_setup_pending: "setup_pending", otp_ambiguous: "ambiguous", otp_untrusted: "untrusted",
           otp_rate_limited: "rate_limited", otp_not_available: "revoked", otp_service_unavailable: "unavailable" };
-        setState(errors[result.code ?? ""] ?? "unavailable");
+        if (result.code === "otp_setup_pending") { initialState.current = "setup_pending"; startSetupRecovery(); }
+        else setState(errors[result.code ?? ""] ?? "unavailable");
       }
     } catch { if (token === generation.current) { clear(); setState("unavailable"); } }
     finally { clearTimeout(abort); }
   };
   const start = () => { if (running.current) return; clear(); running.current = true; deadline.current = Date.now() + 120000; limitTimer.current = setTimeout(() => { clear(); setState("timedOut"); }, 120000); void check(generation.current); };
+  const refreshSetup = async (token: number) => {
+    if (token !== generation.current || document.hidden) return;
+    if (Date.now() >= deadline.current) { clear(); setState("timedOut"); return; }
+    controller.current = new AbortController();
+    const abort = setTimeout(() => controller.current?.abort(), 8000);
+    try {
+      const response = await fetch(`/api/shop/me/orders/${encodeURIComponent(orderId)}/otp-status`, {
+        method: "POST", credentials: "same-origin", cache: "no-store", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ allocationId }), signal: controller.current.signal,
+      });
+      const result = await response.json() as { ok?: boolean; state?: string; code?: string };
+      if (token !== generation.current || document.hidden) return;
+      if (response.ok && result.ok === true && result.state === "active") {
+        clear(); initialState.current = "idle"; setState("idle");
+      } else if (response.ok && result.ok === true && result.state === "pending") {
+        setState("setup_pending"); timer.current = setTimeout(() => void refreshSetup(token), 5000);
+      } else {
+        clear(); setState(result.code === "customer_auth_required" ? "reauth_required" : result.code === "otp_not_available" ? "revoked" : "unavailable");
+      }
+    } catch { if (token === generation.current) { clear(); setState("unavailable"); } }
+    finally { clearTimeout(abort); }
+  };
+  const startSetupRecovery = () => {
+    if (running.current) return;
+    clear(); running.current = true; setState("setup_pending"); deadline.current = Date.now() + 120000;
+    limitTimer.current = setTimeout(() => { clear(); setState("timedOut"); }, 120000);
+    void refreshSetup(generation.current);
+  };
+  useEffect(() => {
+    if (grantState === "pending" && !document.hidden) startSetupRecovery();
+  }, []);
   const reauth = async (provider: "google" | "email") => {
     clear(); setState("checking");
     const token = generation.current;
@@ -102,7 +134,7 @@ export default function CustomerOtpCard({ orderId, allocationId, title, locale, 
     {state === "reauth_required" ? <div className="customer-otp__actions">
       <button type="button" onClick={() => void reauth("google")}>{labels.reauthGoogle}</button>
       <button type="button" onClick={() => void reauth("email")}>{labels.reauthEmail}</button>
-    </div> : <button type="button" disabled={["checking","pending","setup_pending","revoked"].includes(state)} onClick={start}>{labels.get}</button>}
+    </div> : <button type="button" disabled={["checking","pending","revoked"].includes(state)} onClick={() => initialState.current === "setup_pending" ? startSetupRecovery() : start()}>{initialState.current === "setup_pending" ? labels.refreshSetup : labels.get}</button>}
     <p aria-live="polite">{copyStatus}</p>
   </article>;
 }
