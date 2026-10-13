@@ -113,3 +113,51 @@ test("admin quarantine preserves the operator reason without OTP in status or ou
   assert.doesNotMatch(await(await admin.handleOtpRoutes(ctx,"otp")).text(),/593821|alias-a/);
  }finally{f.close();}
 });
+
+test("session revocation between final proof read and entitlement SQL is fenced",async()=>{
+ const f=await fixture();try{
+  const prepare=f.env.CONTENT_DB.prepare.bind(f.env.CONTENT_DB);let orderReads=0;
+  f.env.CONTENT_DB={...f.env.CONTENT_DB,prepare(sql){
+   const statement=prepare(sql);
+   if(sql.startsWith("SELECT id FROM shop_orders WHERE id = ? AND customer_id = ?")) {
+    const first=statement.first.bind(statement);statement.first=async()=>{
+      const row=await first();orderReads+=1;
+      if(orderReads===2)f.sqlite.exec("UPDATE shop_customer_sessions SET revoked_at='2026-01-01T00:00:00.000Z'");
+      return row;
+    };
+   }
+   return statement;
+  }};
+  const response=await endpoint.handleCustomerOtp(f.request(),"order-a",f.env);
+  assert.equal(response.status,404);assert.doesNotMatch(await response.text(),/593821/);
+ }finally{f.close();}
+});
+test("existing one-use magic-link step-up preserves session, identity and localized allocation return",async()=>{
+ const magic=await otpModule("src/lib/shop/magic-link.ts"),f=await fixture();
+ try{
+  f.sqlite.exec("DELETE FROM shop_otp_session_proofs");
+  const token="B".repeat(43),returnPath="/ja/shop/account/orders/order-a?allocation=allocation-a";
+  await auth.createAuthChallenge(f.env,{kind:"magic_link",provider:"email",publicToken:token,email:"buyer@example.test",redirectPath:returnPath,payload:{locale:"ja",otpReauth:true,customerId:"customer-a",sessionHash:f.sessionHash}});
+  const result=await magic.consumeMagicLink(f.env,{token,request:f.request()});
+  assert.equal(result.redirectPath,returnPath);assert.equal(result.session.cookie,"");assert.equal(result.session.tokenHash,f.sessionHash);
+  assert.equal(f.sqlite.prepare("SELECT COUNT(*) AS n FROM shop_customer_sessions").get().n,1);
+  assert.equal(f.sqlite.prepare("SELECT customer_id FROM shop_otp_session_proofs").get().customer_id,"customer-a");
+  assert.ok("error" in await magic.consumeMagicLink(f.env,{token,request:f.request()}));
+ }finally{f.close();}
+});
+test("two delivered allocations in one order keep aliases and codes isolated",async()=>{
+ const f=await fixture();try{
+  function clone(table,id,replacements){const row=f.sqlite.prepare(`SELECT * FROM ${table} WHERE id=?`).get(id);Object.assign(row,replacements);
+   const columns=Object.keys(row);f.sqlite.prepare(`INSERT INTO ${table} (${columns.join(",")}) VALUES (${columns.map(()=>"?").join(",")})`).run(...columns.map(column=>row[column]));}
+  clone("shop_inventory_units","unit-a",{id:"unit-b",key_fingerprint:"b".repeat(43)});
+  clone("shop_order_items","item-a",{id:"item-b",line_number:2});
+  clone("shop_inventory_reservations","reservation-a",{id:"reservation-b",order_item_id:"item-b"});
+  clone("shop_inventory_allocations","allocation-a",{id:"allocation-b",reservation_id:"reservation-b",order_item_id:"item-b",inventory_unit_id:"unit-b"});
+  clone("shop_otp_inventory_aliases","binding-a",{id:"binding-b",inventory_unit_id:"unit-b",alias_id:"alias-b"});
+  await reconciliation.reconcileOtpGrants(f.env);
+  assert.equal((await grants.listOrderOtpCards(f.db,"customer-a","order-a")).length,2);
+  f.env.MAILVAULT_OTP.lookupLoginOtp=async request=>({state:"found",code:request.aliasId==="alias-a"?"593821":"482716",receivedAt:new Date().toISOString(),messageRef:"private"});
+  assert.equal((await(await endpoint.handleCustomerOtp(f.request(),"order-a",f.env)).json()).code,"593821");
+  assert.equal((await(await endpoint.handleCustomerOtp(f.request({allocationId:"allocation-b"}),"order-a",f.env)).json()).code,"482716");
+ }finally{f.close();}
+});
