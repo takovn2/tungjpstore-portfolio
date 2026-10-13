@@ -26,7 +26,7 @@ export const GET: APIRoute = async ({ request, url }) => {
     status: 302,
     headers: {
       location,
-      "set-cookie": result.session.cookie,
+      ...(result.session.cookie ? { "set-cookie": result.session.cookie } : {}),
       "cache-control": "private, no-store",
       "referrer-policy": "no-referrer",
     },

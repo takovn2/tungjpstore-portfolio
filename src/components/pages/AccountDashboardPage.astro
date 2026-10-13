@@ -164,6 +164,12 @@ const nextTierName = loyalty.nextTier ? (loyalty.nextTier.name[locale] || loyalt
 
 <script is:inline define:vars={{ loginHref, locale }}>
   document.querySelector("[data-account-logout]")?.addEventListener("click", async () => {
+    window.dispatchEvent(new Event("shop:logout"));
+    if ("BroadcastChannel" in window) {
+      const channel = new BroadcastChannel("shop-session-events");
+      channel.postMessage("logout");
+      channel.close();
+    }
     try {
       await fetch("/api/shop/auth/logout", { method: "POST", credentials: "same-origin" });
     } catch {}

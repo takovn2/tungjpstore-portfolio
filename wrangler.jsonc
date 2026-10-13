@@ -10,6 +10,7 @@
 	"vars": {
 		"MEDIA_PUBLIC_BASE_URL": "https://media.tung.codes",
 		"SHOP_PUBLIC_ORIGIN": "https://tung.codes",
+		"SHOP_OTP_ENABLED": "false",
 		"SHOP_KEY_ENCRYPTION_KEY_VERSION": "v1",
 		"TELEGRAM_BOT_USERNAME": "dochoiai_bot",
 		"TELEGRAM_TOKEN_ENCRYPTION_KEY_VERSION": "v1",
@@ -60,6 +61,7 @@
 	"dev": {
 		"inspector_port": 0
 	},
+	"services": [{ "binding": "MAILVAULT_OTP", "service": "mail-vault", "entrypoint": "CustomerOtpReader" }],
 	"d1_databases": [
 		{
 			"binding": "CONTACT_DB",

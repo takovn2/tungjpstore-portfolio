@@ -1,3 +1,4 @@
+import { completeOtpReauth, type OtpReauthContext, parseOtpReauth } from "./otp/reauth";
 import { buildMagicLinkEmail } from "../email/auth-templates";
 import { CloudflareEmailProvider } from "../email/provider";
 import {
@@ -62,6 +63,7 @@ export async function requestMagicLink(
     returnPath?: string | null;
     requestId?: string;
     remoteIp?: string | null;
+    reauth?: OtpReauthContext;
   },
 ): Promise<{ ok: true } | { ok: false; code: string; status: number }> {
   // Always-ish success responses for valid-shaped emails to reduce enumeration.
@@ -97,7 +99,7 @@ export async function requestMagicLink(
     publicToken: token,
     redirectPath,
     email,
-    payload: { locale },
+    payload: { locale, ...(input.reauth ?? {}) },
   });
 
   const origin = publicOrigin(bindings);
@@ -161,6 +163,12 @@ export async function consumeMagicLink(
   }
 
   try {
+    const reauth = parseOtpReauth(JSON.parse(challenge.payloadJson));
+    if (reauth) {
+      const session = await completeOtpReauth(bindings, input.request, reauth, "email", { subject: challenge.emailNormalized, email: challenge.emailNormalized });
+      if (!session) return { error: "reauth_required", status: 403 };
+      return { redirectPath: sanitizeReturnPath(challenge.redirectPath), session };
+    }
     const customer = await upsertVerifiedCustomerIdentity(bindings, {
       provider: "email",
       externalSubject: challenge.emailNormalized,

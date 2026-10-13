@@ -1,0 +1,28 @@
+# TUNG OTP BRIDGE V1: staging certification
+
+Repository ID: `1409362372`; canonical `takovn2/tungjpstore-portfolio`.
+Main base SHA: `3edeed73f45a3dba1a15cae057035e5aa51ed242`. Prior-reviewed HEAD SHA: `14e45e68517a638ff08624fb02fc48c91c4d1a35`. Remediation HEAD is recorded in the external acceptance/PR receipt.
+Branch: `codex/otp-bridge-v1`; remediation starts from the clean prior-reviewed HEAD. Final clean worktree and exact heads are verified in the acceptance/PR receipt; final review HEAD, PR URL and CI run URLs are recorded in the PR receipt/final agent output (avoids a self-referential commit hash inside its own tree).
+Author review only; independent reviewer not assigned/approved. Flags OFF; production mutations NONE.
+
+## Runtime evidence and certification limits
+
+Status: LOCAL_RUNTIME_VERIFIED; STAGING/PRODUCTION_NOT_CERTIFIED.
+
+Read-only Wrangler whoami verified account `ef250a88911fd24073cb73d1c07e0218`. Both `mail-vault` and `tungjpstore-portfolio` version/deployment metadata were read with that account explicitly selected. This confirms current same-account Worker identity. It does not prove that the new named entrypoint exists in a deployed version. Local workerd with each repository compatibility date/Node compatibility runs both Workers, named binding and separate actual D1/R2 successfully.
+
+Public DNS lookup for `tungjp.store` returned Cloudflare routing MX (`route1/2/3.mx.cloudflare.net`). MX is insufficient to certify the catch-all destination, ACTIVE alias or delivery. No real MailVault/customer mailbox was accessed. Reviewed owner-controlled mail sample and operator-authorized test receipt remain mandatory before enabling any provider.
+
+Remaining approval/review gates: independently review exact PR SHAs and least-privilege deployment roles; provision the shared integration secret separately; approve migrations/backups and sequence; deploy both with flags OFF; verify actual deployed named RPC (including wrong-key caller), catch-all and controlled synthetic/test alias; review legitimate login-only sender/DKIM/template samples; verify real recent Google auth_time or magic-link on same session; physical Safari and remote D1 latency/quota tuning; flag activation for controlled cohort only with separate approval. No production-ready/security-approved status is asserted.
+
+MailVault and Shop cannot share a database transaction. Final reads fence completed revocation interleavings, but cannot atomically couple both databases or the network-send boundary. Revocation occurring after the final authorization statement or after a response was delivered cannot retract that response/clipboard. UI holds only a short-lived code; no external provider consumption guarantee is made. A deployment principal possessing both the binding and HMAC secret remains privileged; isolate those rights.
+
+## Review receipt references
+
+The exact file manifest is [00-preflight.md](00-preflight.md); RPC/auth decisions are [01-architecture-contract.md](01-architecture-contract.md), schema/state details are reports 02/03, commands/counts/security negatives and CI receipts are [04-security-test-matrix.md](04-security-test-matrix.md), remaining runtime prerequisites are [05-staging-certification.md](05-staging-certification.md), and operator-only recovery is [06-release-and-rollback.md](06-release-and-rollback.md). These references apply to this deliverable.
+
+PRs: [MailVault #13](https://github.com/takovn2/mailvault/pull/13), [Portfolio #1](https://github.com/takovn2/tungjpstore-portfolio/pull/1). Independent reviewer: unassigned, not approved; drafts await separate P5 review. Initial exact-head CI: [MailVault](https://github.com/takovn2/mailvault/actions/runs/38433814625), [Portfolio](https://github.com/takovn2/tungjpstore-portfolio/actions/runs/38434002462). Final head receipts are attached to the PRs; flags OFF and production mutations NONE.
+
+## Independent review remediation
+
+F-01 through F-04 implementation changes and current evidence are documented in [07-review-remediation.md](07-review-remediation.md). Companion provenance is pinned in [mailvault-companion.json](mailvault-companion.json) and enforced by the native test gate. These remediation sections supersede earlier descriptions/counts. External P5 review remains required; production flags stay OFF.
