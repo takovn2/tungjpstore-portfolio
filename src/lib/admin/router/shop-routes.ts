@@ -4,6 +4,7 @@ import { handleCatalogRoutes } from "./shop/catalog";
 import { handleIntegrationRoutes } from "./shop/integrations";
 import { handleOpsRoutes } from "./shop/ops";
 import { handlePaymentRoutes } from "./shop/payments";
+import { handleOtpRoutes } from "./shop/otp";
 import { shopFailure } from "./shop/shared";
 
 /**
@@ -14,7 +15,8 @@ import { shopFailure } from "./shop/shared";
 export async function handleShopRoutes(ctx: AdminRouteContext): Promise<Response> {
   const resource = ctx.segments[1] ?? "overview";
   try {
-    const response = (await handleOpsRoutes(ctx, resource))
+    const response = (await handleOtpRoutes(ctx, resource))
+      ?? (await handleOpsRoutes(ctx, resource))
       ?? (await handleCatalogRoutes(ctx, resource))
       ?? (await handlePaymentRoutes(ctx, resource))
       ?? (await handleIntegrationRoutes(ctx, resource));

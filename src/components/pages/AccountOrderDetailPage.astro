@@ -1,4 +1,10 @@
 ---
+import { env } from "cloudflare:workers";
+import { getCustomerSession } from "../../lib/shop/customer-auth";
+import { listOrderOtpCards } from "../../lib/shop/otp/grant-repository";
+import { reconcileOtpGrants } from "../../lib/shop/otp/reconciliation";
+import { otpBindings } from "../../lib/shop/otp/bindings";
+import CustomerOtpCard from "../shop/otp/CustomerOtpCard";
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import { localizePath, type Locale } from "../../i18n/dictionaries";
 import { formatMoney, formatShopDateTime, formatShopFulfillmentStatus, formatShopOrderStatus, formatShopPaymentStatus, getShopCopy } from "../../i18n/shop";
@@ -32,6 +38,14 @@ const { locale, order } = Astro.props;
 const copy = getShopCopy(locale);
 const account = copy.account;
 const canReveal = order.paymentStatus === "paid";
+let otpCards: Array<{ allocation_id: string; order_item_id: string; state: string }> = [];
+if (env.SHOP_OTP_ENABLED === "true") {
+  const session = await getCustomerSession(env, Astro.request);
+  if (session) {
+    await reconcileOtpGrants(otpBindings(env), Date.now(), order.id).catch(() => undefined);
+    otpCards = await listOrderOtpCards(env.CONTENT_DB, session.customerId, order.id).catch(() => []);
+  }
+}
 ---
 
 <BaseLayout title={`${account.detail.metaTitlePrefix} ${order.number}`} description={account.detail.metaDescription} locale={locale} chrome="store" noindex={true} alternateLocales={[locale]} rss={false}>
@@ -55,6 +69,9 @@ const canReveal = order.paymentStatus === "paid";
         ))}
       </ul>
     </section>
+
+    {otpCards.map((card) => <CustomerOtpCard client:load orderId={order.id} allocationId={card.allocation_id}
+      title={order.items.find((item) => item.id === card.order_item_id)?.variantTitle ?? ""} locale={locale} grantState={card.state} />)}
 
     {canReveal ? (
       <section class="account__section">

@@ -1,3 +1,5 @@
+import { verifyGoogleReauth } from "./otp/google-reauth";
+import { completeOtpReauth, type OtpReauthContext, parseOtpReauth } from "./otp/reauth";
 import {
   consumeAuthChallenge,
   createAuthChallenge,
@@ -34,7 +36,7 @@ export function isGoogleOAuthConfigured(bindings: Pick<ShopBindings, "GOOGLE_OAU
 
 export async function startGoogleOAuth(
   bindings: Pick<ShopBindings, "CONTENT_DB" | "SHOP_PUBLIC_ORIGIN" | "GOOGLE_OAUTH_CLIENT_ID" | "GOOGLE_OAUTH_CLIENT_SECRET">,
-  input: { returnPath?: string | null; requestId?: string },
+  input: { returnPath?: string | null; requestId?: string; reauth?: OtpReauthContext },
 ): Promise<{ redirectUrl: string; setCookie: string } | { error: string; status: number }> {
   if (!isGoogleOAuthConfigured(bindings)) {
     return { error: "oauth_not_configured", status: 503 };
@@ -43,6 +45,7 @@ export async function startGoogleOAuth(
 
   const state = randomOpaqueToken(32);
   const codeVerifier = pkceVerifier();
+  const nonce = input.reauth ? randomOpaqueToken(32) : null;
   const codeChallenge = await pkceChallenge(codeVerifier);
   const redirectPath = sanitizeReturnPath(input.returnPath);
   await createAuthChallenge(bindings, {
@@ -50,7 +53,7 @@ export async function startGoogleOAuth(
     provider: "google",
     publicToken: state,
     redirectPath,
-    payload: { codeVerifier },
+    payload: { codeVerifier, nonce, ...(input.reauth ?? {}) },
   });
   await recordCustomerSecurityEvent(bindings, {
     eventType: "oauth_start",
@@ -70,6 +73,8 @@ export async function startGoogleOAuth(
   url.searchParams.set("code_challenge_method", "S256");
   url.searchParams.set("access_type", "online");
   url.searchParams.set("prompt", "select_account");
+  if (input.reauth) url.searchParams.set("max_age", "0");
+  if (nonce) url.searchParams.set("nonce", nonce);
 
   return {
     redirectUrl: url.toString(),
@@ -142,7 +147,7 @@ export async function completeGoogleOAuth(
   }
   if (!tokenResponse.ok) return { error: "oauth_token_exchange_failed", status: 502 };
 
-  const tokenJson = await tokenResponse.json() as { access_token?: string };
+  const tokenJson = await tokenResponse.json() as { access_token?: string; id_token?: string };
   if (!tokenJson.access_token) return { error: "oauth_token_exchange_failed", status: 502 };
 
   let userInfo: GoogleUserInfo;
@@ -166,6 +171,16 @@ export async function completeGoogleOAuth(
   }
 
   try {
+    const reauth = parseOtpReauth(JSON.parse(challenge.payloadJson));
+    if (reauth) {
+      const nonce = (JSON.parse(challenge.payloadJson) as { nonce?: string }).nonce;
+      if (!nonce || !(await verifyGoogleReauth(tokenJson.id_token, {
+        clientId: bindings.GOOGLE_OAUTH_CLIENT_ID!.trim(), nonce, subject: userInfo.sub,
+      }))) return { error: "reauth_required", status: 403 };
+      const session = await completeOtpReauth(bindings, input.request, reauth, "google", { subject: userInfo.sub, email: userInfo.email });
+      if (!session) return { error: "reauth_required", status: 403 };
+      return { redirectPath: sanitizeReturnPath(challenge.redirectPath), session };
+    }
     const customer = await upsertVerifiedCustomerIdentity(bindings, {
       provider: "google",
       externalSubject: userInfo.sub,

@@ -53,6 +53,7 @@ function createD1() {
     "0043_shop_currency_pricing.sql",
     "0045_shop_crypto_storefront_scope.sql",
     "0046_manual_crypto_payment_proofs.sql",
+    "0062_shop_otp_bridge.sql",
   ]) sqlite.exec(read(`content-migrations/${migration}`));
 
   const db = {
@@ -160,6 +161,8 @@ test("GLB checkout supports manual proof review and encrypted key delivery", asy
       sealed.dataIvB64, sealed.wrappedDekB64, sealed.wrapIvB64, sealed.keyFingerprint, now, now,
     );
 
+    sqlite.prepare(`INSERT INTO shop_otp_inventory_aliases (id, inventory_unit_id, alias_id, provider_key, state, validated_at, created_at, updated_at)
+      VALUES ('glb-otp-binding', 'glb-e2e-inventory-0001', 'glb-synthetic-alias', 'synthetic', 'ready', ?, ?, ?)` ).run(now,now,now);
     const checkout = await shop.checkoutGlbTelegramItems(bindings, {
       user: { id: 8685416501, first_name: "GLB Buyer", username: "glb_buyer" },
       botConfigId,
@@ -174,6 +177,12 @@ test("GLB checkout supports manual proof review and encrypted key delivery", asy
     assert.equal(checkout.payment?.provider, "bybit");
     const customerId = sqlite.prepare("SELECT customer_id AS customerId FROM shop_orders WHERE id = ?").get(checkout.order.orderId).customerId;
 
+    // Verify the guest email before entitling the actual delivered allocation.
+    sqlite.prepare("UPDATE shop_customers SET email_normalized='glb-buyer@example.test', account_activated_at=? WHERE id=?").run(now,customerId);
+    sqlite.prepare("UPDATE shop_orders SET customer_email_snapshot='glb-buyer@example.test' WHERE id=?").run(checkout.order.orderId);
+    sqlite.prepare(`INSERT INTO shop_customer_identities (id,customer_id,provider,external_subject,verified_at,created_at,updated_at)
+      VALUES ('glb-otp-email',?,'email','glb-buyer@example.test',?,?,?)`).run(customerId,now,now,now);
+    assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM shop_otp_grants").get().n,0);
     stats.queries = 0;
     const initial = await shop.statusSummaryForGlbTelegramOrder(bindings, customerId, checkout.order.orderId, botConfigId);
     assert.equal(initial?.payment?.state, "awaiting_payment");
@@ -207,6 +216,16 @@ test("GLB checkout supports manual proof review and encrypted key delivery", asy
     const delivery = await shop.revealKeysForTelegramOrder(bindings, customerId, checkout.order.orderId, botConfigId);
     assert.equal(delivery.deliveries[0].keys[0], "GLB-E2E-LICENSE-0001");
     assert.equal(sqlite.prepare("SELECT fulfillment_status FROM shop_orders WHERE id = ?").get(checkout.order.orderId).fulfillment_status, "fulfilled");
+    const grant=sqlite.prepare("SELECT * FROM shop_otp_grants").get();
+    assert.equal(grant.customer_id,customerId);assert.equal(grant.order_id,checkout.order.orderId);
+    assert.equal(grant.inventory_unit_id,"glb-e2e-inventory-0001");assert.equal(grant.state,"pending");
+    const bundled=await build({entryPoints:[`${projectRoot}/src/lib/shop/otp/reconciliation.ts`],bundle:true,format:"esm",platform:"node",write:false,logLevel:"silent"});
+    const otp=await import(`data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString("base64")}`);
+    const otpBindings={...bindings,SHOP_OTP_ENABLED:"true",OTP_BRIDGE_RPC_HMAC_KEY:"synthetic-32-character-key-for-test-only",MAILVAULT_OTP:{validateAlias:async request=>({state:"active",aliasId:request.aliasId})}};
+    await Promise.all([otp.reconcileOtpGrants(otpBindings),otp.reconcileOtpGrants(otpBindings)]);
+    assert.equal(sqlite.prepare("SELECT state FROM shop_otp_grants").get().state,"active");
+    await shop.revealKeysForTelegramOrder(bindings,customerId,checkout.order.orderId,botConfigId);
+    assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM shop_otp_grants").get().n,1);
   } finally {
     sqlite.close();
   }

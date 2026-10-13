@@ -43,7 +43,7 @@ export const GET: APIRoute = async ({ request, url }) => {
     "cache-control": "private, no-store",
     "referrer-policy": "no-referrer",
   });
-  headers.append("set-cookie", result.session.cookie);
+  if (result.session.cookie) headers.append("set-cookie", result.session.cookie);
   headers.append("set-cookie", clearOAuthStateCookie());
   return new Response(null, { status: 302, headers });
 };

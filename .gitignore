@@ -47,3 +47,6 @@ TUNG_SHOP_ONE_SHOT_AGENT_BUNDLE/
 
 # jetbrains setting folder
 .idea/
+
+# Isolated Wrangler type generation; never contains secrets.
+.otp-typegen/

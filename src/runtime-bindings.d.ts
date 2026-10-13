@@ -39,6 +39,7 @@ declare namespace Cloudflare {
     GOOGLE_OAUTH_CLIENT_ID?: string;
     GOOGLE_OAUTH_CLIENT_SECRET?: string;
     SHOP_CUSTOMER_SESSION_SECRET?: string;
+    OTP_BRIDGE_RPC_HMAC_KEY?: string;
     TELEGRAM_MINI_APP_SESSION_SECRET?: string;
   }
 }

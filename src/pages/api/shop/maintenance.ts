@@ -1,3 +1,5 @@
+import { otpBindings } from "../../../lib/shop/otp/bindings";
+import { reconcileOtpGrants } from "../../../lib/shop/otp/reconciliation";
 import type { APIRoute } from "astro";
 import { env } from "cloudflare:workers";
 import { dispatchTransactionalEmails } from "../../../lib/email/outbox";
@@ -154,6 +156,7 @@ export const POST: APIRoute = async ({ request }) => {
             : null,
         }
       : { configured: false, shop: null, contact: null };
+    const otp = env.SHOP_OTP_ENABLED === "true" ? await reconcileOtpGrants(otpBindings(env)).catch(() => ({ activated: 0, pending: 0 })) : { activated: 0, pending: 0 };
     const customerAuth = await purgeExpiredCustomerAuth(env.CONTENT_DB, 200).catch(() => ({
       sessionsDeleted: 0,
       challengesDeleted: 0,
@@ -187,6 +190,7 @@ export const POST: APIRoute = async ({ request }) => {
       telegram,
       email,
       customerAuth,
+      otp,
       telegramCleanup: {
         updatesDeleted: telegramUpdatesDeleted,
         cartsDeleted: telegramCartsDeleted,
